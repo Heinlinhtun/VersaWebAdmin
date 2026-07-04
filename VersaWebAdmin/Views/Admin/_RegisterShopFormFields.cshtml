@@ -1,0 +1,52 @@
+<div class="row">
+    <div class="col-md-6 mb-3">
+        <label class="form-label fw-bold">Shop Name (ဆိုင်အမည်)</label>
+        <input name="ShopName" class="form-control shadow-sm" placeholder="ဥပမာ - ရွှေဆိုင်" required>
+    </div>
+    <div class="col-md-6 mb-3">
+        <label class="form-label fw-bold">Shop Login ID (ဆိုင် ID)</label>
+        <div class="input-group">
+            <span class="input-group-text bg-light text-muted small">versa-</span>
+            <input name="ShopLoginId" class="form-control shadow-sm" placeholder="shweshop" required>
+        </div>
+    </div>
+
+    <div class="col-md-6 mb-3">
+        <label class="form-label fw-bold">Contact Number (ဖုန်းနံပါတ်)</label>
+        <input name="ContactNumber" class="form-control shadow-sm" placeholder="09xxxxxxxxx">
+    </div>
+    <div class="col-md-6 mb-3">
+        <label class="form-label fw-bold">Address (လိပ်စာ)</label>
+        <input name="Address" class="form-control shadow-sm" placeholder="ရန်ကုန်">
+    </div>
+
+    <div class="col-md-6 mb-3">
+        <label class="form-label fw-bold text-primary">Admin Username</label>
+        <input name="AdminUsername" class="form-control shadow-sm border-primary" value="admin" required>
+    </div>
+    <div class="col-md-6 mb-3">
+        <label class="form-label fw-bold text-primary">Admin Password / PIN</label>
+        <input name="AdminPassword" type="text" class="form-control shadow-sm border-primary" value="1234" required>
+    </div>
+
+    <div class="col-md-6 mb-3">
+        <label class="form-label fw-bold">Max Users (ခွင့်ပြုမည့်ဝန်ထမ်းအရေအတွက်)</label>
+        <input name="MaxUsers" type="number" class="form-control shadow-sm" value="5" min="1" required>
+    </div>
+
+    <div class="col-md-6 mb-3">
+        <label class="form-label fw-bold text-primary">Subscription Plan (သက်တမ်းရွေးချယ်ရန်)</label>
+        <select name="PlanMonths" class="form-select border-primary shadow-sm" required>
+            <optgroup label="Short Term">
+                <option value="1">၁ လစာ (Free Trial)</option>
+                <option value="6">၆ လစာ (Standard)</option>
+            </optgroup>
+            <optgroup label="Long Term (Recommended)">
+                <option value="12" selected>၁ နှစ်စာ (Pro Plan)</option>
+                <option value="24">၂ နှစ်စာ (Value Plan)</option>
+                <option value="36">၃ နှစ်စာ (Business Plan)</option>
+                <option value="60">၅ နှစ်စာ (Enterprise Plan - Life Time Deal)</option>
+            </optgroup>
+        </select>
+    </div>
+</div>

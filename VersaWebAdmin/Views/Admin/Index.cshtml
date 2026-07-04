@@ -1,0 +1,56 @@
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-primary text-white d-flex align-items-center">
+        <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Register New Client Shop</h5>
+    </div>
+    <div class="card-body p-0">
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs nav-fill bg-light" id="shopTypeTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active py-3 fw-bold" id="pos-tab" data-bs-toggle="tab" data-bs-target="#pos" type="button" role="tab">
+                    <i class="fas fa-cash-register me-2"></i>Standard POS Shop
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link py-3 fw-bold" id="restaurant-tab" data-bs-toggle="tab" data-bs-target="#restaurant" type="button" role="tab">
+                    <i class="fas fa-utensils me-2"></i>Restaurant Shop
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content p-4" id="shopTypeTabsContent">
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
+            }
+
+            <!-- Standard POS Tab -->
+            <div class="tab-pane fade show active" id="pos" role="tabpanel">
+                <form asp-action="RegisterShop" method="post">
+                    <input type="hidden" name="ShopType" value="POS" />
+                    <partial name="_RegisterShopFormFields" />
+                    <button type="submit" class="btn btn-primary w-100 py-2 shadow-sm mt-3">
+                        <i class="fas fa-rocket me-2"></i>Create POS Shop
+                    </button>
+                </form>
+            </div>
+
+            <!-- Restaurant Tab -->
+            <div class="tab-pane fade" id="restaurant" role="tabpanel">
+                <form asp-action="RegisterShop" method="post">
+                    <input type="hidden" name="ShopType" value="Restaurant" />
+                    <div class="alert alert-info py-2 small">
+                        <i class="fas fa-info-circle me-2"></i>Restaurant registration uses the specialized table management and kitchen ordering schema.
+                    </div>
+                    <partial name="_RegisterShopFormFields" />
+                    <button type="submit" class="btn btn-success w-100 py-2 shadow-sm mt-3">
+                        <i class="fas fa-utensils me-2"></i>Create Restaurant Shop
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+}

@@ -1,0 +1,202 @@
+@model VersaWebAdmin.Models.AccountSettingsViewModel
+@{
+    ViewData["Title"] = "Account Settings";
+    var activeTab = TempData["ActiveTab"]?.ToString() ?? ViewData["ActiveTab"]?.ToString() ?? "change";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0 fw-bold">Account Settings</h2>
+        <small class="text-muted">Manage admin accounts and security</small>
+    </div>
+</div>
+
+@if (TempData["ChangeSuccess"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["ChangeSuccess"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["ChangeError"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @TempData["ChangeError"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["CreateSuccess"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["CreateSuccess"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["CreateError"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @TempData["CreateError"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["DeleteSuccess"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @TempData["DeleteSuccess"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["DeleteError"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @TempData["DeleteError"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-4">
+
+    <!-- Left: Forms -->
+    <div class="col-lg-6">
+
+        <!-- Tabs -->
+        <ul class="nav nav-tabs mb-3" id="settingsTabs">
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "change" ? "active" : "")"
+                        data-bs-toggle="tab" data-bs-target="#tab-change">
+                    🔑 Change Password
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "create" ? "active" : "")"
+                        data-bs-toggle="tab" data-bs-target="#tab-create">
+                    ➕ New User
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+
+            <!-- Change Password Tab -->
+            <div class="tab-pane fade @(activeTab == "change" ? "show active" : "")" id="tab-change">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <h6 class="card-title mb-3 text-muted fw-semibold text-uppercase" style="font-size:.75rem;letter-spacing:.06em">
+                            Change Your Password
+                        </h6>
+                        <form asp-action="ChangePassword" asp-controller="Account" method="post">
+                            @Html.AntiForgeryToken()
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Current Password</label>
+                                <input asp-for="ChangePassword.CurrentPassword" class="form-control" type="password" placeholder="••••••••" />
+                                <span asp-validation-for="ChangePassword.CurrentPassword" class="text-danger small"></span>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">New Password</label>
+                                <input asp-for="ChangePassword.NewPassword" class="form-control" type="password" placeholder="Min 6 characters" />
+                                <span asp-validation-for="ChangePassword.NewPassword" class="text-danger small"></span>
+                            </div>
+                            <div class="mb-4">
+                                <label class="form-label small fw-semibold">Confirm New Password</label>
+                                <input asp-for="ChangePassword.ConfirmPassword" class="form-control" type="password" placeholder="Repeat new password" />
+                                <span asp-validation-for="ChangePassword.ConfirmPassword" class="text-danger small"></span>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">Update Password</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Create User Tab -->
+            <div class="tab-pane fade @(activeTab == "create" ? "show active" : "")" id="tab-create">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <h6 class="card-title mb-3 text-muted fw-semibold text-uppercase" style="font-size:.75rem;letter-spacing:.06em">
+                            Create New Admin Account
+                        </h6>
+                        <form asp-action="CreateUser" asp-controller="Account" method="post">
+                            @Html.AntiForgeryToken()
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Username</label>
+                                <input asp-for="CreateUser.Username" class="form-control" placeholder="e.g. superadmin" />
+                                <span asp-validation-for="CreateUser.Username" class="text-danger small"></span>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Password</label>
+                                <input asp-for="CreateUser.Password" class="form-control" type="password" placeholder="Min 6 characters" />
+                                <span asp-validation-for="CreateUser.Password" class="text-danger small"></span>
+                            </div>
+                            <div class="mb-4">
+                                <label class="form-label small fw-semibold">Role</label>
+                                <select asp-for="CreateUser.Role" class="form-select">
+                                    <option value="SuperAdmin">SuperAdmin</option>
+                                    <option value="Admin" selected>Admin</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-success w-100">Create User</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: User List -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body p-4">
+                <h6 class="card-title mb-3 text-muted fw-semibold text-uppercase" style="font-size:.75rem;letter-spacing:.06em">
+                    Admin Accounts
+                </h6>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="small text-muted fw-semibold">#</th>
+                                <th class="small text-muted fw-semibold">Username</th>
+                                <th class="small text-muted fw-semibold">Role</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var user in Model.Users)
+                            {
+                                bool isMe = user.Username == User.Identity?.Name;
+                                <tr>
+                                    <td class="text-muted small">@user.UserId</td>
+                                    <td>
+                                        <span class="fw-medium">@user.Username</span>
+                                        @if (isMe)
+                                        {
+                                            <span class="badge bg-primary ms-1" style="font-size:.65rem">You</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge @(user.Role == "SuperAdmin" ? "bg-warning text-dark" : "bg-secondary")">
+                                            @user.Role
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        @if (!isMe)
+                                        {
+                                            <form asp-action="DeleteUser" asp-controller="Account" method="post" class="d-inline"
+                                                  onsubmit="return confirm('Delete user @user.Username?')">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="userId" value="@user.UserId" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                            </form>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

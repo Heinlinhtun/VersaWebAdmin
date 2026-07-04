@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Versa.Core/Versa.Core.csproj" />
+  <Project Path="Versa.Desktop/Versa.Desktop.csproj" />
+  <Project Path="Versa.POS/Versa.POS.csproj" Id="c740c91e-0e2c-4391-b0e9-706ab48e3bf2" />
+  <Project Path="VersaWebAdmin/VersaWebAdmin.csproj" />
+</Solution>

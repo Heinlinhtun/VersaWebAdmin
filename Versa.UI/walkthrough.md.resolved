@@ -1,0 +1,52 @@
+# RBAC Implementation — Walkthrough
+
+## What Was Implemented
+
+Role-Based Access Control (RBAC) with 4 fixed roles: **Admin → Manager → Staff → Cashier**
+
+---
+
+## Files Changed
+
+| File | What Changed |
+|---|---|
+| [src/composables/usePermissions.js](file:///c:/Users/Hainn/source/repos/VersaWebAdmin/Versa.UI/src/composables/usePermissions.js) | **NEW** — Central permission composable |
+| [src/router/index.js](file:///c:/Users/Hainn/source/repos/VersaWebAdmin/Versa.UI/src/router/index.js) | Added `meta: { roles: [...] }` to every route + role guard |
+| [src/layouts/DashboardLayout.vue](file:///c:/Users/Hainn/source/repos/VersaWebAdmin/Versa.UI/src/layouts/DashboardLayout.vue) | Sidebar nav items wrapped with `v-if="can(...)"` |
+| [src/views/Partners.vue](file:///c:/Users/Hainn/source/repos/VersaWebAdmin/Versa.UI/src/views/Partners.vue) | Role dropdown → 4 roles; Add/Edit/Delete guarded |
+| [src/views/Users.vue](file:///c:/Users/Hainn/source/repos/VersaWebAdmin/Versa.UI/src/views/Users.vue) | Role dropdown → 4 roles; Add/Edit/Delete guarded |
+
+---
+
+## Role Permission Matrix
+
+| Page | Admin | Manager | Staff | Cashier |
+|---|:---:|:---:|:---:|:---:|
+| Dashboard | ✅ | ✅ | ✅ | ❌ |
+| Sale Terminal | ✅ | ✅ | ✅ | ✅ |
+| Products | ✅ | ✅ | 👁 view | ❌ |
+| Purchases | ✅ | ✅ | ❌ | ❌ |
+| Inventory | ✅ | ✅ | 👁 view | ❌ |
+| Adjustments | ✅ | ✅ | ❌ | ❌ |
+| History Center | ✅ | ✅ | 👁 view | ❌ |
+| Expenses | ✅ | ✅ | ❌ | ❌ |
+| Master Data | ✅ | ❌ | ❌ | ❌ |
+| Partners | ✅ | 👁 customers | ❌ | ❌ |
+| Reports / BI | ✅ | ❌ | ❌ | ❌ |
+| Settings | ✅ | ❌ | ❌ | ❌ |
+
+---
+
+## Verified
+
+![Role dropdown showing 4 options](C:/Users/Hainn/.gemini/antigravity/brain/d16695ca-e65b-4b24-ac51-1fd897bcdffa/partners_role_dropdown_1772619416192.png)
+*Partners Staff tab — dropdown now shows all 4 roles*
+
+---
+
+## How to Test
+
+1. Create a new Staff user with role = **Manager** or **Staff** (via Partners → Staff tab)
+2. Log out, log back in as that user
+3. The sidebar will only show pages that role is permitted to see
+4. Pages accessed directly via URL will redirect to `/dashboard` or `/Sale` if not permitted

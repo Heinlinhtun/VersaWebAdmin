@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "New Profile",
+    "Projects": [
+      {
+        "Path": "Versa.POS\\Versa.POS.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "VersaWebAdmin\\VersaWebAdmin.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

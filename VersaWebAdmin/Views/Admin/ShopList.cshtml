@@ -1,0 +1,278 @@
+@model IEnumerable<Versa.Core.Models.Tenant>
+
+@{
+    ViewData["Title"] = "Shop Management";
+}
+
+@if (TempData["DeleteError"] != null)
+{
+    <div class="alert alert-danger">@TempData["DeleteError"]</div>
+}
+@if (TempData["DeleteSuccess"] != null)
+{
+    <div class="alert alert-success">@TempData["DeleteSuccess"]</div>
+}
+@if (TempData["BackupError"] != null)
+{
+    <div class="alert alert-danger">@TempData["BackupError"]</div>
+}
+@if (TempData["BackupSuccess"] != null)
+{
+    <div class="alert alert-success">@TempData["BackupSuccess"]</div>
+}
+@if (TempData["DuplicateError"] != null)
+{
+    <div class="alert alert-danger">@TempData["DuplicateError"]</div>
+}
+@if (TempData["DuplicateSuccess"] != null)
+{
+    <div class="alert alert-success">@TempData["DuplicateSuccess"]</div>
+}
+@if (TempData["ResetError"] != null)
+{
+    <div class="alert alert-danger">@TempData["ResetError"]</div>
+}
+@if (TempData["ResetSuccess"] != null)
+{
+    <div class="alert alert-success">@TempData["ResetSuccess"]</div>
+}
+
+<div class="container-fluid mt-4">
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+            <h5 class="text-primary mb-0"><i class="bi bi-person-badge me-2"></i>Shop Subscription Management</h5>
+            <div class="d-flex gap-2">
+                <form asp-action="RunBackupNow" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-secondary btn-sm shadow-sm">Run Backup Now</button>
+                </form>
+                <a asp-action="Index" class="btn btn-primary btn-sm shadow-sm">+ Register New Shop</a>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Shop Name</th>
+                            <th>Plan</th>
+                            <th>Duration (Start - End)</th>
+                            <th>Days Left</th>
+                            <th>Status</th>
+                            <th>User Limit</th>
+                            <th class="text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var shop in Model)
+                        {
+                            var daysLeft = (shop.SubscriptionEndDate - DateTime.Now).Days;
+                            <tr>
+                                <td>
+                                    <div class="fw-bold text-dark">@shop.ShopName <span class="badge bg-light text-secondary border ms-1">@shop.ShopType</span></div>
+                                    <div class="small text-muted">
+                                        <i class="bi bi-phone me-1"></i>@shop.ContactNumber | <i class="bi bi-geo-alt me-1"></i>@shop.Address
+                                    </div>
+                                    <small class="text-muted">ID: @shop.ShopLoginId | DB: @shop.DbName</small>
+                                </td>
+                                <td><span class="badge bg-info text-dark">@shop.SubscriptionPlan</span></td>
+                                <td><small>@shop.SubscriptionStartDate.ToString("dd/MM/yyyy") - @shop.SubscriptionEndDate.ToString("dd/MM/yyyy")</small></td>
+                                <td>
+                                    @if (daysLeft > 7)
+                                    {
+                                        <span class="text-success fw-bold">@daysLeft Days</span>
+                                    }
+                                    else if (daysLeft > 0)
+                                    {
+                                        <span class="text-warning fw-bold">@daysLeft Days Left!</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-danger fw-bold">Expired</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (!shop.IsActive)
+                                    {
+                                        <span class="badge rounded-pill bg-dark">Suspended</span>
+                                    }
+                                    else if (daysLeft > 0)
+                                    {
+                                        <span class="badge rounded-pill bg-success">Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge rounded-pill bg-danger">Expired</span>
+                                    }
+                                </td>
+                                <td><span class="badge bg-secondary">@shop.MaxUsers Users</span></td>
+                                <td class="text-center">
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                            Actions
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                            <li><a class="dropdown-item" asp-action="Renew" asp-route-id="@shop.TenantId">Renew</a></li>
+                                            <li><a class="dropdown-item" asp-action="Edit" asp-route-id="@shop.TenantId">Edit</a></li>
+                                            <li><button type="button" class="dropdown-item" onclick="triggerShopAction('@shop.TenantId', 'download')">Download Backup</button></li>
+                                            <li><button type="button" class="dropdown-item" onclick="triggerShopAction('@shop.TenantId', 'backup')">Backup to Dropbox</button></li>
+                                            <li><button type="button" class="dropdown-item" onclick="triggerDuplicateAction('@shop.TenantId', '@shop.ShopName')">Duplicate</button></li>
+                                            <li><hr class="dropdown-divider" /></li>
+                                            <li><button type="button" class="dropdown-item" onclick="triggerShopAction('@shop.TenantId', 'reset')">Reset</button></li>
+                                            <li><button type="button" class="dropdown-item text-danger" onclick="triggerShopAction('@shop.TenantId', 'delete')">Delete</button></li>
+                                            <li>
+                                                <form asp-action="Suspend" asp-route-id="@shop.TenantId" method="post" class="px-3 py-1">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="btn btn-link dropdown-item px-0 @(shop.IsActive ? "text-danger" : "text-success")"
+                                                            onclick="return confirm('Are you sure you want to @(shop.IsActive ? "SUSPEND" : "ACTIVATE") this shop?')">
+                                                        @(shop.IsActive ? "Suspend" : "Activate")
+                                                    </button>
+                                                </form>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <input type="password" id="adminPassword_@shop.TenantId" class="form-control form-control-sm mt-2"
+                                           placeholder="Admin password" autocomplete="current-password" />
+
+                                    <form asp-action="BackupShop" method="post" class="d-none" id="backupForm_@shop.TenantId">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="Id" value="@shop.TenantId" />
+                                        <input type="hidden" name="AdminPassword" />
+                                    </form>
+                                    <form asp-action="DownloadBackup" method="post" class="d-none" id="downloadForm_@shop.TenantId">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="Id" value="@shop.TenantId" />
+                                        <input type="hidden" name="AdminPassword" />
+                                    </form>
+                                    <form asp-action="ResetShop" method="post" class="d-none" id="resetForm_@shop.TenantId">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="Id" value="@shop.TenantId" />
+                                        <input type="hidden" name="AdminPassword" />
+                                        <input type="hidden" name="ShopAdminUsername" />
+                                        <input type="hidden" name="NewShopAdminPassword" />
+                                    </form>
+                                    <form asp-action="DeleteShop" method="post" class="d-none" id="deleteForm_@shop.TenantId">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="Id" value="@shop.TenantId" />
+                                        <input type="hidden" name="AdminPassword" />
+                                    </form>
+                                    <form asp-action="DuplicateShop" method="post" class="d-none" id="duplicateForm_@shop.TenantId">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="Id" value="@shop.TenantId" />
+                                        <input type="hidden" name="AdminPassword" />
+                                        <input type="hidden" name="NewShopName" />
+                                        <input type="hidden" name="NewShopLoginId" />
+                                        <input type="hidden" name="NewAdminUsername" />
+                                        <input type="hidden" name="NewAdminPassword" />
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function getAdminPassword(tenantId) {
+            const passwordInput = document.getElementById(`adminPassword_${tenantId}`);
+            const adminPassword = passwordInput ? passwordInput.value.trim() : "";
+
+            if (!adminPassword) {
+                alert("Please enter your admin password first.");
+                passwordInput?.focus();
+                return null;
+            }
+
+            return adminPassword;
+        }
+
+        function triggerShopAction(tenantId, action) {
+            const adminPassword = getAdminPassword(tenantId);
+            if (!adminPassword) return false;
+
+            const formMap = {
+                "download": `downloadForm_${tenantId}`,
+                "backup": `backupForm_${tenantId}`,
+                "reset": `resetForm_${tenantId}`,
+                "delete": `deleteForm_${tenantId}`
+            };
+
+            const form = document.getElementById(formMap[action]);
+            if (!form) return false;
+
+            form.querySelector('[name="AdminPassword"]').value = adminPassword;
+
+            if (action === "reset") {
+                const username = prompt("Enter the shop admin username after reset:", "admin");
+                if (!username || !username.trim()) return false;
+
+                const newPassword = prompt("Enter the new shop admin password/PIN after reset:");
+                if (!newPassword || !newPassword.trim()) return false;
+
+                form.querySelector('[name="ShopAdminUsername"]').value = username.trim();
+                form.querySelector('[name="NewShopAdminPassword"]').value = newPassword.trim();
+
+                if (!confirm("Reset will back up this shop, drop its current database, and rebuild it from the empty template. Continue?")) {
+                    return false;
+                }
+            }
+
+            if (action === "delete") {
+                if (!confirm("CRITICAL: Are you sure you want to DELETE this shop and PERMANENTLY drop its database? This action cannot be undone.")) {
+                    return false;
+                }
+            }
+
+            if (action === "download") {
+                if (!confirm("Download a local backup archive for this shop?")) {
+                    return false;
+                }
+            }
+
+            if (action === "backup") {
+                if (!confirm("Run a Dropbox backup for this shop?")) {
+                    return false;
+                }
+            }
+
+            form.submit();
+            return false;
+        }
+
+        function triggerDuplicateAction(tenantId, currentShopName) {
+            const adminPassword = getAdminPassword(tenantId);
+            if (!adminPassword) return false;
+
+            const newShopName = prompt("Enter the new shop name:", `${currentShopName} Copy`);
+            if (!newShopName || !newShopName.trim()) return false;
+
+            const newLoginId = prompt("Enter the new shop login ID:", "");
+            if (!newLoginId || !newLoginId.trim()) return false;
+
+            const newUsername = prompt("Enter the new admin username:", "admin");
+            if (!newUsername || !newUsername.trim()) return false;
+
+            const newPassword = prompt("Enter the new admin password/PIN:");
+            if (!newPassword || !newPassword.trim()) return false;
+
+            const form = document.getElementById(`duplicateForm_${tenantId}`);
+            form.querySelector('[name="AdminPassword"]').value = adminPassword;
+            form.querySelector('[name="NewShopName"]').value = newShopName.trim();
+            form.querySelector('[name="NewShopLoginId"]').value = newLoginId.trim();
+            form.querySelector('[name="NewAdminUsername"]').value = newUsername.trim();
+            form.querySelector('[name="NewAdminPassword"]').value = newPassword.trim();
+
+            if (!confirm(`Duplicate "${currentShopName}" into "${newShopName.trim()}"?`)) {
+                return false;
+            }
+
+            form.submit();
+            return false;
+        }
+    </script>
+}

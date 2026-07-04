@@ -1,0 +1,249 @@
+@import "tailwindcss";
+
+:root {
+  --myanmar-font-family: "Padauk", "Pyidaungsu", "Noto Sans Myanmar", "Myanmar Text", sans-serif;
+  --app-font-family: var(--myanmar-font-family);
+  --app-font-size: 16px;
+  --app-table-header-size: 14px;
+  --app-table-header-line-height: 1.2;
+}
+
+html {
+  font-size: var(--app-font-size);
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--app-font-family);
+  background-color: #f8fafc;
+  color: #0f172a;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* 
+   Stop mobile auto-zoom on input focus. 
+   Browsers trigger zoom when font-size is < 16px.
+*/
+input,
+textarea,
+select {
+  font-size: 14px !important;
+}
+
+/* Global table header readability override */
+table thead th {
+  font-size: var(--app-table-header-size) !important;
+  line-height: var(--app-table-header-line-height) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  color: inherit !important;
+}
+
+/* Force white text in dark report/dashboard headers regardless of language */
+html.lang-mm table thead th {
+  color: #ffffff !important;
+}
+
+/* Keep data tables usable on mobile */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 1rem;
+}
+
+table {
+  min-width: 100%;
+}
+
+@media (max-width: 1024px) {
+  table {
+    min-width: 768px;
+    /* Slightly wider for tablet readability */
+  }
+}
+
+@media (max-width: 640px) {
+  table {
+    min-width: 600px;
+  }
+
+  /* Compact typography for mobile */
+  html.lang-mm {
+    font-size: 14px;
+  }
+
+  .text-xs {
+    font-size: 0.65rem;
+  }
+
+  .text-sm {
+    font-size: 0.75rem;
+  }
+}
+
+/* Theme: Dark */
+html.theme-dark {
+  color-scheme: dark;
+}
+
+html.theme-dark body {
+  background-color: #020617;
+  color: #e2e8f0;
+}
+
+html.theme-dark .bg-\[\#f8fafc\],
+html.theme-dark .bg-\[\#f1f5f9\],
+html.theme-dark .bg-gray-50,
+html.theme-dark .bg-gray-100,
+html.theme-dark .bg-slate-50,
+html.theme-dark .bg-slate-100 {
+  background-color: #020617 !important;
+}
+
+html.theme-dark .bg-white,
+html.theme-dark .bg-white\/80,
+html.theme-dark .bg-white\/70,
+html.theme-dark .bg-slate-50\/50,
+html.theme-dark .bg-slate-50\/40 {
+  background-color: #0f172a !important;
+}
+
+html.theme-dark .border,
+html.theme-dark .border-slate-50,
+html.theme-dark .border-slate-100,
+html.theme-dark .border-slate-200,
+html.theme-dark .border-gray-100,
+html.theme-dark .border-gray-200,
+html.theme-dark .border-blue-100,
+html.theme-dark .divide-slate-50,
+html.theme-dark .divide-gray-100 {
+  border-color: #334155 !important;
+}
+
+html.theme-dark .text-slate-900,
+html.theme-dark .text-slate-800,
+html.theme-dark .text-gray-900,
+html.theme-dark .text-gray-800 {
+  color: #e2e8f0 !important;
+}
+
+html.theme-dark .text-slate-700,
+html.theme-dark .text-slate-600,
+html.theme-dark .text-gray-700,
+html.theme-dark .text-gray-600,
+html.theme-dark .text-slate-500,
+html.theme-dark .text-gray-500 {
+  color: #cbd5e1 !important;
+}
+
+html.theme-dark .text-slate-400,
+html.theme-dark .text-gray-400 {
+  color: #94a3b8 !important;
+}
+
+html.theme-dark input,
+html.theme-dark select,
+html.theme-dark textarea {
+  background-color: #0b1220 !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+html.theme-dark input::placeholder,
+html.theme-dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+html.theme-dark table thead th {
+  background-color: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+html.theme-dark .shadow-sm,
+html.theme-dark .shadow-lg,
+html.theme-dark .shadow-xl,
+html.theme-dark .shadow-2xl {
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.5) !important;
+}
+
+.padauk-regular {
+  font-family: var(--myanmar-font-family);
+  font-weight: 400;
+  font-style: normal;
+}
+
+.padauk-bold {
+  font-family: var(--myanmar-font-family);
+  font-weight: 400;
+  font-style: normal;
+}
+
+/* Global Myanmar Text Refinement */
+.myanmar-text {
+  font-family: var(--myanmar-font-family) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  line-height: 1.45;
+  font-feature-settings: "kern" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+input.myanmar-text,
+textarea.myanmar-text,
+select.myanmar-text {
+  line-height: 1.4;
+}
+
+html.lang-mm {
+  font-size: 15px;
+}
+
+html.lang-mm body,
+html.lang-mm input,
+html.lang-mm textarea,
+html.lang-mm select,
+html.lang-mm button {
+  font-family: var(--myanmar-font-family);
+}
+
+html.lang-mm .font-normal,
+html.lang-mm b,
+html.lang-mm strong {
+  font-weight: 400 !important;
+}
+
+html.lang-mm .tracking-tight,
+html.lang-mm .tracking-wide,
+html.lang-mm .tracking-wider,
+html.lang-mm .tracking-widest,
+html.lang-mm .tracking-\[0\.15em\],
+html.lang-mm .tracking-\[0\.2em\] {
+  letter-spacing: 0 !important;
+}
+
+html.lang-mm aside .nav-item {
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+html.lang-mm aside .nav-header {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+}
+
+html.lang-mm aside button {
+  font-size: 13px !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}

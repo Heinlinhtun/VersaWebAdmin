@@ -1,0 +1,190 @@
+@model IEnumerable<VersaWebAdmin.Models.ShopMonitoringViewModel>
+
+@{
+    ViewData["Title"] = "Shop Monitoring";
+    var totalShops = Model.Count();
+    var onlineShops = Model.Count(s => s.IsOnline);
+    var offlineShops = totalShops - onlineShops;
+    var totalOnlineUsers = Model.Sum(s => s.OnlineUserCount);
+    var totalDbSizeMb = Model.Sum(s => s.DbSizeMb);
+}
+
+<div class="container-fluid mt-4">
+    <h4 class="text-primary mb-3">
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="me-2" style="vertical-align:-5px">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
+        Shop Monitoring Dashboard
+    </h4>
+
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-primary bg-opacity-10">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-primary">@totalShops</div>
+                    <div class="text-muted small">Total Shops</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-success bg-opacity-10">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-success">@onlineShops</div>
+                    <div class="text-muted small">Shops Online</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-warning bg-opacity-10">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-warning">@totalOnlineUsers</div>
+                    <div class="text-muted small">Users Online</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-info bg-opacity-10">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-info">@totalDbSizeMb.ToString("F1") MB</div>
+                    <div class="text-muted small">Total Data Usage</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shop Table -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+            <h5 class="text-primary mb-0">Shop Status</h5>
+            <small class="text-muted">
+                <span class="badge bg-success me-1">&nbsp;</span> Online &nbsp;
+                <span class="badge bg-secondary me-1">&nbsp;</span> Offline &nbsp;
+                <span class="badge bg-danger me-1">&nbsp;</span> Inactive
+            </small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Shop</th>
+                            <th>Plan</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center">Users Online</th>
+                            <th class="text-center">Total Users</th>
+                            <th class="text-center">Last Activity</th>
+                            <th class="text-center">Inactive Days</th>
+                            <th class="text-center">DB Size</th>
+                            <th class="text-center">Sales</th>
+                            <th class="text-center">Products</th>
+                            <th class="text-center">Customers</th>
+                            <th class="text-center">Days Left</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var shop in Model)
+                        {
+                            string statusBadgeClass;
+                            string statusText;
+
+                            if (!shop.IsActive)
+                            {
+                                statusBadgeClass = "bg-danger";
+                                statusText = "Inactive";
+                            }
+                            else if (shop.IsOnline)
+                            {
+                                statusBadgeClass = "bg-success";
+                                statusText = "Online";
+                            }
+                            else
+                            {
+                                statusBadgeClass = "bg-secondary";
+                                statusText = "Offline";
+                            }
+
+                            string daysSinceActivityDisplay;
+                            string daysSinceActivityClass;
+                            if (shop.DaysSinceLastActivity == -1)
+                            {
+                                daysSinceActivityDisplay = "N/A";
+                                daysSinceActivityClass = "text-muted";
+                            }
+                            else if (shop.DaysSinceLastActivity == 0)
+                            {
+                                daysSinceActivityDisplay = "Today";
+                                daysSinceActivityClass = "text-success";
+                            }
+                            else if (shop.DaysSinceLastActivity <= 7)
+                            {
+                                daysSinceActivityDisplay = $"{shop.DaysSinceLastActivity}d";
+                                daysSinceActivityClass = "text-warning";
+                            }
+                            else
+                            {
+                                daysSinceActivityDisplay = $"{shop.DaysSinceLastActivity}d";
+                                daysSinceActivityClass = "text-danger fw-bold";
+                            }
+
+                            string daysLeftClass = shop.DaysLeft switch
+                            {
+                                > 30 => "text-success",
+                                > 7 => "text-warning",
+                                > 0 => "text-danger",
+                                _ => "text-danger fw-bold"
+                            };
+
+                            <tr>
+                                <td>
+                                    <div class="fw-bold text-dark">@shop.ShopName</div>
+                                    <small class="text-muted">@shop.ShopLoginId</small>
+                                </td>
+                                <td><span class="badge bg-info text-dark">@shop.SubscriptionPlan</span></td>
+                                <td class="text-center">
+                                    <span class="badge @statusBadgeClass">@statusText</span>
+                                </td>
+                                <td class="text-center">
+                                    @if (shop.OnlineUserCount > 0)
+                                    {
+                                        <span class="fw-bold text-success">@shop.OnlineUserCount</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">0</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <span class="text-muted">@shop.OnlineUserCount / @shop.TotalUserCount</span>
+                                </td>
+                                <td class="text-center">
+                                    <small class="text-muted">
+                                        @(shop.LastActivityDate?.ToString("dd/MM/yyyy HH:mm") ?? "Never")
+                                    </small>
+                                </td>
+                                <td class="text-center">
+                                    <span class="@daysSinceActivityClass">@daysSinceActivityDisplay</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="@(shop.DbSizeMb > 100 ? "text-warning fw-bold" : "text-muted")">
+                                        @shop.DbSizeMb.ToString("F1") MB
+                                    </span>
+                                </td>
+                                <td class="text-center"><small class="text-muted">@shop.TotalSales.ToString("N0")</small></td>
+                                <td class="text-center"><small class="text-muted">@shop.TotalProducts.ToString("N0")</small></td>
+                                <td class="text-center"><small class="text-muted">@shop.TotalCustomers.ToString("N0")</small></td>
+                                <td class="text-center">
+                                    <span class="@daysLeftClass fw-bold">@shop.DaysLeft d</span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer bg-white text-muted small">
+            Last refreshed: @DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss") &mdash;
+            <a href="@Url.Action("Monitor")" class="text-primary">Refresh</a>
+        </div>
+    </div>
+</div>

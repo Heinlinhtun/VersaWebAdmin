@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - VersaWebAdmin</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+        }
+        * { box-sizing: border-box; }
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #0f0f23;
+            color: #e2e8f0;
+        }
+        .login-wrapper {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            background: radial-gradient(ellipse at 60% 20%, rgba(99,102,241,0.15) 0%, transparent 60%),
+                        radial-gradient(ellipse at 10% 80%, rgba(79,70,229,0.1) 0%, transparent 50%),
+                        #0f0f23;
+        }
+        .login-card {
+            width: 100%;
+            max-width: 420px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 24px;
+            padding: 2.5rem;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 32px 64px rgba(0,0,0,0.5);
+        }
+        .brand {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .brand-icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border-radius: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            box-shadow: 0 8px 24px rgba(99,102,241,0.4);
+        }
+        .brand-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #e2e8f0, #a5b4fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0;
+        }
+        .brand-subtitle {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.4);
+            margin: 0.25rem 0 0;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .form-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(255,255,255,0.5);
+            margin-bottom: 0.4rem;
+        }
+        .form-control {
+            background: rgba(255,255,255,0.05) !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            color: #e2e8f0 !important;
+            border-radius: 12px !important;
+            padding: 0.75rem 1rem !important;
+            font-size: 0.925rem;
+            transition: all 0.2s;
+        }
+        .form-control:focus {
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.2) !important;
+            outline: none;
+        }
+        .form-control::placeholder { color: rgba(255,255,255,0.25); }
+        .input-group .form-control { border-radius: 12px 0 0 12px !important; }
+        .input-group .btn-toggle {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-left: none;
+            border-radius: 0 12px 12px 0;
+            color: rgba(255,255,255,0.4);
+            padding: 0 1rem;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .input-group .btn-toggle:hover { color: #e2e8f0; }
+        .btn-login {
+            width: 100%;
+            padding: 0.85rem;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            font-weight: 700;
+            font-size: 0.9rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 20px rgba(99,102,241,0.4);
+            margin-top: 0.5rem;
+        }
+        .btn-login:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 28px rgba(99,102,241,0.5);
+        }
+        .btn-login:active { transform: translateY(0); }
+        .alert-danger {
+            background: rgba(239,68,68,0.1);
+            border: 1px solid rgba(239,68,68,0.3);
+            color: #fca5a5;
+            border-radius: 12px;
+            font-size: 0.875rem;
+            padding: 0.75rem 1rem;
+        }
+        .text-footer {
+            text-align: center;
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.2);
+            margin-top: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    @RenderBody()
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
