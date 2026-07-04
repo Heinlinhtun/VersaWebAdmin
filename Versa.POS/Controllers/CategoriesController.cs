@@ -44,6 +44,15 @@ public class CategoriesController : BaseShopController
     public async Task<IActionResult> Delete(int id)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+        var usageCount = await conn.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM Products WHERE CategoryId = @id AND IFNULL(IsActive, 1) = 1",
+            new { id });
+
+        if (usageCount > 0)
+        {
+            return BadRequest(new { message = "This category is used by products. It cannot be deleted." });
+        }
+
         await conn.ExecuteAsync("DELETE FROM Categories WHERE CategoryId = @id", new { id });
         return Ok(new { message = "Deleted" });
     }

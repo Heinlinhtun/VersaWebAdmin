@@ -1620,7 +1620,7 @@ const deleteItem = async (item) => {
 
   } catch (err) {
     console.error("Delete Error:", err);
-    const msg = err.response?.data?.Message || tx.value.deleteOperationFailed;
+    const msg = err.response?.data?.Message || err.response?.data?.message || tx.value.deleteOperationFailed;
     addToast(msg, "error");
   }
 };

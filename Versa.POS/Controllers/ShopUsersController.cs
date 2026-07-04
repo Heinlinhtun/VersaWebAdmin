@@ -33,7 +33,7 @@ namespace Versa.POS.Controllers
                     SELECT u.UserId, u.BranchId, u.Username, u.Role, u.IsActive, b.BranchName 
                     FROM ShopUsers u 
                     LEFT JOIN Branches b ON u.BranchId = b.BranchId 
-                    WHERE u.BranchId = @userBranchId
+                    WHERE u.BranchId = @userBranchId AND u.IsActive = 1
                     ORDER BY u.UserId DESC";
                 var users = await conn.QueryAsync<dynamic>(sql, new { userBranchId });
                 return Ok(users);
@@ -44,6 +44,7 @@ namespace Versa.POS.Controllers
                     SELECT u.UserId, u.BranchId, u.Username, u.Role, u.IsActive, b.BranchName 
                     FROM ShopUsers u 
                     LEFT JOIN Branches b ON u.BranchId = b.BranchId 
+                    WHERE u.IsActive = 1
                     ORDER BY u.UserId DESC";
                 var users = await conn.QueryAsync<dynamic>(sql);
                 return Ok(users);
@@ -101,7 +102,7 @@ namespace Versa.POS.Controllers
             
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
 
-            var currentUserCount = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ShopUsers");
+            var currentUserCount = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ShopUsers WHERE IsActive = 1");
             if (currentUserCount >= maxUsers)
             {
                 return BadRequest(new { Message = $"Client အလိုက် ခွင့်ပြုထားသော အကောင့်အရေအတွက် ({maxUsers}) ပြည့်သွားပါပြီ။" });
@@ -228,7 +229,7 @@ namespace Versa.POS.Controllers
                 return BadRequest(new { Message = "မန်နေဂျာများသည် မိမိဆိုင်ခွဲ (Branch) ရှိ ဝန်ထမ်းများကိုသာ ဖျက်ခွင့်ရှိပါသည်။" });
             }
 
-            await conn.ExecuteAsync("DELETE FROM ShopUsers WHERE UserId = @id", new { id });
+            await conn.ExecuteAsync("UPDATE ShopUsers SET IsActive = 0 WHERE UserId = @id", new { id });
             return Ok(new { Message = "ဝန်ထမ်းကို ဖျက်ပြီးပါပြီ။" });
         }
     }

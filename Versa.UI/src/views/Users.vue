@@ -277,7 +277,7 @@ const confirmToggleStatus = async (user) => {
     try {
       await api.put(`/ShopUsers/${user.UserId}`, { ...user, IsActive: !user.IsActive });
       fetchUsers();
-    } catch (err) { addToast(t('users.toastError'), "error"); }
+    } catch (err) { addToast(err.response?.data?.Message || err.response?.data?.message || t('users.toastError'), "error"); }
   }
 };
 
@@ -288,7 +288,7 @@ const confirmDelete = async (user) => {
       await api.delete(`/ShopUsers/${user.UserId}`);
       fetchUsers();
       addToast(t('users.deleted'), "success");
-    } catch (err) { addToast(t('users.toastError'), "error"); }
+    } catch (err) { addToast(err.response?.data?.Message || err.response?.data?.message || t('users.toastError'), "error"); }
   }
 };
 

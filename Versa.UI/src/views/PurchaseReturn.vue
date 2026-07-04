@@ -162,6 +162,7 @@ const processReturn = async (item) => {
   const refund = unitPrice * qty;
 
   const payload = {
+    POItemId: parseInt(item.POItemId || item.poItemId),
     POId: parseInt(item.POId),
     ProductId: parseInt(item.ProductId),
     BranchId: parseInt(localStorage.getItem('BranchId')),

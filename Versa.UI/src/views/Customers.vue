@@ -386,7 +386,7 @@ const deleteCustomer = async (id) => {
     await api.delete(`/customers/${id}`);
     addToast(t('customers.removed'), "success");
     fetchCustomers();
-  } catch (err) { addToast(t('customers.deleteFailed'), "error"); }
+  } catch (err) { addToast(err.response?.data?.Message || err.response?.data?.message || t('customers.deleteFailed'), "error"); }
 };
 
 const openModal = (item = null) => {

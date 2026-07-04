@@ -19,6 +19,33 @@ namespace Versa.POS.Controllers
             _dbService = dbService;
         }
 
+        private static async Task EnsurePurchaseBatchRemainingColumnAsync(MySqlConnection conn, MySqlTransaction transaction)
+        {
+            var hasColumn = await conn.ExecuteScalarAsync<int>(@"
+SELECT COUNT(*)
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'PurchaseOrderItems'
+  AND COLUMN_NAME = 'RemainingQuantity'",
+                transaction: transaction);
+
+            if (hasColumn == 0)
+            {
+                await conn.ExecuteAsync(
+                    "ALTER TABLE PurchaseOrderItems ADD COLUMN RemainingQuantity DECIMAL(18,4) NULL",
+                    transaction: transaction);
+            }
+
+            await conn.ExecuteAsync(@"
+UPDATE PurchaseOrderItems poi
+LEFT JOIN UnitConversions uc
+  ON uc.ProductId = poi.ProductId
+ AND uc.FromUnitId = poi.UnitId
+SET poi.RemainingQuantity = (IFNULL(poi.Quantity, 0) + IFNULL(poi.FOCQuantity, 0)) * IFNULL(uc.Multiplier, 1)
+WHERE poi.RemainingQuantity IS NULL",
+                transaction: transaction);
+        }
+
         [HttpPost("import")]
         public async Task<IActionResult> ImportFromExcel(IFormFile file)
         {
@@ -30,6 +57,8 @@ namespace Versa.POS.Controllers
 
             try
             {
+                await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
+
                 var excelType = GetExcelType(file.FileName);
                 List<dynamic> rows;
                 try
@@ -155,9 +184,9 @@ namespace Versa.POS.Controllers
                             }
 
                             // Insert Purchase Order Item linked to the Group PO
-                            string poiSql = @"INSERT INTO PurchaseOrderItems (POId, ProductId, UnitId, Quantity, FOCQuantity, CostPrice, ExpiryDate, AlertDays) 
-                                            VALUES (@poId, @productId, @unitId, @qty, 0, @purchasePrice, @expiryDate, @warningDays)";
-                            await conn.ExecuteAsync(poiSql, new { poId, productId, unitId, qty, purchasePrice, expiryDate, warningDays }, transaction);
+                            string poiSql = @"INSERT INTO PurchaseOrderItems (POId, ProductId, UnitId, Quantity, FOCQuantity, CostPrice, ExpiryDate, AlertDays, RemainingQuantity) 
+                                            VALUES (@poId, @productId, @unitId, @qty, 0, @purchasePrice, @expiryDate, @warningDays, @remainingQuantity)";
+                            await conn.ExecuteAsync(poiSql, new { poId, productId, unitId, qty, purchasePrice, expiryDate, warningDays, remainingQuantity = qty }, transaction);
 
                             // Update Stock for the specific branch
                             string stockSql = @"

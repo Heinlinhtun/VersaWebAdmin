@@ -58,6 +58,18 @@ WHERE TABLE_SCHEMA = DATABASE()
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
 
+        var usageCount = await conn.ExecuteScalarAsync<int>(@"
+SELECT SUM(RefCount)
+FROM (
+    SELECT COUNT(*) AS RefCount FROM Sales WHERE CustomerId = @id
+    UNION ALL SELECT COUNT(*) FROM CustomerPayments WHERE CustomerId = @id
+) refs", new { id });
+
+        if (usageCount > 0)
+        {
+            return BadRequest(new { Message = "This customer has sale or payment history. It cannot be deleted." });
+        }
+
         // ID အလိုက် ဖျက်ရန် SQL
         string sql = "DELETE FROM Customers WHERE CustomerId = @id";
 

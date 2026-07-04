@@ -69,10 +69,25 @@ namespace Versa.POS.Controllers
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
 
-            var saleCount = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Sales WHERE BranchId = @id", new { id });
-            if (saleCount > 0)
+            var usageCount = await conn.ExecuteScalarAsync<int>(@"
+SELECT SUM(RefCount)
+FROM (
+    SELECT COUNT(*) AS RefCount FROM Sales WHERE BranchId = @id
+    UNION ALL SELECT COUNT(*) FROM PurchaseOrders WHERE BranchId = @id
+    UNION ALL SELECT COUNT(*) FROM SaleReturns WHERE BranchId = @id
+    UNION ALL SELECT COUNT(*) FROM PurchaseReturns WHERE BranchId = @id
+    UNION ALL SELECT COUNT(*) FROM StockAdjustments WHERE BranchId = @id
+    UNION ALL SELECT COUNT(*) FROM StockTransfers WHERE FromBranchId = @id OR ToBranchId = @id
+    UNION ALL SELECT COUNT(*) FROM ProductStocks WHERE BranchId = @id AND IFNULL(Quantity, 0) <> 0
+    UNION ALL SELECT COUNT(*) FROM ShopUsers WHERE BranchId = @id
+    UNION ALL SELECT COUNT(*) FROM Expenses WHERE BranchId = @id
+    UNION ALL SELECT COUNT(*) FROM Consignments WHERE BranchId = @id
+    UNION ALL SELECT COUNT(*) FROM ConsignmentItems WHERE BranchId = @id
+) refs", new { id });
+
+            if (usageCount > 0)
             {
-                return BadRequest(new { Message = "ဤဌာနခွဲတွင် အရောင်းမှတ်တမ်းများရှိနေသောကြောင့် ဖျက်၍မရပါ။ Inactive သာ လုပ်ပေးပါ။" });
+                return BadRequest(new { Message = "This branch already has sales, purchases, stock, users, expenses, transfer, return, or consignment history. Please make it inactive instead of deleting." });
             }
 
             await conn.ExecuteAsync("DELETE FROM Branches WHERE BranchId = @id", new { id });

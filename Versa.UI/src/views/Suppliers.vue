@@ -547,7 +547,7 @@ const deleteSupplier = async (id) => {
       fetchSuppliers();
       addToast(t('suppliers.deleted'), "success");
     } catch (err) {
-      addToast(t('suppliers.deleteError'), "error");
+      addToast(err.response?.data?.Message || err.response?.data?.message || t('suppliers.deleteError'), "error");
     }
   }
 };

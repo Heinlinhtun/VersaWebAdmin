@@ -151,6 +151,86 @@ WHERE SaleId = @SaleId
             return existing > 0;
         }
 
+        private static async Task EnsurePurchaseBatchRemainingColumnAsync(MySqlConnection conn, MySqlTransaction? transaction = null)
+        {
+            var hasColumn = await conn.ExecuteScalarAsync<int>(@"
+SELECT COUNT(*)
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'PurchaseOrderItems'
+  AND COLUMN_NAME = 'RemainingQuantity'",
+                transaction: transaction);
+
+            if (hasColumn == 0)
+            {
+                await conn.ExecuteAsync(
+                    "ALTER TABLE PurchaseOrderItems ADD COLUMN RemainingQuantity DECIMAL(18,4) NULL",
+                    transaction: transaction);
+            }
+
+            await conn.ExecuteAsync(@"
+UPDATE PurchaseOrderItems poi
+LEFT JOIN UnitConversions uc
+  ON uc.ProductId = poi.ProductId
+ AND uc.FromUnitId = poi.UnitId
+SET poi.RemainingQuantity = (IFNULL(poi.Quantity, 0) + IFNULL(poi.FOCQuantity, 0)) * IFNULL(uc.Multiplier, 1)
+WHERE poi.RemainingQuantity IS NULL",
+                transaction: transaction);
+        }
+
+        private static async Task RestorePurchaseBatchesFefoAsync(
+            MySqlConnection conn,
+            MySqlTransaction transaction,
+            int branchId,
+            int productId,
+            decimal baseQuantity)
+        {
+            if (baseQuantity <= 0) return;
+
+            var batches = (await conn.QueryAsync<dynamic>(@"
+SELECT
+  poi.POItemId,
+  IFNULL(poi.RemainingQuantity, 0) AS RemainingQuantity,
+  ((IFNULL(poi.Quantity, 0) + IFNULL(poi.FOCQuantity, 0)) * IFNULL(uc.Multiplier, 1)) AS OriginalBaseQuantity
+FROM PurchaseOrderItems poi
+JOIN PurchaseOrders po ON po.POId = poi.POId
+LEFT JOIN UnitConversions uc
+  ON uc.ProductId = poi.ProductId
+ AND uc.FromUnitId = poi.UnitId
+WHERE po.BranchId = @BranchId
+  AND poi.ProductId = @ProductId
+  AND IFNULL(poi.RemainingQuantity, 0) < ((IFNULL(poi.Quantity, 0) + IFNULL(poi.FOCQuantity, 0)) * IFNULL(uc.Multiplier, 1))
+ORDER BY
+  CASE WHEN poi.ExpiryDate IS NULL THEN 1 ELSE 0 END,
+  poi.ExpiryDate ASC,
+  po.OrderDate ASC,
+  poi.POItemId ASC
+FOR UPDATE",
+                new { BranchId = branchId, ProductId = productId },
+                transaction)).ToList();
+
+            var remaining = baseQuantity;
+            foreach (var batch in batches)
+            {
+                if (remaining <= 0) break;
+
+                var current = Convert.ToDecimal(batch.RemainingQuantity);
+                var original = Convert.ToDecimal(batch.OriginalBaseQuantity);
+                var capacity = Math.Max(0, original - current);
+                var restore = Math.Min(capacity, remaining);
+                if (restore <= 0) continue;
+
+                await conn.ExecuteAsync(@"
+UPDATE PurchaseOrderItems
+SET RemainingQuantity = IFNULL(RemainingQuantity, 0) + @Restore
+WHERE POItemId = @POItemId",
+                    new { Restore = restore, POItemId = (int)batch.POItemId },
+                    transaction);
+
+                remaining -= restore;
+            }
+        }
+
         [HttpGet("stock-report/{branchId}")]
         public async Task<IActionResult> GetStockReport(int branchId)
         {
@@ -389,6 +469,8 @@ WHERE SaleId = @SaleId
 
             try
             {
+                await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
+
                 var saleMaster = await conn.QueryFirstOrDefaultAsync<dynamic>(
                     "SELECT BranchId, TotalAmount FROM Sales WHERE SaleId = @saleId FOR UPDATE", new { saleId }, transaction);
                 if (saleMaster == null) return BadRequest(new { Message = "Voucher not found." });
@@ -418,6 +500,7 @@ WHERE SaleId = @SaleId
 
                     decimal multiplier = conv?.Multiplier ?? 1;
                     decimal baseQtyToReturn = (decimal)item.Quantity * multiplier;
+                    await RestorePurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, (int)saleMaster.BranchId, (int)item.ProductId, baseQtyToReturn);
 
                     string returnSql = @"INSERT INTO SaleReturns (SaleId, ProductId, BranchId, Quantity, UnitId, RefundAmount, Reason, ReturnDate) 
                                  VALUES (@saleId, @ProductId, @BranchId, @Quantity, @UnitId, @RefundAmount, @Reason, NOW())";
@@ -466,6 +549,8 @@ WHERE SaleId = @SaleId
 
             try
             {
+                await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
+
                 var conv = await conn.QueryFirstOrDefaultAsync<dynamic>(
                     "SELECT Multiplier FROM UnitConversions WHERE ProductId = @ProductId AND FromUnitId = @UnitId",
                     new { model.ProductId, model.UnitId }, transaction);
@@ -474,26 +559,24 @@ WHERE SaleId = @SaleId
                 decimal baseQtyToDeduct = model.Quantity * multiplier;
 
                 var purchaseItem = await conn.QueryFirstOrDefaultAsync<dynamic>(@"
-SELECT poi.Quantity, po.BranchId
+SELECT poi.POItemId, poi.Quantity, po.BranchId
 FROM PurchaseOrderItems poi
 JOIN PurchaseOrders po ON po.POId = poi.POId
-WHERE poi.POId = @POId
+WHERE (@POItemId IS NULL OR poi.POItemId = @POItemId)
+  AND poi.POId = @POId
   AND poi.ProductId = @ProductId
   AND poi.UnitId = @UnitId
   AND po.BranchId = @BranchId
-LIMIT 1",
-                    new { model.POId, model.ProductId, model.UnitId, model.BranchId }, transaction);
+  AND IFNULL(poi.Quantity, 0) >= @Quantity
+ORDER BY poi.POItemId ASC
+LIMIT 1
+FOR UPDATE",
+                    new { model.POItemId, model.POId, model.ProductId, model.UnitId, model.BranchId, model.Quantity }, transaction);
 
                 if (purchaseItem == null)
                 {
                     await transaction.RollbackAsync();
-                    return BadRequest(new { Message = "Purchase item not found for this branch and unit." });
-                }
-
-                if ((decimal)purchaseItem.Quantity < model.Quantity)
-                {
-                    await transaction.RollbackAsync();
-                    return BadRequest(new { Message = $"Return quantity exceeds remaining quantity on this purchase. Returnable: {(decimal)purchaseItem.Quantity:0.##}." });
+                    return BadRequest(new { Message = "Purchase batch not found or return quantity exceeds remaining quantity." });
                 }
 
                 string checkStockSql = "SELECT Quantity FROM ProductStocks WHERE BranchId = @BranchId AND ProductId = @ProductId";
@@ -512,8 +595,24 @@ LIMIT 1",
                 string stockUpdate = "UPDATE ProductStocks SET Quantity = Quantity - @baseQtyToDeduct WHERE BranchId = @BranchId AND ProductId = @ProductId";
                 await conn.ExecuteAsync(stockUpdate, new { baseQtyToDeduct, model.BranchId, model.ProductId }, transaction);
 
-                string poItemUpdate = "UPDATE PurchaseOrderItems SET Quantity = Quantity - @Quantity WHERE POId = @POId AND ProductId = @ProductId AND UnitId = @UnitId";
-                await conn.ExecuteAsync(poItemUpdate, new { model.Quantity, model.POId, model.ProductId, model.UnitId }, transaction);
+                string poItemUpdate = @"
+UPDATE PurchaseOrderItems
+SET Quantity = Quantity - @Quantity,
+    RemainingQuantity = GREATEST(IFNULL(RemainingQuantity, 0) - @baseQtyToDeduct, 0)
+WHERE POItemId = @POItemId
+  AND Quantity >= @Quantity";
+                var updatedPurchaseRows = await conn.ExecuteAsync(poItemUpdate, new
+                {
+                    model.Quantity,
+                    baseQtyToDeduct,
+                    POItemId = (int)purchaseItem.POItemId
+                }, transaction);
+
+                if (updatedPurchaseRows != 1)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { Message = "Purchase batch was changed by another operation. Please refresh and try again." });
+                }
 
                 await transaction.CommitAsync();
                 return Ok(new { Message = "Purchase return successful." });
@@ -535,6 +634,7 @@ LIMIT 1",
             try
             {
                 await EnsureSaleReturnsPaymentMethodColumnAsync(conn, (MySqlTransaction)transaction);
+                await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
 
                 var originalItem = await conn.QueryFirstOrDefaultAsync<dynamic>(
                     "SELECT Quantity, UnitId FROM SaleItems WHERE SaleId = @SaleId AND ProductId = @ProductId FOR UPDATE",
@@ -603,6 +703,7 @@ LIMIT 1",
 
                 string stockUpdate = @"UPDATE ProductStocks SET Quantity = Quantity + @baseQtyReturned 
                                WHERE BranchId = @BranchId AND ProductId = @ProductId";
+                await RestorePurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, model.BranchId, model.ProductId, baseQtyReturned);
                 await conn.ExecuteAsync(stockUpdate, new { baseQtyReturned, model.BranchId, model.ProductId }, transaction);
 
                 string saleItemUpdate = @"UPDATE SaleItems 
@@ -811,6 +912,7 @@ WHERE SaleId = @saleId", new { saleId });
             {
                 await EnsureBundleItemsSupportsServicesAsync(conn, (MySqlTransaction)transaction);
                 await EnsureSaleReturnsSupportsItemTypesAsync(conn, (MySqlTransaction)transaction);
+                await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
 
                 var itemType = string.IsNullOrWhiteSpace(model.ItemType) ? "Product" : model.ItemType.Trim();
                 if (model.Quantity <= 0) return BadRequest(new { Message = "Invalid Quantity." });
@@ -891,6 +993,7 @@ VALUES (@SaleId, 'Product', @ProductId, NULL, NULL, @BranchId, @Quantity, @UnitI
                     await conn.ExecuteAsync(
                         @"UPDATE ProductStocks SET Quantity = Quantity + @baseQtyReturned WHERE BranchId = @BranchId AND ProductId = @ProductId",
                         new { baseQtyReturned, model.BranchId, ProductId = model.ProductId.Value }, transaction);
+                    await RestorePurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, model.BranchId, model.ProductId.Value, baseQtyReturned);
 
                     await conn.ExecuteAsync(
                         @"UPDATE SaleItems 
@@ -952,6 +1055,7 @@ VALUES (@SaleId, 'Product', @ProductId, NULL, NULL, @BranchId, @Quantity, @UnitI
                         await conn.ExecuteAsync(
                             "UPDATE ProductStocks SET Quantity = Quantity + @qty WHERE BranchId = @BranchId AND ProductId = @ProductId",
                             new { qty = compQty, model.BranchId, ProductId = (int)comp.ComponentProductId }, transaction);
+                        await RestorePurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, model.BranchId, (int)comp.ComponentProductId, compQty);
                     }
 
                     await conn.ExecuteAsync(@"
@@ -1066,7 +1170,7 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
                     u.UnitName,
                     IFNULL(ps.Quantity, 0) as StockQty,
                     IFNULL(uc.Multiplier, 1) as UnitMultiplier,
-                    LEAST(poi.Quantity, IFNULL(ps.Quantity, 0) / IFNULL(uc.Multiplier, 1)) as ReturnableQty
+                    GREATEST(0, LEAST(IFNULL(poi.Quantity, 0), IFNULL(ps.Quantity, 0) / IFNULL(uc.Multiplier, 1))) as ReturnableQty
                 FROM PurchaseOrderItems poi
                 JOIN PurchaseOrders po ON poi.POId = po.POId
                 JOIN Products p ON poi.ProductId = p.ProductId
@@ -1157,9 +1261,10 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
         public async Task<IActionResult> GetExpiredItems([FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate, [FromQuery] int? branchId)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+            await EnsurePurchaseBatchRemainingColumnAsync(conn);
             var scopedBranchId = ResolveBranchScope(branchId);
             
-            string whereClause = "WHERE poi.ExpiryDate IS NOT NULL AND poi.ExpiryDate < CURDATE() AND (@branchId IS NULL OR po.BranchId = @branchId)";
+            string whereClause = "WHERE poi.ExpiryDate IS NOT NULL AND poi.ExpiryDate < CURDATE() AND IFNULL(poi.RemainingQuantity, 0) > 0 AND (@branchId IS NULL OR po.BranchId = @branchId)";
             if (toDate.HasValue)
             {
                 whereClause += " AND DATE(poi.ExpiryDate) <= @cutoffDate";
@@ -1169,7 +1274,8 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
                 SELECT 
                     poi.POItemId,
                     poi.ProductId,
-                    poi.Quantity,
+                    (IFNULL(poi.RemainingQuantity, 0) / IFNULL(uc.Multiplier, 1)) AS Quantity,
+                    IFNULL(poi.RemainingQuantity, 0) AS RemainingBaseQuantity,
                     poi.ExpiryDate,
                     p.Name as ProductName,
                     p.SKU as Sku,
@@ -1179,6 +1285,7 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
                 JOIN PurchaseOrders po ON poi.POId = po.POId
                 JOIN Products p ON poi.ProductId = p.ProductId
                 LEFT JOIN Units u ON poi.UnitId = u.UnitId
+                LEFT JOIN UnitConversions uc ON uc.ProductId = poi.ProductId AND uc.FromUnitId = poi.UnitId
                 {whereClause}
                 ORDER BY poi.ExpiryDate ASC";
 
@@ -1259,7 +1366,7 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
                     u.UnitName,
                     IFNULL(ps.Quantity, 0) as StockQty,
                     IFNULL(uc.Multiplier, 1) as UnitMultiplier,
-                    LEAST(poi.Quantity, IFNULL(ps.Quantity, 0) / IFNULL(uc.Multiplier, 1)) as ReturnableQty
+                    GREATEST(0, LEAST(IFNULL(poi.Quantity, 0), IFNULL(ps.Quantity, 0) / IFNULL(uc.Multiplier, 1))) as ReturnableQty
                 FROM PurchaseOrderItems poi
                 JOIN PurchaseOrders po ON poi.POId = po.POId
                 JOIN Products p ON poi.ProductId = p.ProductId

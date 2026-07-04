@@ -16,6 +16,29 @@ public class HistoryController : BaseShopController
     private string? CleanDate(string? date) => string.IsNullOrWhiteSpace(date) ? null : date;
     private string CleanText(string? value) => string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
 
+    private static async Task EnsurePurchaseBatchRemainingColumnAsync(MySqlConnection conn)
+    {
+        var hasColumn = await conn.ExecuteScalarAsync<int>(@"
+SELECT COUNT(*)
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'PurchaseOrderItems'
+  AND COLUMN_NAME = 'RemainingQuantity'");
+
+        if (hasColumn == 0)
+        {
+            await conn.ExecuteAsync("ALTER TABLE PurchaseOrderItems ADD COLUMN RemainingQuantity DECIMAL(18,4) NULL");
+        }
+
+        await conn.ExecuteAsync(@"
+UPDATE PurchaseOrderItems poi
+LEFT JOIN UnitConversions uc
+  ON uc.ProductId = poi.ProductId
+ AND uc.FromUnitId = poi.UnitId
+SET poi.RemainingQuantity = (IFNULL(poi.Quantity, 0) + IFNULL(poi.FOCQuantity, 0)) * IFNULL(uc.Multiplier, 1)
+WHERE poi.RemainingQuantity IS NULL");
+    }
+
     private string BuildDateFilter(string dateField = "s.SaleDate")
     {
         // Returns SQL fragment for date range filtering
@@ -511,6 +534,7 @@ WHERE (@Query = ''
     public async Task<IActionResult> GetProductPurchaseBatches(int productId, [FromQuery] int? branchId)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+        await EnsurePurchaseBatchRemainingColumnAsync(conn);
         int? resolvedBranchId = User.IsInRole("Admin") ? branchId : int.Parse(User.FindFirst("BranchId").Value);
 
         const string sql = @"
@@ -526,6 +550,8 @@ SELECT
     u.UnitName AS unitName,
     IFNULL(poi.Quantity, 0) AS quantity,
     IFNULL(poi.FOCQuantity, 0) AS focQuantity,
+    IFNULL(poi.RemainingQuantity, 0) AS remainingBaseQuantity,
+    (IFNULL(poi.RemainingQuantity, 0) / IFNULL(uc.Multiplier, 1)) AS remainingQuantity,
     IFNULL(poi.CostPrice, 0) AS costPrice,
     poi.ExpiryDate AS expiryDate,
     IFNULL(poi.AlertDays, 30) AS alertDays
@@ -533,6 +559,7 @@ FROM PurchaseOrderItems poi
 INNER JOIN PurchaseOrders po ON po.POId = poi.POId
 INNER JOIN Products p ON p.ProductId = poi.ProductId
 LEFT JOIN Units u ON u.UnitId = poi.UnitId
+LEFT JOIN UnitConversions uc ON uc.ProductId = poi.ProductId AND uc.FromUnitId = poi.UnitId
 LEFT JOIN Suppliers s ON s.SupplierId = po.SupplierId
 LEFT JOIN Branches b ON b.BranchId = po.BranchId
 WHERE poi.ProductId = @ProductId

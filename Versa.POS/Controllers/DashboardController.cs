@@ -16,10 +16,34 @@ namespace Versa.POS.Controllers
             _dbService = dbService;
         }
 
+        private static async Task EnsurePurchaseBatchRemainingColumnAsync(MySqlConnection conn)
+        {
+            var hasColumn = await conn.ExecuteScalarAsync<int>(@"
+SELECT COUNT(*)
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'PurchaseOrderItems'
+  AND COLUMN_NAME = 'RemainingQuantity'");
+
+            if (hasColumn == 0)
+            {
+                await conn.ExecuteAsync("ALTER TABLE PurchaseOrderItems ADD COLUMN RemainingQuantity DECIMAL(18,4) NULL");
+            }
+
+            await conn.ExecuteAsync(@"
+UPDATE PurchaseOrderItems poi
+LEFT JOIN UnitConversions uc
+  ON uc.ProductId = poi.ProductId
+ AND uc.FromUnitId = poi.UnitId
+SET poi.RemainingQuantity = (IFNULL(poi.Quantity, 0) + IFNULL(poi.FOCQuantity, 0)) * IFNULL(uc.Multiplier, 1)
+WHERE poi.RemainingQuantity IS NULL");
+        }
+
         [HttpGet("summary/{branchId}")]
         public async Task<IActionResult> GetDailySummary(int branchId, [FromQuery] int days = 7, [FromQuery] string? date = null)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+            await EnsurePurchaseBatchRemainingColumnAsync(conn);
             var selectedDate = ResolveDashboardDate(date);
 
             // ၁။ ဒီနေ့အရောင်းနှင့် အကြွေးစာရင်းချုပ်
@@ -74,16 +98,15 @@ namespace Versa.POS.Controllers
             string expirySoonSql = @"
                 SELECT 
                     COUNT(*) as ProductCount,
-                    IFNULL(SUM(Quantity), 0) as TotalQty
+                    IFNULL(SUM(RemainingQuantity), 0) as TotalQty
                 FROM (
-                    SELECT DISTINCT ps.ProductId, ps.Quantity
+                    SELECT poi.POItemId, poi.RemainingQuantity
                     FROM PurchaseOrderItems poi
                     JOIN PurchaseOrders po ON poi.POId = po.POId
-                    JOIN ProductStocks ps ON poi.ProductId = ps.ProductId AND po.BranchId = ps.BranchId
                     WHERE po.BranchId = @branchId 
                     AND poi.ExpiryDate IS NOT NULL 
                     AND poi.ExpiryDate BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL IFNULL(poi.AlertDays, 30) DAY)
-                    AND ps.Quantity > 0
+                    AND IFNULL(poi.RemainingQuantity, 0) > 0
                 ) p";
             var expirySoonRes = await conn.QueryFirstOrDefaultAsync<dynamic>(expirySoonSql, new { branchId });
             int expiredSoonCount = Convert.ToInt32(expirySoonRes.ProductCount);
@@ -213,11 +236,12 @@ namespace Versa.POS.Controllers
         public async Task<IActionResult> GetExpiredSoonItems(int branchId)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+            await EnsurePurchaseBatchRemainingColumnAsync(conn);
             string sql = @"
                 SELECT 
                     p.Name as name, 
                     poi.ExpiryDate as expiryDate, 
-                    poi.Quantity as batchQuantity,
+                    (IFNULL(poi.RemainingQuantity, 0) / IFNULL(uc.Multiplier, 1)) as batchQuantity,
                     poi.FOCQuantity as focQuantity,
                     ps.Quantity as totalStock,
                     IFNULL(poi.AlertDays, 30) as alertDays,
@@ -226,10 +250,11 @@ namespace Versa.POS.Controllers
                 JOIN PurchaseOrders po ON poi.POId = po.POId
                 JOIN Products p ON poi.ProductId = p.ProductId
                 JOIN ProductStocks ps ON poi.ProductId = ps.ProductId AND po.BranchId = ps.BranchId
+                LEFT JOIN UnitConversions uc ON uc.ProductId = poi.ProductId AND uc.FromUnitId = poi.UnitId
                 WHERE po.BranchId = @branchId 
                 AND poi.ExpiryDate IS NOT NULL 
                 AND poi.ExpiryDate BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL IFNULL(poi.AlertDays, 30) DAY)
-                AND ps.Quantity > 0
+                AND IFNULL(poi.RemainingQuantity, 0) > 0
                 ORDER BY poi.ExpiryDate ASC";
 
             var result = await conn.QueryAsync<dynamic>(sql, new { branchId });

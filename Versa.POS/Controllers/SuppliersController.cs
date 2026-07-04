@@ -38,6 +38,19 @@ public class SuppliersController : BaseShopController
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
 
+        var usageCount = await conn.ExecuteScalarAsync<int>(@"
+SELECT SUM(RefCount)
+FROM (
+    SELECT COUNT(*) AS RefCount FROM PurchaseOrders WHERE SupplierId = @id
+    UNION ALL SELECT COUNT(*) FROM SupplierPayments WHERE SupplierId = @id
+    UNION ALL SELECT COUNT(*) FROM Consignments WHERE SupplierId = @id
+) refs", new { id });
+
+        if (usageCount > 0)
+        {
+            return BadRequest(new { Message = "This supplier has purchase, payment, or consignment history. It cannot be deleted." });
+        }
+
         string sql = "DELETE FROM Suppliers WHERE SupplierId = @id";
 
         try

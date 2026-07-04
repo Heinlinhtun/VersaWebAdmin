@@ -8,6 +8,7 @@ namespace Versa.Core.Models
     {
 
         public int ReturnId { get; set; }
+        public int? POItemId { get; set; }
         public int POId { get; set; }         // မူလ Purchase Order ID
         public int ProductId { get; set; }
         public int BranchId { get; set; }

@@ -939,6 +939,7 @@ const processPurchaseReturn = async (item) => {
   if (qty > maxReturnable) return addToast(`${tx.value.returnQty} > ${tx.value.returnable} (${formatQty(maxReturnable)})`, "error");
   if (qty > item.StockQty) return addToast("လက်ကျန်ထက် ပိုပို့၍မရပါ", "error");
   const payload = {
+    POItemId: item.POItemId || item.poItemId,
     POId: item.POId, ProductId: item.ProductId, BranchId: localStorage.getItem("BranchId"),
     Quantity: qty, UnitId: item.UnitId, RefundAmount: (item.CostPrice || 0) * qty, Reason: "Supplier Return",
   };

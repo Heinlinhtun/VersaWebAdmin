@@ -17,6 +17,33 @@ namespace Versa.POS.Controllers
             _dbService = dbService;
         }
 
+        private static async Task EnsurePurchaseBatchRemainingColumnAsync(MySqlConnection conn, MySqlTransaction? transaction = null)
+        {
+            var hasColumn = await conn.ExecuteScalarAsync<int>(@"
+SELECT COUNT(*)
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'PurchaseOrderItems'
+  AND COLUMN_NAME = 'RemainingQuantity'",
+                transaction: transaction);
+
+            if (hasColumn == 0)
+            {
+                await conn.ExecuteAsync(
+                    "ALTER TABLE PurchaseOrderItems ADD COLUMN RemainingQuantity DECIMAL(18,4) NULL",
+                    transaction: transaction);
+            }
+
+            await conn.ExecuteAsync(@"
+UPDATE PurchaseOrderItems poi
+LEFT JOIN UnitConversions uc
+  ON uc.ProductId = poi.ProductId
+ AND uc.FromUnitId = poi.UnitId
+SET poi.RemainingQuantity = (IFNULL(poi.Quantity, 0) + IFNULL(poi.FOCQuantity, 0)) * IFNULL(uc.Multiplier, 1)
+WHERE poi.RemainingQuantity IS NULL",
+                transaction: transaction);
+        }
+
         [HttpGet("detail-by-invoice/{invoiceNo}")]
         public async Task<IActionResult> GetPurchaseDetail(string invoiceNo)
         {
@@ -47,6 +74,8 @@ namespace Versa.POS.Controllers
 
             try
             {
+                await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
+
                 if (model.SupplierId <= 0 || model.Items == null || model.Items.Count == 0)
                     return BadRequest(new { Message = "Supplier and purchase items are required." });
 
@@ -154,8 +183,8 @@ namespace Versa.POS.Controllers
                     }
 
                     // ၉။ PurchaseOrderItems ထဲသို့ Record သွင်းခြင်း
-                    string itemSql = @"INSERT INTO PurchaseOrderItems (POId, ProductId, UnitId, Quantity, FOCQuantity, CostPrice, ExpiryDate, AlertDays) 
-                             VALUES (@POId, @ProductId, @UnitId, @Quantity, @FOCQuantity, @CostPrice, @ExpiryDate, @AlertDays)";
+                    string itemSql = @"INSERT INTO PurchaseOrderItems (POId, ProductId, UnitId, Quantity, FOCQuantity, CostPrice, ExpiryDate, AlertDays, RemainingQuantity) 
+                             VALUES (@POId, @ProductId, @UnitId, @Quantity, @FOCQuantity, @CostPrice, @ExpiryDate, @AlertDays, @RemainingQuantity)";
 
                     insertedItemCount += await conn.ExecuteAsync(itemSql, new
                     {
@@ -166,7 +195,8 @@ namespace Versa.POS.Controllers
                         FOCQuantity = focQty,
                         item.CostPrice, // မူရင်းဝယ်ဈေးအတိုင်း မှတ်တမ်းတင်သည်
                         item.ExpiryDate,
-                        item.AlertDays
+                        item.AlertDays,
+                        RemainingQuantity = totalInwardBaseQty
                     }, transaction);
 
                     // ၁၀။ Stock Update (Base Unit သို့ပြောင်း၍ ပေါင်းထည့်ခြင်း)
@@ -229,6 +259,8 @@ namespace Versa.POS.Controllers
             try
             {
                 // ၁။ ယခင် Item များ၏ Stock ကို Reverse ပြန်လုပ်ခြင်း
+                await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
+
                 var oldItems = await conn.QueryAsync<dynamic>(
                     @"SELECT poi.*, uc.Multiplier FROM PurchaseOrderItems poi 
               LEFT JOIN UnitConversions uc ON poi.ProductId = uc.ProductId AND poi.UnitId = uc.FromUnitId
@@ -285,8 +317,8 @@ namespace Versa.POS.Controllers
 
                     // ၄။ PurchaseOrderItems ထဲသို့ Record သွင်းခြင်း
                     await conn.ExecuteAsync(
-                        @"INSERT INTO PurchaseOrderItems (POId, ProductId, UnitId, Quantity, FOCQuantity, CostPrice, ExpiryDate, AlertDays) 
-                  VALUES (@POId, @ProductId, @UnitId, @Quantity, @FOCQuantity, @CostPrice, @ExpiryDate, @AlertDays)",
+                        @"INSERT INTO PurchaseOrderItems (POId, ProductId, UnitId, Quantity, FOCQuantity, CostPrice, ExpiryDate, AlertDays, RemainingQuantity) 
+                  VALUES (@POId, @ProductId, @UnitId, @Quantity, @FOCQuantity, @CostPrice, @ExpiryDate, @AlertDays, @RemainingQuantity)",
                         new
                         {
                             POId = id,
@@ -296,7 +328,8 @@ namespace Versa.POS.Controllers
                             FOCQuantity = item.FOCQuantity ?? 0m,
                             CostPrice = item.CostPrice,
                             item.ExpiryDate,
-                            item.AlertDays
+                            item.AlertDays,
+                            RemainingQuantity = baseQuantity
                         },
                         transaction);
 

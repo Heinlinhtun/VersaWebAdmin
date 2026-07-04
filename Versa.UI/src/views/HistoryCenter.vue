@@ -662,7 +662,7 @@
           </div>
 
           <div class="overflow-auto border border-slate-100 rounded-xl">
-            <table class="w-full min-w-[900px] text-left border-collapse">
+            <table class="w-full min-w-[980px] text-left border-collapse">
               <thead class="bg-[#3f3f46] text-white">
                 <tr class="text-[10px] uppercase tracking-[0.15em]">
                   <th class="p-4">PO No</th>
@@ -671,6 +671,7 @@
                   <th class="p-4">Branch</th>
                   <th class="p-4 text-right">Qty</th>
                   <th class="p-4 text-right">FOC</th>
+                  <th class="p-4 text-right">Remaining</th>
                   <th class="p-4">Unit</th>
                   <th class="p-4 text-right">Cost</th>
                   <th class="p-4">Expiry Date</th>
@@ -679,12 +680,12 @@
               </thead>
               <tbody class="divide-y divide-slate-100 text-xs">
                 <tr v-if="isBatchLoading">
-                  <td colspan="10" class="p-10 text-center text-slate-400 uppercase tracking-widest">
+                  <td colspan="11" class="p-10 text-center text-slate-400 uppercase tracking-widest">
                     Loading batches...
                   </td>
                 </tr>
                 <tr v-else-if="purchaseBatches.length === 0">
-                  <td colspan="10" class="p-10 text-center text-slate-400 uppercase tracking-widest">
+                  <td colspan="11" class="p-10 text-center text-slate-400 uppercase tracking-widest">
                     No purchase batches found
                   </td>
                 </tr>
@@ -695,6 +696,7 @@
                   <td class="p-4 text-slate-600">{{ batch.branchName || '-' }}</td>
                   <td class="p-4 text-right tabular-nums">{{ formatNumber(batch.quantity) }}</td>
                   <td class="p-4 text-right tabular-nums">{{ formatNumber(batch.focQuantity) }}</td>
+                  <td class="p-4 text-right tabular-nums text-emerald-700">{{ formatNumber(batch.remainingQuantity) }}</td>
                   <td class="p-4 text-slate-500">{{ batch.unitName || '-' }}</td>
                   <td class="p-4 text-right tabular-nums">{{ formatNumber(batch.costPrice) }}</td>
                   <td class="p-4 tabular-nums" :class="getBatchExpiryStatus(batch).className">

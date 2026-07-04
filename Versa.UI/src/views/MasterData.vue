@@ -504,6 +504,13 @@ const tabs = computed(() => [
     { id: 'branches', label: t('branches.title') },
 ]);
 
+const getApiErrorMessage = (err, fallback) => (
+    err.response?.data?.Message
+    || err.response?.data?.message
+    || err.response?.data?.title
+    || fallback
+);
+
 // ── CATEGORIES ──────────────────────────────────────────
 const cat = reactive({
     list: [], showModal: false, isEdit: false, searchQuery: '', currentPage: 1, pageSize: 10,
@@ -532,7 +539,14 @@ const cat = reactive({
         } catch { addToast(t('categories.toastError'), 'error'); }
     },
     async deleteItem(id) {
-        if (confirm(t('categories.deleteConfirm'))) { await api.delete(`/categories/${id}`); await fetchCategories(); }
+        if (confirm(t('categories.deleteConfirm'))) {
+            try {
+                await api.delete(`/categories/${id}`);
+                await fetchCategories();
+            } catch (err) {
+                addToast(getApiErrorMessage(err, t('categories.toastError')), 'error');
+            }
+        }
     },
 });
 watch(() => cat.searchQuery, () => { cat.currentPage = 1; });
@@ -565,7 +579,14 @@ const unit = reactive({
         } catch { addToast(t('units.toastError'), 'error'); }
     },
     async deleteItem(id) {
-        if (confirm(t('units.deleteConfirm'))) { await api.delete(`/units/${id}`); await fetchUnits(); }
+        if (confirm(t('units.deleteConfirm'))) {
+            try {
+                await api.delete(`/units/${id}`);
+                await fetchUnits();
+            } catch (err) {
+                addToast(getApiErrorMessage(err, t('units.toastError')), 'error');
+            }
+        }
     },
 });
 watch(() => unit.searchQuery, () => { unit.currentPage = 1; });
@@ -613,7 +634,7 @@ const branch = reactive({
     async deleteItem(id) {
         if (confirm(t('branches.deleteConfirm'))) {
             try { await api.delete(`/Branches/${id}`); await fetchBranches(); addToast(t('branches.deleted'), 'success'); }
-            catch (err) { addToast(err.response?.data?.Message || t('branches.actionFailed'), 'error'); }
+            catch (err) { addToast(getApiErrorMessage(err, t('branches.actionFailed')), 'error'); }
         }
     },
 });

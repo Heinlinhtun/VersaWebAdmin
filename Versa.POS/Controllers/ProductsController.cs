@@ -303,6 +303,38 @@ public class ProductsController : BaseShopController
             await conn.ExecuteAsync("DELETE FROM UnitConversions WHERE ProductId = @id", new { id }, transaction);
 
             // ၂။ Product ကို ဖျက်သည်
+            var productExists = await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM Products WHERE ProductId = @id",
+                new { id },
+                transaction);
+
+            if (productExists == 0) return NotFound(new { message = "Product not found." });
+
+            var usageCount = await conn.ExecuteScalarAsync<int>(@"
+SELECT SUM(RefCount)
+FROM (
+    SELECT COUNT(*) AS RefCount FROM SaleItems WHERE ProductId = @id
+    UNION ALL SELECT COUNT(*) FROM PurchaseOrderItems WHERE ProductId = @id
+    UNION ALL SELECT COUNT(*) FROM SaleReturns WHERE ProductId = @id
+    UNION ALL SELECT COUNT(*) FROM PurchaseReturns WHERE ProductId = @id
+    UNION ALL SELECT COUNT(*) FROM StockAdjustments WHERE ProductId = @id
+    UNION ALL SELECT COUNT(*) FROM StockTransferItems WHERE ProductId = @id
+    UNION ALL SELECT COUNT(*) FROM BundleItems WHERE ComponentProductId = @id
+    UNION ALL SELECT COUNT(*) FROM ConsignmentItems WHERE ProductId = @id
+    UNION ALL SELECT COUNT(*) FROM ProductStocks WHERE ProductId = @id AND IFNULL(Quantity, 0) <> 0
+) refs",
+                new { id },
+                transaction);
+
+            if (usageCount > 0)
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(new { message = "This product already has stock, purchase, sale, return, adjustment, transfer, bundle, or consignment history. It cannot be deleted." });
+            }
+
+            await conn.ExecuteAsync("DELETE FROM ProductPrices WHERE ProductId = @id", new { id }, transaction);
+            await conn.ExecuteAsync("DELETE FROM ProductStocks WHERE ProductId = @id AND IFNULL(Quantity, 0) = 0", new { id }, transaction);
+
             string sql = "DELETE FROM Products WHERE ProductId = @id";
             int affected = await conn.ExecuteAsync(sql, new { id }, transaction);
 

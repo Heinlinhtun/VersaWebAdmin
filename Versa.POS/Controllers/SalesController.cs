@@ -57,6 +57,131 @@ CREATE TABLE IF NOT EXISTS HeldSales (
             await conn.ExecuteAsync("DELETE FROM HeldSales WHERE ExpiresAt <= NOW()");
         }
 
+        private static async Task EnsurePurchaseBatchRemainingColumnAsync(MySqlConnection conn, MySqlTransaction transaction)
+        {
+            var hasColumn = await conn.ExecuteScalarAsync<int>(@"
+SELECT COUNT(*)
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'PurchaseOrderItems'
+  AND COLUMN_NAME = 'RemainingQuantity'",
+                transaction: transaction);
+
+            if (hasColumn == 0)
+            {
+                await conn.ExecuteAsync(
+                    "ALTER TABLE PurchaseOrderItems ADD COLUMN RemainingQuantity DECIMAL(18,4) NULL",
+                    transaction: transaction);
+            }
+
+            await conn.ExecuteAsync(@"
+UPDATE PurchaseOrderItems poi
+LEFT JOIN UnitConversions uc
+  ON uc.ProductId = poi.ProductId
+ AND uc.FromUnitId = poi.UnitId
+SET poi.RemainingQuantity = (IFNULL(poi.Quantity, 0) + IFNULL(poi.FOCQuantity, 0)) * IFNULL(uc.Multiplier, 1)
+WHERE poi.RemainingQuantity IS NULL",
+                transaction: transaction);
+        }
+
+        private static async Task DeductPurchaseBatchesFefoAsync(
+            MySqlConnection conn,
+            MySqlTransaction transaction,
+            int branchId,
+            int productId,
+            decimal baseQuantity)
+        {
+            if (baseQuantity <= 0) return;
+
+            var batches = (await conn.QueryAsync<dynamic>(@"
+SELECT poi.POItemId, IFNULL(poi.RemainingQuantity, 0) AS RemainingQuantity
+FROM PurchaseOrderItems poi
+JOIN PurchaseOrders po ON po.POId = poi.POId
+WHERE po.BranchId = @BranchId
+  AND poi.ProductId = @ProductId
+  AND IFNULL(poi.RemainingQuantity, 0) > 0
+ORDER BY
+  CASE WHEN poi.ExpiryDate IS NULL THEN 1 ELSE 0 END,
+  poi.ExpiryDate ASC,
+  po.OrderDate ASC,
+  poi.POItemId ASC
+FOR UPDATE",
+                new { BranchId = branchId, ProductId = productId },
+                transaction)).ToList();
+
+            var remaining = baseQuantity;
+            foreach (var batch in batches)
+            {
+                if (remaining <= 0) break;
+
+                var available = Convert.ToDecimal(batch.RemainingQuantity);
+                var deduct = Math.Min(available, remaining);
+                if (deduct <= 0) continue;
+
+                await conn.ExecuteAsync(@"
+UPDATE PurchaseOrderItems
+SET RemainingQuantity = GREATEST(IFNULL(RemainingQuantity, 0) - @Deduct, 0)
+WHERE POItemId = @POItemId",
+                    new { Deduct = deduct, POItemId = (int)batch.POItemId },
+                    transaction);
+
+                remaining -= deduct;
+            }
+        }
+
+        private static async Task RestorePurchaseBatchesFefoAsync(
+            MySqlConnection conn,
+            MySqlTransaction transaction,
+            int branchId,
+            int productId,
+            decimal baseQuantity)
+        {
+            if (baseQuantity <= 0) return;
+
+            var batches = (await conn.QueryAsync<dynamic>(@"
+SELECT
+  poi.POItemId,
+  IFNULL(poi.RemainingQuantity, 0) AS RemainingQuantity,
+  ((IFNULL(poi.Quantity, 0) + IFNULL(poi.FOCQuantity, 0)) * IFNULL(uc.Multiplier, 1)) AS OriginalBaseQuantity
+FROM PurchaseOrderItems poi
+JOIN PurchaseOrders po ON po.POId = poi.POId
+LEFT JOIN UnitConversions uc
+  ON uc.ProductId = poi.ProductId
+ AND uc.FromUnitId = poi.UnitId
+WHERE po.BranchId = @BranchId
+  AND poi.ProductId = @ProductId
+  AND IFNULL(poi.RemainingQuantity, 0) < ((IFNULL(poi.Quantity, 0) + IFNULL(poi.FOCQuantity, 0)) * IFNULL(uc.Multiplier, 1))
+ORDER BY
+  CASE WHEN poi.ExpiryDate IS NULL THEN 1 ELSE 0 END,
+  poi.ExpiryDate ASC,
+  po.OrderDate ASC,
+  poi.POItemId ASC
+FOR UPDATE",
+                new { BranchId = branchId, ProductId = productId },
+                transaction)).ToList();
+
+            var remaining = baseQuantity;
+            foreach (var batch in batches)
+            {
+                if (remaining <= 0) break;
+
+                var current = Convert.ToDecimal(batch.RemainingQuantity);
+                var original = Convert.ToDecimal(batch.OriginalBaseQuantity);
+                var capacity = Math.Max(0, original - current);
+                var restore = Math.Min(capacity, remaining);
+                if (restore <= 0) continue;
+
+                await conn.ExecuteAsync(@"
+UPDATE PurchaseOrderItems
+SET RemainingQuantity = IFNULL(RemainingQuantity, 0) + @Restore
+WHERE POItemId = @POItemId",
+                    new { Restore = restore, POItemId = (int)batch.POItemId },
+                    transaction);
+
+                remaining -= restore;
+            }
+        }
+
         private static async Task EnsureSalesOrderStatusColumnAsync(MySqlConnection conn, MySqlTransaction transaction)
         {
             var exists = await conn.ExecuteScalarAsync<int>(@"
@@ -362,6 +487,7 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
                 await EnsureSalesOrderStatusColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureSalesClientSaleIdColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureSalesSaleTypeColumnAsync(conn, (MySqlTransaction)transaction);
+                await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureBundleItemsSupportsUnitsAsync(conn, (MySqlTransaction)transaction);
 
                 string? cleanClientSaleId = string.IsNullOrWhiteSpace(model.ClientSaleId) ? null : model.ClientSaleId.Trim();
@@ -465,6 +591,10 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
                     {
                         decimal multiplier = item.Multiplier > 0 ? item.Multiplier : 1;
                         decimal baseQty = item.Quantity * multiplier;
+                        if (item.ProductId.HasValue)
+                        {
+                            await DeductPurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, model.BranchId, item.ProductId.Value, baseQty);
+                        }
                         await conn.ExecuteAsync("UPDATE ProductStocks SET Quantity = Quantity - @baseQty WHERE BranchId = @BranchId AND ProductId = @ProductId",
                             new { baseQty, model.BranchId, item.ProductId }, transaction);
 
@@ -508,6 +638,7 @@ WHERE SaleItemId = @SaleItemId",
                         foreach (var comp in components)
                         {
                             decimal totalDeduct = Convert.ToDecimal(comp.Quantity) * Convert.ToDecimal(comp.UnitMultiplier) * item.Quantity;
+                            await DeductPurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, model.BranchId, Convert.ToInt32(comp.ComponentProductId), totalDeduct);
                             await conn.ExecuteAsync("UPDATE ProductStocks SET Quantity = Quantity - @totalDeduct WHERE BranchId = @BranchId AND ProductId = @ComponentProductId",
                                 new { totalDeduct, model.BranchId, comp.ComponentProductId }, transaction);
                         }
@@ -642,6 +773,7 @@ WHERE SaleItemId = @SaleItemId",
             try
             {
                 await EnsureSalesOrderStatusColumnAsync(conn, (MySqlTransaction)transaction);
+                await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureSalesSaleTypeColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureBundleItemsSupportsUnitsAsync(conn, (MySqlTransaction)transaction);
 
@@ -723,6 +855,10 @@ WHERE SaleItemId = @SaleItemId",
                     {
                         decimal multiplier = item.Multiplier > 0 ? item.Multiplier : 1;
                         decimal baseQty = item.Quantity * multiplier;
+                        if (item.ProductId.HasValue)
+                        {
+                            await DeductPurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, model.BranchId, item.ProductId.Value, baseQty);
+                        }
                         await conn.ExecuteAsync("UPDATE ProductStocks SET Quantity = Quantity - @baseQty WHERE BranchId = @BranchId AND ProductId = @ProductId",
                             new { baseQty, model.BranchId, item.ProductId }, transaction);
 
@@ -765,6 +901,7 @@ WHERE SaleItemId = @SaleItemId",
                         foreach (var comp in components)
                         {
                             decimal totalDeduct = Convert.ToDecimal(comp.Quantity) * Convert.ToDecimal(comp.UnitMultiplier) * item.Quantity;
+                            await DeductPurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, model.BranchId, Convert.ToInt32(comp.ComponentProductId), totalDeduct);
                             await conn.ExecuteAsync("UPDATE ProductStocks SET Quantity = Quantity - @totalDeduct WHERE BranchId = @BranchId AND ProductId = @ComponentProductId",
                                 new { totalDeduct, model.BranchId, comp.ComponentProductId }, transaction);
                         }
@@ -978,6 +1115,7 @@ WHERE CustomerId = @CustomerId",
             try
             {
                 await EnsureSalesOrderStatusColumnAsync(conn, (MySqlTransaction)transaction);
+                await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureBundleItemsSupportsUnitsAsync(conn, (MySqlTransaction)transaction);
 
                 var saleRow = await conn.QueryFirstOrDefaultAsync<dynamic>(@"
@@ -1045,6 +1183,7 @@ LIMIT 1",
                             }
 
                             decimal baseQty = qty * multiplier;
+                            await RestorePurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, branchId, productId.Value, baseQty);
                             await conn.ExecuteAsync(
                                 "UPDATE ProductStocks SET Quantity = Quantity + @baseQty WHERE BranchId = @branchId AND ProductId = @productId",
                                 new { baseQty, branchId, productId = productId.Value }, transaction);
@@ -1065,6 +1204,7 @@ LIMIT 1",
                             foreach (var comp in components)
                             {
                                 decimal compQty = Convert.ToDecimal(comp.Quantity) * Convert.ToDecimal(comp.UnitMultiplier) * bundleQty;
+                                await RestorePurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, branchId, (int)comp.ComponentProductId, compQty);
                                 await conn.ExecuteAsync(
                                     "UPDATE ProductStocks SET Quantity = Quantity + @qty WHERE BranchId = @branchId AND ProductId = @productId",
                                     new { qty = compQty, branchId, productId = (int)comp.ComponentProductId }, transaction);
@@ -1301,6 +1441,8 @@ LIMIT 1",
 
             try
             {
+                await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
+
                 // 0. Handle Category Auto-creation
                 int? resolvedCategoryId = model.CategoryId > 0 ? model.CategoryId : null;
                 string cleanCatName = model.CategoryName?.Trim();
@@ -1409,14 +1551,15 @@ LIMIT 1",
                 }, transaction);
 
                 // 3. Create Purchase Order Item
-                string poiSql = @"INSERT INTO PurchaseOrderItems (POId, ProductId, UnitId, Quantity, FOCQuantity, CostPrice, ExpiryDate, AlertDays) 
-                                 VALUES (@POId, @ProductId, @UnitId, @Quantity, 0, @CostPrice, NULL, 30)";
+                string poiSql = @"INSERT INTO PurchaseOrderItems (POId, ProductId, UnitId, Quantity, FOCQuantity, CostPrice, ExpiryDate, AlertDays, RemainingQuantity) 
+                                 VALUES (@POId, @ProductId, @UnitId, @Quantity, 0, @CostPrice, NULL, 30, @RemainingQuantity)";
                 await conn.ExecuteAsync(poiSql, new {
                     POId = poId,
                     ProductId = productId,
                     UnitId = resolvedUnitId,
                     model.Quantity,
-                    model.CostPrice
+                    model.CostPrice,
+                    RemainingQuantity = model.Quantity
                 }, transaction);
 
                 // 4. Update Stock
