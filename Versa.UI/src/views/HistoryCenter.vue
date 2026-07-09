@@ -1607,6 +1607,12 @@ const viewDetail = async (saleId) => {
   }
 };
 
+const openSaleDetailFromQuery = async () => {
+  const saleId = Number(route.query.detailSaleId || 0);
+  if (!saleId || currentTab.value !== 'sale') return;
+  await viewDetail(saleId);
+};
+
 const tabs = computed(() => ([
   { id: 'inventory-ledger', label: t('history.inventoryLedgerTab'), activeClass: 'bg-cyan-700 text-white shadow-lg shadow-cyan-100 font-normal' },
   { id: 'sale', label: t('history.saleTab'), activeClass: 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 font-normal' },
@@ -1949,12 +1955,13 @@ onMounted(async () => {
   await fetchBranches(); // ၂။ Branch တွေယူပါ
   fetchSettings();
   await loadData();      // ၃။ ဒေတာ စတင်ခေါ်ပါ
+  await openSaleDetailFromQuery();
 });
 
 // ✅ စာမျက်နှာပွင့်နေတုန်း နောက်ထပ် Link တစ်ခု ထပ်နှိပ်ရင်လည်း အလုပ်လုပ်အောင် စောင့်ကြည့်ပါ
 watch(() => route.query, () => {
   syncQueryToFilters();
-  loadData();
+  loadData().then(openSaleDetailFromQuery);
 }, { deep: true });
 
 watch(currentTab, () => {

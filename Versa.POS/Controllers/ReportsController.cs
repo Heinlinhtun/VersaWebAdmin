@@ -846,12 +846,45 @@ WHERE cs.SettlementDate BETWEEN @start AND @end
   AND (@branchId IS NULL OR cs.BranchId = @branchId)
 ORDER BY cs.SettlementDate DESC, cs.SettlementId DESC";
 
+        const string inventorySql = @"
+SELECT
+    ci.ConsignItemId,
+    ci.ConsignId,
+    c.OrderDate,
+    sup.SupplierName,
+    b.BranchName,
+    p.Name AS ProductName,
+    p.Sku,
+    u.UnitName,
+    IFNULL(ci.Quantity, 0) AS Quantity,
+    IFNULL(ci.SoldQuantity, 0) AS SoldQuantity,
+    IFNULL(ci.ReturnedQuantity, 0) AS ReturnedQuantity,
+    GREATEST(0, IFNULL(ci.Quantity, 0) - IFNULL(ci.SoldQuantity, 0) - IFNULL(ci.ReturnedQuantity, 0)) AS AvailableQuantity,
+    IFNULL(ci.UnitPrice, 0) AS UnitCost,
+    GREATEST(0, IFNULL(ci.Quantity, 0) - IFNULL(ci.SoldQuantity, 0) - IFNULL(ci.ReturnedQuantity, 0)) * IFNULL(ci.UnitPrice, 0) AS AvailableValue
+FROM ConsignmentItems ci
+JOIN Consignments c ON c.ConsignId = ci.ConsignId
+LEFT JOIN Suppliers sup ON sup.SupplierId = c.SupplierId
+LEFT JOIN Branches b ON b.BranchId = COALESCE(ci.BranchId, c.BranchId)
+LEFT JOIN Products p ON p.ProductId = ci.ProductId
+LEFT JOIN Units u ON u.UnitId = p.UnitId
+WHERE c.Status = 'Active'
+  AND (@branchId IS NULL OR COALESCE(ci.BranchId, c.BranchId) = @branchId)
+  AND GREATEST(0, IFNULL(ci.Quantity, 0) - IFNULL(ci.SoldQuantity, 0) - IFNULL(ci.ReturnedQuantity, 0)) > 0
+ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
+
         var parameters = new { start, end, branchId = scopedBranchId };
+        var summary = await conn.QueryFirstOrDefaultAsync<dynamic>(summarySql, parameters);
+        var inventoryItems = (await conn.QueryAsync<dynamic>(inventorySql, parameters)).ToList();
+        var currentAvailableValue = inventoryItems.Sum(x => (decimal?)x.AvailableValue ?? 0m);
+
         return Ok(new
         {
-            Summary = await conn.QueryFirstOrDefaultAsync<dynamic>(summarySql, parameters),
+            Summary = summary,
             Items = (await conn.QueryAsync<dynamic>(itemsSql, parameters)).ToList(),
-            Settlements = (await conn.QueryAsync<dynamic>(settlementsSql, parameters)).ToList()
+            Settlements = (await conn.QueryAsync<dynamic>(settlementsSql, parameters)).ToList(),
+            InventoryItems = inventoryItems,
+            CurrentAvailableValue = currentAvailableValue
         });
     }
 

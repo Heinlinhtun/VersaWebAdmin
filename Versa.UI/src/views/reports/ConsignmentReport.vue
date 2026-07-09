@@ -40,6 +40,50 @@
 
     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <h3 class="font-normal text-[10px] uppercase text-slate-500 tracking-[0.2em]">{{ tx.currentStock }}</h3>
+        <div class="text-right">
+          <p class="text-[10px] uppercase tracking-widest text-slate-400">{{ tx.availableValue }}</p>
+          <p class="text-lg text-emerald-600 tabular-nums">{{ formatNumber(currentAvailableValue) }}</p>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead class="bg-slate-100 text-slate-500 text-[10px] uppercase tracking-[0.18em]">
+            <tr>
+              <th class="p-4">{{ tx.date }}</th>
+              <th class="p-4">{{ tx.product }}</th>
+              <th class="p-4">{{ tx.supplier }}</th>
+              <th class="p-4">{{ tx.branch }}</th>
+              <th class="p-4 text-right">{{ tx.qty }}</th>
+              <th class="p-4 text-right">{{ tx.availableQty }}</th>
+              <th class="p-4 text-right">{{ tx.unitCost }}</th>
+              <th class="p-4 text-right">{{ tx.value }}</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr v-for="row in inventoryItems" :key="row.ConsignItemId || row.consignItemId" class="hover:bg-slate-50">
+              <td class="p-4 text-slate-500">{{ formatDate(row.OrderDate || row.orderDate) }}</td>
+              <td class="p-4 text-slate-800">
+                <div>{{ row.ProductName || row.productName }}</div>
+                <div class="text-[10px] text-slate-400 uppercase">{{ row.Sku || row.sku || tx.noSku }}</div>
+              </td>
+              <td class="p-4 text-slate-600">{{ row.SupplierName || row.supplierName || '-' }}</td>
+              <td class="p-4 text-slate-600">{{ row.BranchName || row.branchName || '-' }}</td>
+              <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'Quantity')) }}</td>
+              <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'AvailableQuantity')) }}</td>
+              <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'UnitCost')) }}</td>
+              <td class="p-4 text-right text-emerald-600 tabular-nums">{{ formatNumber(amount(row, 'AvailableValue')) }}</td>
+            </tr>
+            <tr v-if="inventoryItems.length === 0">
+              <td colspan="8" class="p-10 text-center text-xs text-slate-400 uppercase tracking-widest">{{ tx.noCurrentStock }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
         <h3 class="font-normal text-[10px] uppercase text-slate-500 tracking-[0.2em]">{{ tx.saleLines }}</h3>
         <button @click="handleExportCsv" class="text-[10px] font-normal text-blue-600 uppercase hover:underline">{{ tx.exportCsv }}</button>
       </div>
@@ -124,6 +168,7 @@ const { exportToCsv } = useCsvExport();
 const summary = ref({});
 const items = ref([]);
 const settlements = ref([]);
+const inventoryItems = ref([]);
 
 const tx = computed(() => ({
   salesRevenue: t('reportViews.consignment.salesRevenue'),
@@ -148,10 +193,21 @@ const tx = computed(() => ({
   profit: t('reportViews.consignment.profit'),
   payment: t('reportViews.consignment.payment'),
   amount: t('reportViews.consignment.amount'),
+  currentStock: t('reportViews.consignment.currentStock'),
+  availableValue: t('reportViews.consignment.availableValue'),
+  unitCost: t('reportViews.consignment.unitCost'),
+  value: t('reportViews.consignment.value'),
   noSku: t('reportViews.consignment.noSku'),
   noSaleLines: t('reportViews.consignment.noSaleLines'),
-  noPayouts: t('reportViews.consignment.noPayouts')
+  noPayouts: t('reportViews.consignment.noPayouts'),
+  noCurrentStock: t('reportViews.consignment.noCurrentStock')
 }));
+
+const currentAvailableValue = computed(() => {
+  const apiTotal = Number(summary.value?.CurrentAvailableValue ?? summary.value?.currentAvailableValue ?? 0);
+  if (Number.isFinite(apiTotal) && apiTotal > 0) return apiTotal;
+  return inventoryItems.value.reduce((sum, row) => sum + amount(row, 'AvailableValue'), 0);
+});
 
 const amount = (obj, key) => {
   const camel = key.charAt(0).toLowerCase() + key.slice(1);
@@ -165,6 +221,8 @@ const fetchData = async () => {
     summary.value = res.data?.Summary || res.data?.summary || {};
     items.value = res.data?.Items || res.data?.items || [];
     settlements.value = res.data?.Settlements || res.data?.settlements || [];
+    inventoryItems.value = res.data?.InventoryItems || res.data?.inventoryItems || [];
+    summary.value.CurrentAvailableValue = res.data?.CurrentAvailableValue ?? res.data?.currentAvailableValue ?? currentAvailableValue.value;
   } catch (err) {
     console.error('Consignment report error:', err);
   }

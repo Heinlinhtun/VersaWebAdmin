@@ -314,6 +314,14 @@
                                                         class="px-3 py-1.5 rounded-lg text-[10px] font-normal uppercase tracking-wider bg-emerald-600 text-white hover:bg-emerald-700 transition-all active:scale-95">
                                                         {{ t('customers.collectPayment') || 'Pay' }}
                                                     </button>
+                                                    <button @click="cust.viewOrderDetail(sale)"
+                                                        class="p-2 rounded-lg bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm active:scale-95"
+                                                        title="View voucher detail">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                        </svg>
+                                                    </button>
                                                     <button v-if="cust.canDeliver(sale)" @click="cust.setOrderStatus(sale, 'Completed')"
                                                         class="px-3 py-1.5 rounded-lg text-[10px] font-normal uppercase tracking-wider bg-slate-900 text-white hover:bg-black transition-all active:scale-95">
                                                         {{ t('sale.confirm') || 'Deliver' }}
@@ -1028,10 +1036,12 @@ import api from '../services/api';
 import { useToast } from '../composables/useToast';
 import { useI18n } from '../composables/useI18n';
 import { usePermissions } from '../composables/usePermissions';
+import { useRouter } from 'vue-router';
 
 const { addToast } = useToast();
 const { t } = useI18n();
 const { can, PERMISSIONS } = usePermissions();
+const router = useRouter();
 const availablePaymentMethods = ['Cash', 'KPay', 'CB Pay', 'AYA Pay', 'Wave Money', 'Banking'];
 
 const activeTab = ref('customers');
@@ -1192,6 +1202,18 @@ const cust = reactive({
             PaymentDate: new Date().toISOString().substr(0, 10),
         };
         cust.showOrderPaymentModal = true;
+    },
+    viewOrderDetail(sale) {
+        const saleId = sale?.SaleId || sale?.saleId;
+        if (!saleId) return;
+        router.push({
+            path: '/historycenter',
+            query: {
+                tab: 'sale',
+                search: String(saleId),
+                detailSaleId: String(saleId)
+            }
+        });
     },
     async submitOrderPayment() {
         const saleId = cust.selectedOrder?.SaleId || cust.selectedOrder?.saleId;

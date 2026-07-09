@@ -2439,9 +2439,14 @@ messages.en.reportViews.consignment = {
   profit: "Profit",
   payment: "Payment",
   amount: "Amount",
+  currentStock: "Current Consignment Stock",
+  availableValue: "Available Value",
+  unitCost: "Unit Cost",
+  value: "Value",
   noSku: "No SKU",
   noSaleLines: "No consignment sale lines found",
-  noPayouts: "No payouts found"
+  noPayouts: "No payouts found",
+  noCurrentStock: "No current consignment stock found"
 };
 
 messages.mm.reportViews.consignment = {
@@ -2468,7 +2473,12 @@ messages.mm.reportViews.consignment = {
   profit: "အမြတ်",
   payment: "ငွေပေးချေမှု",
   amount: "ပမာဏ",
+  currentStock: "လက်ရှိ Consignment Stock",
+  availableValue: "ရရှိနိုင်တန်ဖိုး",
+  unitCost: "တစ်ခုချင်းကုန်ကျစရိတ်",
+  value: "တန်ဖိုး",
   noSku: "SKU မရှိ",
   noSaleLines: "Consignment အရောင်းစာရင်း မရှိပါ",
-  noPayouts: "ပေးချေမှုမှတ်တမ်း မရှိပါ"
+  noPayouts: "ပေးချေမှုမှတ်တမ်း မရှိပါ",
+  noCurrentStock: "လက်ရှိ Consignment Stock မရှိပါ"
 };
