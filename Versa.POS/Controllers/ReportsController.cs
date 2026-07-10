@@ -776,8 +776,8 @@ WHERE TABLE_SCHEMA = DATABASE()
 SELECT
     IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE si.Quantity END), 0) AS SoldQuantity,
     IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0) END), 0) AS SalesRevenue,
-    IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE si.Quantity * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0) END), 0) AS ConsignmentCost,
-    IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE ((si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0)) - (si.Quantity * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0)) END), 0) AS GrossProfit,
+    IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0) END), 0) AS ConsignmentCost,
+    IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE ((si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0)) - ((si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0)) END), 0) AS GrossProfit,
     COUNT(DISTINCT s.SaleId) AS InvoiceCount,
     IFNULL((SELECT SUM(cs.TotalAmount)
             FROM ConsignmentSettlements cs
@@ -799,6 +799,7 @@ SELECT
 FROM SaleItems si
 JOIN Sales s ON s.SaleId = si.SaleId
 LEFT JOIN ConsignmentItems ci ON ci.ConsignItemId = si.ConsignItemId
+LEFT JOIN UnitConversions uc ON uc.ProductId = si.ProductId AND uc.FromUnitId = si.UnitId
 WHERE s.SaleDate BETWEEN @start AND @end
   AND IFNULL(si.IsConsignment, 0) = 1
   AND (@branchId IS NULL OR s.BranchId = @branchId)";
@@ -812,12 +813,15 @@ SELECT
     sup.SupplierName,
     b.BranchName,
     IFNULL(si.Quantity, 0) AS Quantity,
+    COALESCE(su.UnitName, '') AS UnitName,
+    IFNULL(si.Quantity, 0) * IFNULL(uc.Multiplier, 1) AS BaseQuantity,
+    COALESCE(bu.UnitName, '') AS BaseUnitName,
     IFNULL(si.UnitPrice, 0) AS UnitPrice,
     IFNULL(si.DiscountAmount, 0) AS DiscountAmount,
     COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0) AS UnitCost,
     CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0) END AS Revenue,
-    CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE si.Quantity * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0) END AS Cost,
-    CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE ((si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0)) - (si.Quantity * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0)) END AS Profit
+    CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0) END AS Cost,
+    CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE ((si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0)) - ((si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0)) END AS Profit
 FROM SaleItems si
 JOIN Sales s ON s.SaleId = si.SaleId
 LEFT JOIN Products p ON p.ProductId = si.ProductId
@@ -825,6 +829,9 @@ LEFT JOIN ConsignmentItems ci ON ci.ConsignItemId = si.ConsignItemId
 LEFT JOIN Consignments c ON c.ConsignId = ci.ConsignId
 LEFT JOIN Suppliers sup ON sup.SupplierId = c.SupplierId
 LEFT JOIN Branches b ON b.BranchId = s.BranchId
+LEFT JOIN Units su ON su.UnitId = si.UnitId
+LEFT JOIN Units bu ON bu.UnitId = p.UnitId
+LEFT JOIN UnitConversions uc ON uc.ProductId = si.ProductId AND uc.FromUnitId = si.UnitId
 WHERE s.SaleDate BETWEEN @start AND @end
   AND IFNULL(si.IsConsignment, 0) = 1
   AND (@branchId IS NULL OR s.BranchId = @branchId)

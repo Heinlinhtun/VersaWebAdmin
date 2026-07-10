@@ -283,16 +283,16 @@
                             </div>
                             <div class="max-h-[65vh] overflow-y-auto">
                                 <table class="w-full text-left text-xs">
-                                    <thead class="bg-slate-50 sticky top-0 text-[10px] uppercase text-slate-600 border-b border-slate-200">
+                                    <thead class="bg-[#3f3f46] sticky top-0 text-[10px] uppercase text-white">
                                         <tr>
-                                            <th class="py-2 px-4 font-normal text-slate-600">Date</th>
-                                            <th class="py-2 px-4 font-normal text-slate-600">Voucher No</th>
-                                            <th class="py-2 px-4 font-normal text-right text-slate-600">Amount</th>
-                                            <th class="py-2 px-4 font-normal text-right text-slate-600">Paid</th>
-                                            <th class="py-2 px-4 font-normal text-right text-slate-600">Remain</th>
-                                            <th class="py-2 px-4 font-normal text-slate-600">Method</th>
-                                            <th class="py-2 px-4 font-normal text-slate-600">Status</th>
-                                            <th class="py-2 px-4 font-normal text-right text-slate-600">Action</th>
+                                            <th class="py-2 px-4 font-normal">Date</th>
+                                            <th class="py-2 px-4 font-normal">Voucher No</th>
+                                            <th class="py-2 px-4 font-normal text-right">Amount</th>
+                                            <th class="py-2 px-4 font-normal text-right">Paid</th>
+                                            <th class="py-2 px-4 font-normal text-right">Remain</th>
+                                            <th class="py-2 px-4 font-normal">Method</th>
+                                            <th class="py-2 px-4 font-normal">Status</th>
+                                            <th class="py-2 px-4 font-normal text-right">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-50">
@@ -463,14 +463,14 @@
                             </div>
                             <div class="max-h-56 overflow-y-auto">
                                 <table class="w-full text-left text-xs">
-                                    <thead class="bg-slate-50 sticky top-0 text-[10px] uppercase text-slate-600 border-b border-slate-200">
+                                    <thead class="bg-[#3f3f46] sticky top-0 text-[10px] uppercase text-white">
                                         <tr>
-                                            <th class="py-2 px-4 font-normal text-slate-600">Date</th>
-                                            <th class="py-2 px-4 font-normal text-slate-600">Voucher No</th>
-                                            <th class="py-2 px-4 font-normal text-right text-slate-600">Amount</th>
-                                            <th class="py-2 px-4 font-normal text-right text-slate-600">Paid</th>
-                                            <th class="py-2 px-4 font-normal text-right text-slate-600">Remain</th>
-                                            <th class="py-2 px-4 font-normal text-slate-600">Method</th>
+                                            <th class="py-2 px-4 font-normal">Date</th>
+                                            <th class="py-2 px-4 font-normal">Voucher No</th>
+                                            <th class="py-2 px-4 font-normal text-right">Amount</th>
+                                            <th class="py-2 px-4 font-normal text-right">Paid</th>
+                                            <th class="py-2 px-4 font-normal text-right">Remain</th>
+                                            <th class="py-2 px-4 font-normal">Method</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-50">

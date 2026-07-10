@@ -48,7 +48,7 @@
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse text-sm">
-          <thead class="bg-slate-100 text-slate-500 text-[10px] uppercase tracking-[0.18em]">
+          <thead class="bg-[#3f3f46] text-white text-[10px] uppercase tracking-[0.18em]">
             <tr>
               <th class="p-4">{{ tx.date }}</th>
               <th class="p-4">{{ tx.product }}</th>
@@ -69,7 +69,9 @@
               </td>
               <td class="p-4 text-slate-600">{{ row.SupplierName || row.supplierName || '-' }}</td>
               <td class="p-4 text-slate-600">{{ row.BranchName || row.branchName || '-' }}</td>
-              <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'Quantity')) }}</td>
+              <td class="p-4 text-right tabular-nums">
+                <div>{{ formatQty(amount(row, 'Quantity')) }}</div>
+              </td>
               <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'AvailableQuantity')) }}</td>
               <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'UnitCost')) }}</td>
               <td class="p-4 text-right text-emerald-600 tabular-nums">{{ formatNumber(amount(row, 'AvailableValue')) }}</td>
@@ -110,7 +112,12 @@
                 <div class="text-[10px] text-slate-400 uppercase">{{ row.Sku || row.sku || tx.noSku }}</div>
               </td>
               <td class="p-4 text-slate-600">{{ row.SupplierName || row.supplierName || '-' }}</td>
-              <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'Quantity')) }}</td>
+              <td class="p-4 text-right tabular-nums">
+                <div>{{ formatQty(amount(row, 'Quantity')) }} {{ row.UnitName || row.unitName || '' }}</div>
+                <div v-if="shouldShowBaseQty(row)" class="text-[10px] text-slate-400 mt-1">
+                  {{ formatQty(amount(row, 'BaseQuantity')) }} {{ row.BaseUnitName || row.baseUnitName || '' }}
+                </div>
+              </td>
               <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'Revenue')) }}</td>
               <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'Cost')) }}</td>
               <td class="p-4 text-right text-emerald-600 tabular-nums">{{ formatNumber(amount(row, 'Profit')) }}</td>
@@ -129,7 +136,7 @@
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse text-sm">
-          <thead class="bg-slate-100 text-slate-500 text-[10px] uppercase tracking-[0.18em]">
+          <thead class="bg-[#3f3f46] text-white text-[10px] uppercase tracking-[0.18em]">
             <tr>
               <th class="p-4">{{ tx.date }}</th>
               <th class="p-4">{{ tx.supplier }}</th>
@@ -195,6 +202,7 @@ const tx = computed(() => ({
   amount: t('reportViews.consignment.amount'),
   currentStock: t('reportViews.consignment.currentStock'),
   availableValue: t('reportViews.consignment.availableValue'),
+  baseQty: t('reportViews.consignment.baseQty'),
   unitCost: t('reportViews.consignment.unitCost'),
   value: t('reportViews.consignment.value'),
   noSku: t('reportViews.consignment.noSku'),
@@ -229,13 +237,14 @@ const fetchData = async () => {
 };
 
 const handleExportCsv = () => {
-  const headers = [tx.value.date, tx.value.voucher, tx.value.product, tx.value.supplier, tx.value.qty, tx.value.revenue, tx.value.cost, tx.value.profit];
+  const headers = [tx.value.date, tx.value.voucher, tx.value.product, tx.value.supplier, tx.value.qty, tx.value.baseQty, tx.value.revenue, tx.value.cost, tx.value.profit];
   const rows = items.value.map(row => [
     formatDate(row.SaleDate || row.saleDate),
     row.VoucherNo || row.voucherNo,
     row.ProductName || row.productName,
     row.SupplierName || row.supplierName || '',
-    amount(row, 'Quantity'),
+    `${formatQty(amount(row, 'Quantity'))} ${row.UnitName || row.unitName || ''}`.trim(),
+    shouldShowBaseQty(row) ? `${formatQty(amount(row, 'BaseQuantity'))} ${row.BaseUnitName || row.baseUnitName || ''}`.trim() : '',
     amount(row, 'Revenue'),
     amount(row, 'Cost'),
     amount(row, 'Profit')
@@ -244,7 +253,15 @@ const handleExportCsv = () => {
 };
 
 const formatNumber = (value) => new Intl.NumberFormat().format(Number(value || 0));
+const formatQty = (value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(Number(value || 0));
 const formatDate = (value) => value ? new Date(value).toLocaleDateString('en-GB') : '-';
+const shouldShowBaseQty = (row) => {
+  const qty = amount(row, 'Quantity');
+  const baseQty = amount(row, 'BaseQuantity');
+  const unitName = String(row.UnitName || row.unitName || '').trim().toLowerCase();
+  const baseUnitName = String(row.BaseUnitName || row.baseUnitName || '').trim().toLowerCase();
+  return baseQty > 0 && (Math.abs(baseQty - qty) > 0.0001 || (unitName && baseUnitName && unitName !== baseUnitName));
+};
 
 watch(() => props.filters, fetchData, { deep: true });
 onMounted(fetchData);
