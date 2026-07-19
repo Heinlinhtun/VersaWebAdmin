@@ -321,7 +321,12 @@
                 <td class="px-4 py-3 text-blue-600">{{ row.VoucherNo || row.voucherNo }}</td>
                 <td class="px-4 py-3 text-slate-900">{{ row.ItemName || row.itemName }}</td>
                 <td class="px-4 py-3 text-slate-600">{{ row.ItemTypeLabel || row.itemTypeLabel }}</td>
-                <td class="px-4 py-3 text-right tabular-nums">{{ formatNumber(getAmount(row, 'Quantity')) }}</td>
+                <td class="px-4 py-3 text-right tabular-nums">
+                  <div>{{ formatQty(getAmount(row, 'Quantity')) }} {{ row.UnitName || row.unitName || '' }}</div>
+                  <div v-if="shouldShowBaseQty(row)" class="text-[10px] text-slate-400 mt-1">
+                    {{ formatQty(getAmount(row, 'BaseQuantity')) }} {{ row.BaseUnitName || row.baseUnitName || '' }}
+                  </div>
+                </td>
                 <td class="px-4 py-3 text-right tabular-nums">{{ formatNumber(getAmount(row, 'Revenue')) }}</td>
                 <td class="px-4 py-3 text-right tabular-nums">{{ formatNumber(getAmount(row, 'COGS')) }}</td>
                 <td class="px-4 py-3 text-right tabular-nums">{{ formatNumber(getAmount(row, 'ItemProfit')) }}</td>
@@ -428,6 +433,16 @@ const formatDate = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
   return date.toLocaleDateString();
+};
+
+const formatQty = (value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(asNumber(value));
+
+const shouldShowBaseQty = (row) => {
+  const qty = getAmount(row, 'Quantity');
+  const baseQty = getAmount(row, 'BaseQuantity');
+  const unitName = String(row?.UnitName || row?.unitName || '').trim().toLowerCase();
+  const baseUnitName = String(row?.BaseUnitName || row?.baseUnitName || '').trim().toLowerCase();
+  return baseQty > 0 && (Math.abs(baseQty - qty) > 0.0001 || (unitName && baseUnitName && unitName !== baseUnitName));
 };
 
 const openCogsDetails = async () => {

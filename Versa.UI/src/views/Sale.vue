@@ -706,13 +706,16 @@
                   <div style="font-weight: bold; line-height: 1.18;">{{ item.Name }}</div>
                   <div :style="{ fontSize: receiptFont.tiny + 'px', color: '#444' }">({{ getUnitName(item.UnitId) }}) @ {{
                     formatNumber(item.SelectedPrice) }}</div>
+                  <div v-if="item.DiscountAmount > 0 && !item.isFOC" :style="{ fontSize: receiptFont.tiny + 'px', color: '#dc2626', marginTop: '1px' }">
+                    Discount: -{{ formatNumber(item.DiscountAmount) }}
+                  </div>
                   <div v-if="item.Note" :style="{ fontSize: receiptFont.tiny + 'px', color: '#555', fontStyle: 'italic', marginTop: '2px' }">
                     * {{ item.Note }}
                   </div>
                 </td>
                 <td style="text-align: center; vertical-align: top; padding: 2px 0 4px 0; line-height: 1.18;">{{ item.Quantity }}</td>
-                <td style="text-align: right; vertical-align: top; padding: 2px 0 4px 0; line-height: 1.18;">{{ formatNumber(item.Quantity *
-                  item.SelectedPrice) }}</td>
+                <td style="text-align: right; vertical-align: top; padding: 2px 0 4px 0; line-height: 1.18;">{{ item.isFOC ? '0' :
+                  formatNumber((item.Quantity * item.SelectedPrice) - (item.DiscountAmount || 0)) }}</td>
               </tr>
             </tbody>
 
@@ -837,6 +840,9 @@
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ idx + 1 }}</td>
                 <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold;">
                   {{ item.Name }} {{ item.isFOC ? '(FOC)' : '' }}
+                  <div v-if="item.DiscountAmount > 0 && !item.isFOC" :style="{ fontWeight: 'normal', fontSize: receiptFont.tiny + 'px', color: '#dc2626', marginTop: '2px' }">
+                    Discount: -{{ formatNumber(item.DiscountAmount) }}
+                  </div>
                   <div v-if="item.Note" :style="{ fontWeight: 'normal', fontSize: receiptFont.tiny + 'px', color: '#555', fontStyle: 'italic', marginTop: '2px' }">
                     * {{ item.Note }}
                   </div>
@@ -2855,9 +2861,13 @@ const buildInvoiceHtml = (format = null) => {
         const unit = item.UnitName || item.BaseUnitName || '';
         const qty = item.Quantity || 0;
         const price = item.SelectedPrice || item.UnitPrice || 0;
-        const subtotal = item.isFOC ? 0 : (qty * price) - (item.DiscountAmount || 0);
+        const itemDiscount = item.isFOC ? 0 : Number(item.DiscountAmount || 0);
+        const subtotal = item.isFOC ? 0 : (qty * price) - itemDiscount;
+        const discountHtml = itemDiscount > 0
+          ? `<div style="font-size:${font.tiny}px;color:#dc2626;margin-top:1px">Discount: -${formatMoney(itemDiscount)}</div>`
+          : '';
         return `<tr style="border-bottom:1px dotted #ccc">
-          <td style="padding:2px;font-size:${font.small}px">${name}${unit ? ` <span style="font-size:${font.tiny}px;color:#666">(${unit})</span>` : ''}</td>
+          <td style="padding:2px;font-size:${font.small}px">${name}${unit ? ` <span style="font-size:${font.tiny}px;color:#666">(${unit})</span>` : ''}${discountHtml}</td>
           <td style="text-align:center;padding:2px;font-size:${font.small}px">${qty}</td>
           <td style="text-align:right;padding:2px;font-size:${font.small}px">${formatMoney(price)}</td>
           <td style="text-align:right;padding:2px;font-size:${font.small}px">${formatMoney(subtotal)}</td>
@@ -2868,9 +2878,13 @@ const buildInvoiceHtml = (format = null) => {
         const unit = item.UnitName || item.BaseUnitName || '';
         const qty = item.Quantity || 0;
         const price = item.SelectedPrice || item.UnitPrice || 0;
-        const subtotal = item.isFOC ? 0 : (qty * price) - (item.DiscountAmount || 0);
+        const itemDiscount = item.isFOC ? 0 : Number(item.DiscountAmount || 0);
+        const subtotal = item.isFOC ? 0 : (qty * price) - itemDiscount;
+        const discountHtml = itemDiscount > 0
+          ? `<div style="font-size:10px;color:#dc2626;margin-top:2px;font-weight:normal">Discount: -${formatMoney(itemDiscount)}</div>`
+          : '';
         return `<tr style="border-bottom:1px solid #e5e7eb">
-          <td style="padding:6px 4px;font-size:12px">${name}${unit ? ` <span style="font-size:10px;color:#666">(${unit})</span>` : ''}</td>
+          <td style="padding:6px 4px;font-size:12px">${name}${unit ? ` <span style="font-size:10px;color:#666">(${unit})</span>` : ''}${discountHtml}</td>
           <td style="text-align:center;padding:6px 4px;font-size:12px;width:60px">${qty}</td>
           <td style="text-align:right;padding:6px 4px;font-size:12px;width:90px">${formatMoney(price)}</td>
           <td style="text-align:right;padding:6px 4px;font-size:12px;width:100px">${formatMoney(subtotal)}</td>
@@ -3290,6 +3304,10 @@ const confirmSale = async () => {
     if (!validateCartStock()) return;
 
     await ensureCustomerForOrder({ requireCustomer: false });
+    if (totalPaid.value < totalAmount.value && !saleForm.value.CustomerId) {
+      addToast(t('sale.customerSelection') || 'Please select or create a customer for credit sale.', 'warning');
+      return;
+    }
 
     // ၁။ Items အားလုံး၏ Gross Total (ပစ္စည်းဖိုး သီးသန့်) ကို တွက်ချက်ခြင်း
     const itemsSubTotal = cart.value.reduce((sum, i) => {

@@ -113,9 +113,9 @@
               </td>
               <td class="p-4 text-slate-600">{{ row.SupplierName || row.supplierName || '-' }}</td>
               <td class="p-4 text-right tabular-nums">
-                <div>{{ formatQty(amount(row, 'Quantity')) }} {{ row.UnitName || row.unitName || '' }}</div>
+                <div>{{ formatQty(amount(row, 'Quantity')) }} {{ textValue(row, 'UnitName') }}</div>
                 <div v-if="shouldShowBaseQty(row)" class="text-[10px] text-slate-400 mt-1">
-                  {{ formatQty(amount(row, 'BaseQuantity')) }} {{ row.BaseUnitName || row.baseUnitName || '' }}
+                  {{ formatQty(amount(row, 'BaseQuantity')) }} {{ textValue(row, 'BaseUnitName') }}
                 </div>
               </td>
               <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'Revenue')) }}</td>
@@ -219,8 +219,15 @@ const currentAvailableValue = computed(() => {
 
 const amount = (obj, key) => {
   const camel = key.charAt(0).toLowerCase() + key.slice(1);
-  const parsed = Number(obj?.[key] ?? obj?.[camel] ?? 0);
+  const lower = key.toLowerCase();
+  const parsed = Number(obj?.[key] ?? obj?.[camel] ?? obj?.[lower] ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const textValue = (obj, key) => {
+  const camel = key.charAt(0).toLowerCase() + key.slice(1);
+  const lower = key.toLowerCase();
+  return obj?.[key] ?? obj?.[camel] ?? obj?.[lower] ?? '';
 };
 
 const fetchData = async () => {
@@ -243,8 +250,8 @@ const handleExportCsv = () => {
     row.VoucherNo || row.voucherNo,
     row.ProductName || row.productName,
     row.SupplierName || row.supplierName || '',
-    `${formatQty(amount(row, 'Quantity'))} ${row.UnitName || row.unitName || ''}`.trim(),
-    shouldShowBaseQty(row) ? `${formatQty(amount(row, 'BaseQuantity'))} ${row.BaseUnitName || row.baseUnitName || ''}`.trim() : '',
+    `${formatQty(amount(row, 'Quantity'))} ${textValue(row, 'UnitName')}`.trim(),
+    shouldShowBaseQty(row) ? `${formatQty(amount(row, 'BaseQuantity'))} ${textValue(row, 'BaseUnitName')}`.trim() : '',
     amount(row, 'Revenue'),
     amount(row, 'Cost'),
     amount(row, 'Profit')
@@ -258,8 +265,8 @@ const formatDate = (value) => value ? new Date(value).toLocaleDateString('en-GB'
 const shouldShowBaseQty = (row) => {
   const qty = amount(row, 'Quantity');
   const baseQty = amount(row, 'BaseQuantity');
-  const unitName = String(row.UnitName || row.unitName || '').trim().toLowerCase();
-  const baseUnitName = String(row.BaseUnitName || row.baseUnitName || '').trim().toLowerCase();
+  const unitName = String(textValue(row, 'UnitName')).trim().toLowerCase();
+  const baseUnitName = String(textValue(row, 'BaseUnitName')).trim().toLowerCase();
   return baseQty > 0 && (Math.abs(baseQty - qty) > 0.0001 || (unitName && baseUnitName && unitName !== baseUnitName));
 };
 

@@ -18,6 +18,13 @@ namespace Versa.POS.Controllers
             _dbService = dbService;
         }
 
+        private static bool IsWalkInCustomerName(string? customerName)
+        {
+            if (string.IsNullOrWhiteSpace(customerName)) return true;
+            var normalized = customerName.Trim().Replace("-", "").Replace(" ", "").ToLowerInvariant();
+            return normalized is "walkin" or "walkincustomer";
+        }
+
         public class HeldSaleDraftRequest
         {
             public int? HeldSaleId { get; set; }
@@ -509,8 +516,7 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
                 int? resolvedCustomerId = model.CustomerId > 0 ? model.CustomerId : null;
                 string cleanCustomerName = model.CustomerName?.Trim();
 
-                if (!resolvedCustomerId.HasValue && !string.IsNullOrWhiteSpace(cleanCustomerName) && 
-                    !cleanCustomerName.Equals("Walk-in", StringComparison.OrdinalIgnoreCase))
+                if (!resolvedCustomerId.HasValue && !IsWalkInCustomerName(cleanCustomerName))
                 {
                     // Check if customer exists (case-insensitive)
                     resolvedCustomerId = await conn.QueryFirstOrDefaultAsync<int?>(
@@ -529,6 +535,10 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
                 decimal actualItemsTotal = model.Items.Where(i => !i.IsFOC).Sum(i => (i.Quantity * i.UnitPrice) - i.DiscountAmount);
                 decimal finalTotalAmount = actualItemsTotal - model.DiscountAmount + model.DeliveryFee;
                 decimal dueAmount = Math.Max(0, finalTotalAmount - model.PaidAmount);
+                if (dueAmount > 0 && !resolvedCustomerId.HasValue)
+                {
+                    throw new InvalidOperationException("Credit or partial sale requires a selected customer.");
+                }
                 string finalSaleType = dueAmount > 0 ? (model.PaidAmount > 0 ? "Partial" : "Credit") : "Normal";
 
                 // Always trust authenticated user claim over client payload for audit fields
@@ -781,8 +791,7 @@ WHERE SaleItemId = @SaleItemId",
                 int? resolvedCustomerId = model.CustomerId > 0 ? model.CustomerId : null;
                 string cleanCustomerName = model.CustomerName?.Trim();
 
-                if (!resolvedCustomerId.HasValue && !string.IsNullOrWhiteSpace(cleanCustomerName) &&
-                    !cleanCustomerName.Equals("Walk-in", StringComparison.OrdinalIgnoreCase))
+                if (!resolvedCustomerId.HasValue && !IsWalkInCustomerName(cleanCustomerName))
                 {
                     resolvedCustomerId = await conn.QueryFirstOrDefaultAsync<int?>(
                         "SELECT CustomerId FROM Customers WHERE LOWER(Name) = LOWER(@Name) LIMIT 1",
@@ -798,6 +807,10 @@ WHERE SaleItemId = @SaleItemId",
                 decimal actualItemsTotal = model.Items.Where(i => !i.IsFOC).Sum(i => (i.Quantity * i.UnitPrice) - i.DiscountAmount);
                 decimal finalTotalAmount = actualItemsTotal - model.DiscountAmount + model.DeliveryFee;
                 decimal dueAmount = Math.Max(0, finalTotalAmount - model.PaidAmount);
+                if (dueAmount > 0 && !resolvedCustomerId.HasValue)
+                {
+                    throw new InvalidOperationException("Credit or partial preorder requires a selected customer.");
+                }
                 string finalSaleType = dueAmount > 0 ? (model.PaidAmount > 0 ? "Partial" : "Credit") : "Normal";
 
                 int claimUserId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId) ? parsedUserId : 0;

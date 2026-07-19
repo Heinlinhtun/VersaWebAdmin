@@ -33,7 +33,47 @@ WHERE TABLE_SCHEMA = DATABASE()
     public async Task<IActionResult> GetAll()
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
-        var list = await conn.QueryAsync<Customer>("SELECT * FROM Customers");
+        string sql = @"
+            SELECT
+                c.CustomerId,
+                c.Name,
+                c.Phone,
+                c.Address,
+                GREATEST(IFNULL(cb.CurrentBalance, 0), 0) AS CurrentBalance,
+                c.CreatedAt
+            FROM Customers c
+            LEFT JOIN (
+                SELECT
+                    s.CustomerId,
+                    SUM(
+                        GREATEST(
+                            0,
+                            IFNULL(sit.ItemSubtotal, 0)
+                            - IFNULL(s.DiscountAmount, 0)
+                            + IFNULL(s.DeliveryFee, 0)
+                            - IFNULL(s.PaidAmount, 0)
+                        )
+                    ) AS CurrentBalance
+                FROM Sales s
+                LEFT JOIN (
+                    SELECT
+                        SaleId,
+                        SUM(
+                            CASE
+                                WHEN IFNULL(IsFOC, 0) = 1 THEN 0
+                                WHEN IFNULL(SubTotal, 0) > ((IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                                    THEN GREATEST(0, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                                ELSE GREATEST(0, IFNULL(SubTotal, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0)))
+                            END
+                        ) AS ItemSubtotal
+                    FROM SaleItems
+                    GROUP BY SaleId
+                ) sit ON sit.SaleId = s.SaleId
+                WHERE s.CustomerId IS NOT NULL
+                GROUP BY s.CustomerId
+            ) cb ON cb.CustomerId = c.CustomerId
+            ORDER BY c.CustomerId";
+        var list = await conn.QueryAsync<Customer>(sql);
         return Ok(list);
     }
 
@@ -118,8 +158,39 @@ FROM (
             if (model.Amount <= 0)
                 return BadRequest(new { Message = "Payment amount must be greater than zero." });
 
-            decimal currentDebt = await conn.ExecuteScalarAsync<decimal>(
-                "SELECT IFNULL(CurrentBalance, 0) FROM Customers WHERE CustomerId = @CustomerId FOR UPDATE",
+            var lockedCustomerId = await conn.ExecuteScalarAsync<int?>(
+                "SELECT CustomerId FROM Customers WHERE CustomerId = @CustomerId FOR UPDATE",
+                new { model.CustomerId }, trans);
+
+            if (!lockedCustomerId.HasValue)
+                return BadRequest(new { Message = "Customer not found." });
+
+            decimal currentDebt = await conn.ExecuteScalarAsync<decimal>(@"
+                SELECT IFNULL(SUM(
+                    GREATEST(
+                        0,
+                        IFNULL(sit.ItemSubtotal, 0)
+                        - IFNULL(s.DiscountAmount, 0)
+                        + IFNULL(s.DeliveryFee, 0)
+                        - IFNULL(s.PaidAmount, 0)
+                    )
+                ), 0)
+                FROM Sales s
+                LEFT JOIN (
+                    SELECT
+                        SaleId,
+                        SUM(
+                            CASE
+                                WHEN IFNULL(IsFOC, 0) = 1 THEN 0
+                                WHEN IFNULL(SubTotal, 0) > ((IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                                    THEN GREATEST(0, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                                ELSE GREATEST(0, IFNULL(SubTotal, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0)))
+                            END
+                        ) AS ItemSubtotal
+                    FROM SaleItems
+                    GROUP BY SaleId
+                ) sit ON sit.SaleId = s.SaleId
+                WHERE s.CustomerId = @CustomerId",
                 new { model.CustomerId }, trans);
 
             if (currentDebt <= 0)
@@ -134,15 +205,36 @@ FROM (
             var unpaidSales = await conn.QueryAsync<dynamic>(@"
                 SELECT
                     s.SaleId,
-                    GREATEST(IFNULL(s.DueAmount, 0) - IFNULL(sr.ReturnedAmount, 0), 0) AS DueAmount
+                    GREATEST(
+                        0,
+                        IFNULL(sit.ItemSubtotal, 0)
+                        - IFNULL(s.DiscountAmount, 0)
+                        + IFNULL(s.DeliveryFee, 0)
+                        - IFNULL(s.PaidAmount, 0)
+                    ) AS DueAmount
                 FROM Sales s
                 LEFT JOIN (
-                    SELECT SaleId, SUM(RefundAmount) AS ReturnedAmount
-                    FROM SaleReturns
+                    SELECT
+                        SaleId,
+                        SUM(
+                            CASE
+                                WHEN IFNULL(IsFOC, 0) = 1 THEN 0
+                                WHEN IFNULL(SubTotal, 0) > ((IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                                    THEN GREATEST(0, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                                ELSE GREATEST(0, IFNULL(SubTotal, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0)))
+                            END
+                        ) AS ItemSubtotal
+                    FROM SaleItems
                     GROUP BY SaleId
-                ) sr ON sr.SaleId = s.SaleId
+                ) sit ON sit.SaleId = s.SaleId
                 WHERE s.CustomerId = @CustomerId
-                  AND GREATEST(IFNULL(s.DueAmount, 0) - IFNULL(sr.ReturnedAmount, 0), 0) > 0
+                  AND GREATEST(
+                        0,
+                        IFNULL(sit.ItemSubtotal, 0)
+                        - IFNULL(s.DiscountAmount, 0)
+                        + IFNULL(s.DeliveryFee, 0)
+                        - IFNULL(s.PaidAmount, 0)
+                  ) > 0
                 ORDER BY s.SaleDate ASC, s.SaleId ASC
                 FOR UPDATE",
                 new { model.CustomerId }, trans);
@@ -185,7 +277,7 @@ FROM (
                 throw new InvalidOperationException("Payment could not be fully allocated to customer credit sales.");
 
             // ၂။ Customers Table ထဲမှ Balance ကို နှုတ်ခြင်း
-            string updateSql = @"UPDATE Customers SET CurrentBalance = CurrentBalance - @Amount 
+            string updateSql = @"UPDATE Customers SET CurrentBalance = GREATEST(IFNULL(CurrentBalance, 0) - @Amount, 0) 
                            WHERE CustomerId = @CustomerId";
 
             await conn.ExecuteAsync(updateSql, new { model.Amount, model.CustomerId }, trans);
@@ -234,19 +326,45 @@ FROM (
                 s.SaleId,
                 CONCAT('SA', LPAD(s.SaleId, 7, '0')) AS SaleNo,
                 s.SaleDate,
-                s.TotalAmount,
+                GREATEST(
+                    0,
+                    IFNULL(sit.ItemSubtotal, 0)
+                    - IFNULL(s.DiscountAmount, 0)
+                    + IFNULL(s.DeliveryFee, 0)
+                ) AS TotalAmount,
                 s.PaidAmount,
-                GREATEST(IFNULL(s.DueAmount, 0) - IFNULL(sr.ReturnedAmount, 0), 0) AS DueAmount,
+                GREATEST(
+                    0,
+                    IFNULL(sit.ItemSubtotal, 0)
+                    - IFNULL(s.DiscountAmount, 0)
+                    + IFNULL(s.DeliveryFee, 0)
+                    - IFNULL(s.PaidAmount, 0)
+                ) AS DueAmount,
                 s.SaleType,
                 s.PaymentMethod
             FROM Sales s
             LEFT JOIN (
-                SELECT SaleId, SUM(RefundAmount) AS ReturnedAmount
-                FROM SaleReturns
+                SELECT
+                    SaleId,
+                    SUM(
+                        CASE
+                            WHEN IFNULL(IsFOC, 0) = 1 THEN 0
+                            WHEN IFNULL(SubTotal, 0) > ((IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                                THEN GREATEST(0, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                            ELSE GREATEST(0, IFNULL(SubTotal, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0)))
+                        END
+                    ) AS ItemSubtotal
+                FROM SaleItems
                 GROUP BY SaleId
-            ) sr ON sr.SaleId = s.SaleId
+            ) sit ON sit.SaleId = s.SaleId
             WHERE s.CustomerId = @id
-              AND GREATEST(IFNULL(s.DueAmount, 0) - IFNULL(sr.ReturnedAmount, 0), 0) > 0
+              AND GREATEST(
+                    0,
+                    IFNULL(sit.ItemSubtotal, 0)
+                    - IFNULL(s.DiscountAmount, 0)
+                    + IFNULL(s.DeliveryFee, 0)
+                    - IFNULL(s.PaidAmount, 0)
+              ) > 0
             ORDER BY s.SaleDate ASC, s.SaleId ASC";
 
         var list = await conn.QueryAsync<dynamic>(sql, new { id });
@@ -264,18 +382,38 @@ FROM (
                 s.SaleId,
                 CONCAT('SA', LPAD(s.SaleId, 7, '0')) AS SaleNo,
                 s.SaleDate,
-                s.TotalAmount,
+                GREATEST(
+                    0,
+                    IFNULL(sit.ItemSubtotal, 0)
+                    - IFNULL(s.DiscountAmount, 0)
+                    + IFNULL(s.DeliveryFee, 0)
+                ) AS TotalAmount,
                 s.PaidAmount,
-                GREATEST(IFNULL(s.DueAmount, 0) - IFNULL(sr.ReturnedAmount, 0), 0) AS DueAmount,
+                GREATEST(
+                    0,
+                    IFNULL(sit.ItemSubtotal, 0)
+                    - IFNULL(s.DiscountAmount, 0)
+                    + IFNULL(s.DeliveryFee, 0)
+                    - IFNULL(s.PaidAmount, 0)
+                ) AS DueAmount,
                 s.SaleType,
                 s.PaymentMethod,
                 IFNULL(s.OrderStatus,'Completed') AS OrderStatus
             FROM Sales s
             LEFT JOIN (
-                SELECT SaleId, SUM(RefundAmount) AS ReturnedAmount
-                FROM SaleReturns
+                SELECT
+                    SaleId,
+                    SUM(
+                        CASE
+                            WHEN IFNULL(IsFOC, 0) = 1 THEN 0
+                            WHEN IFNULL(SubTotal, 0) > ((IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                                THEN GREATEST(0, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                            ELSE GREATEST(0, IFNULL(SubTotal, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0)))
+                        END
+                    ) AS ItemSubtotal
+                FROM SaleItems
                 GROUP BY SaleId
-            ) sr ON sr.SaleId = s.SaleId
+            ) sit ON sit.SaleId = s.SaleId
             WHERE s.CustomerId = @id
             ORDER BY s.SaleDate DESC, s.SaleId DESC";
 

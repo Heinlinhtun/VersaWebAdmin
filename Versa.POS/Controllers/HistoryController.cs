@@ -80,11 +80,11 @@ WHERE TABLE_SCHEMA = DATABASE()
     SELECT 
         s.SaleId as saleId, 
         s.SaleDate as saleDate, 
-        GREATEST(0, s.TotalAmount - IFNULL(sr.ReturnedAmount, 0)) as itemSubtotal,
+        IFNULL(sit.ItemSubtotal, 0) as itemSubtotal,
         IFNULL(s.DiscountAmount, 0) as discountAmount,
         IFNULL(s.DeliveryFee, 0) as deliveryFee,
-        GREATEST(0, s.TotalAmount - IFNULL(sr.ReturnedAmount, 0) - IFNULL(s.DiscountAmount, 0) + IFNULL(s.DeliveryFee, 0)) as totalAmount,
-        GREATEST(0, s.TotalAmount - IFNULL(sr.ReturnedAmount, 0) - IFNULL(s.DiscountAmount, 0) + IFNULL(s.DeliveryFee, 0)) as netAmount,
+        GREATEST(0, IFNULL(sit.ItemSubtotal, 0) - IFNULL(s.DiscountAmount, 0) + IFNULL(s.DeliveryFee, 0)) as totalAmount,
+        GREATEST(0, IFNULL(sit.ItemSubtotal, 0) - IFNULL(s.DiscountAmount, 0) + IFNULL(s.DeliveryFee, 0)) as netAmount,
         c.Name as customerName,
         CASE
             WHEN IFNULL(s.DueAmount, 0) > 0 AND IFNULL(s.PaidAmount, 0) > 0 THEN 'Partial'
@@ -110,10 +110,19 @@ WHERE TABLE_SCHEMA = DATABASE()
          WHERE si.SaleId = s.SaleId) as itemsSummary
     FROM Sales s
     LEFT JOIN (
-        SELECT SaleId, SUM(IFNULL(RefundAmount, 0)) AS ReturnedAmount
-        FROM SaleReturns
+        SELECT
+            SaleId,
+            SUM(
+                CASE
+                    WHEN IFNULL(IsFOC, 0) = 1 THEN 0
+                    WHEN IFNULL(SubTotal, 0) > ((IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                        THEN GREATEST(0, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0))
+                    ELSE GREATEST(0, IFNULL(SubTotal, (IFNULL(Quantity, 0) * IFNULL(UnitPrice, 0)) - IFNULL(DiscountAmount, 0)))
+                END
+            ) AS ItemSubtotal
+        FROM SaleItems
         GROUP BY SaleId
-    ) sr ON sr.SaleId = s.SaleId
+    ) sit ON sit.SaleId = s.SaleId
     LEFT JOIN Customers c ON s.CustomerId = c.CustomerId
     LEFT JOIN ShopUsers u ON s.UserId = u.UserId
     WHERE (@BranchId IS NULL OR s.BranchId = @BranchId)            
@@ -539,6 +548,8 @@ WHERE (@Query = ''
 
         const string sql = @"
 SELECT
+    'Purchase' AS sourceType,
+    poi.POItemId AS batchId,
     poi.POItemId AS poItemId,
     po.POId AS poId,
     po.OrderDate AS orderDate,
@@ -550,11 +561,14 @@ SELECT
     u.UnitName AS unitName,
     IFNULL(poi.Quantity, 0) AS quantity,
     IFNULL(poi.FOCQuantity, 0) AS focQuantity,
+    NULL AS soldQuantity,
+    NULL AS returnedQuantity,
     IFNULL(poi.RemainingQuantity, 0) AS remainingBaseQuantity,
     (IFNULL(poi.RemainingQuantity, 0) / IFNULL(uc.Multiplier, 1)) AS remainingQuantity,
     IFNULL(poi.CostPrice, 0) AS costPrice,
     poi.ExpiryDate AS expiryDate,
-    IFNULL(poi.AlertDays, 30) AS alertDays
+    IFNULL(poi.AlertDays, 30) AS alertDays,
+    po.Status AS batchStatus
 FROM PurchaseOrderItems poi
 INNER JOIN PurchaseOrders po ON po.POId = poi.POId
 INNER JOIN Products p ON p.ProductId = poi.ProductId
@@ -564,7 +578,43 @@ LEFT JOIN Suppliers s ON s.SupplierId = po.SupplierId
 LEFT JOIN Branches b ON b.BranchId = po.BranchId
 WHERE poi.ProductId = @ProductId
   AND (@BranchId IS NULL OR po.BranchId = @BranchId)
-ORDER BY po.OrderDate DESC, po.POId DESC, poi.POItemId DESC;";
+  AND IFNULL(poi.RemainingQuantity, 0) > 0
+
+UNION ALL
+
+SELECT
+    'Consignment' AS sourceType,
+    ci.ConsignItemId AS batchId,
+    ci.ConsignItemId AS poItemId,
+    ci.ConsignId AS poId,
+    c.OrderDate AS orderDate,
+    IFNULL(s.SupplierName, 'General Supplier') AS supplierName,
+    b.BranchName AS branchName,
+    ci.ProductId AS productId,
+    p.Name AS productName,
+    ci.UnitId AS unitId,
+    COALESCE(cu.UnitName, bu.UnitName) AS unitName,
+    IFNULL(ci.Quantity, 0) AS quantity,
+    0 AS focQuantity,
+    IFNULL(ci.SoldQuantity, 0) AS soldQuantity,
+    IFNULL(ci.ReturnedQuantity, 0) AS returnedQuantity,
+    GREATEST(0, IFNULL(ci.Quantity, 0) - IFNULL(ci.SoldQuantity, 0) - IFNULL(ci.ReturnedQuantity, 0)) AS remainingBaseQuantity,
+    GREATEST(0, IFNULL(ci.Quantity, 0) - IFNULL(ci.SoldQuantity, 0) - IFNULL(ci.ReturnedQuantity, 0)) AS remainingQuantity,
+    IFNULL(ci.UnitPrice, 0) AS costPrice,
+    NULL AS expiryDate,
+    NULL AS alertDays,
+    c.Status AS batchStatus
+FROM ConsignmentItems ci
+INNER JOIN Consignments c ON c.ConsignId = ci.ConsignId
+INNER JOIN Products p ON p.ProductId = ci.ProductId
+LEFT JOIN Units cu ON cu.UnitId = ci.UnitId
+LEFT JOIN Units bu ON bu.UnitId = p.UnitId
+LEFT JOIN Suppliers s ON s.SupplierId = c.SupplierId
+LEFT JOIN Branches b ON b.BranchId = COALESCE(ci.BranchId, c.BranchId)
+WHERE ci.ProductId = @ProductId
+  AND (@BranchId IS NULL OR COALESCE(ci.BranchId, c.BranchId) = @BranchId)
+  AND GREATEST(0, IFNULL(ci.Quantity, 0) - IFNULL(ci.SoldQuantity, 0) - IFNULL(ci.ReturnedQuantity, 0)) > 0
+ORDER BY orderDate DESC, poId DESC, batchId DESC;";
 
         var rows = await conn.QueryAsync<dynamic>(sql, new
         {

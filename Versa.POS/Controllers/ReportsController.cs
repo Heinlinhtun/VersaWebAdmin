@@ -776,8 +776,25 @@ WHERE TABLE_SCHEMA = DATABASE()
 SELECT
     IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE si.Quantity END), 0) AS SoldQuantity,
     IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0) END), 0) AS SalesRevenue,
-    IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0) END), 0) AS ConsignmentCost,
-    IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE ((si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0)) - ((si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0)) END), 0) AS GrossProfit,
+    IFNULL(SUM(CASE
+        WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0
+        WHEN IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL THEN
+            (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, cfp.UnitPrice, 0)
+        WHEN NULLIF(si.CostPrice, 0) IS NOT NULL THEN
+            si.Quantity * si.CostPrice
+        ELSE
+            (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(cfp.UnitPrice, 0)
+    END), 0) AS ConsignmentCost,
+    IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0) END), 0)
+    - IFNULL(SUM(CASE
+        WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0
+        WHEN IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL THEN
+            (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, cfp.UnitPrice, 0)
+        WHEN NULLIF(si.CostPrice, 0) IS NOT NULL THEN
+            si.Quantity * si.CostPrice
+        ELSE
+            (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(cfp.UnitPrice, 0)
+    END), 0) AS GrossProfit,
     COUNT(DISTINCT s.SaleId) AS InvoiceCount,
     IFNULL((SELECT SUM(cs.TotalAmount)
             FROM ConsignmentSettlements cs
@@ -799,9 +816,34 @@ SELECT
 FROM SaleItems si
 JOIN Sales s ON s.SaleId = si.SaleId
 LEFT JOIN ConsignmentItems ci ON ci.ConsignItemId = si.ConsignItemId
+LEFT JOIN (
+    SELECT
+        ci2.ProductId,
+        COALESCE(ci2.BranchId, c2.BranchId) AS BranchId,
+        MIN(ci2.UnitPrice) AS UnitPrice,
+        MIN(c2.OrderDate) AS FirstConsignDate
+    FROM ConsignmentItems ci2
+    JOIN Consignments c2 ON c2.ConsignId = ci2.ConsignId
+    GROUP BY ci2.ProductId, COALESCE(ci2.BranchId, c2.BranchId)
+) cfp ON cfp.ProductId = si.ProductId AND cfp.BranchId = s.BranchId
 LEFT JOIN UnitConversions uc ON uc.ProductId = si.ProductId AND uc.FromUnitId = si.UnitId
 WHERE s.SaleDate BETWEEN @start AND @end
-  AND IFNULL(si.IsConsignment, 0) = 1
+  AND (
+      IFNULL(si.IsConsignment, 0) = 1
+      OR si.ConsignItemId IS NOT NULL
+      OR (
+          cfp.ProductId IS NOT NULL
+          AND cfp.FirstConsignDate <= s.SaleDate
+          AND NOT EXISTS (
+              SELECT 1
+              FROM PurchaseOrderItems poi2
+              JOIN PurchaseOrders po2 ON po2.POId = poi2.POId
+              WHERE poi2.ProductId = si.ProductId
+                AND po2.BranchId = s.BranchId
+                AND IFNULL(poi2.Quantity, 0) > 0
+          )
+      )
+  )
   AND (@branchId IS NULL OR s.BranchId = @branchId)";
 
         const string itemsSql = @"
@@ -810,30 +852,81 @@ SELECT
     CONCAT('SA', LPAD(s.SaleId, 7, '0')) AS VoucherNo,
     p.Name AS ProductName,
     p.Sku,
-    sup.SupplierName,
+    COALESCE(sup.SupplierName, fsup.SupplierName) AS SupplierName,
     b.BranchName,
     IFNULL(si.Quantity, 0) AS Quantity,
-    COALESCE(su.UnitName, '') AS UnitName,
+    COALESCE(su.UnitName, cu.UnitName, fcu.UnitName, '') AS UnitName,
     IFNULL(si.Quantity, 0) * IFNULL(uc.Multiplier, 1) AS BaseQuantity,
     COALESCE(bu.UnitName, '') AS BaseUnitName,
     IFNULL(si.UnitPrice, 0) AS UnitPrice,
     IFNULL(si.DiscountAmount, 0) AS DiscountAmount,
-    COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0) AS UnitCost,
+    CASE
+        WHEN IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL THEN COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, cfp.UnitPrice, 0)
+        ELSE COALESCE(NULLIF(si.CostPrice, 0), cfp.UnitPrice, 0)
+    END AS UnitCost,
     CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0) END AS Revenue,
-    CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0) END AS Cost,
-    CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE ((si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0)) - ((si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0)) END AS Profit
+    CASE
+        WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0
+        WHEN IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL THEN
+            (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, cfp.UnitPrice, 0)
+        WHEN NULLIF(si.CostPrice, 0) IS NOT NULL THEN
+            si.Quantity * si.CostPrice
+        ELSE
+            (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(cfp.UnitPrice, 0)
+    END AS Cost,
+    CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0) END
+    - CASE
+        WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0
+        WHEN IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL THEN
+            (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, cfp.UnitPrice, 0)
+        WHEN NULLIF(si.CostPrice, 0) IS NOT NULL THEN
+            si.Quantity * si.CostPrice
+        ELSE
+            (si.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(cfp.UnitPrice, 0)
+    END AS Profit
 FROM SaleItems si
 JOIN Sales s ON s.SaleId = si.SaleId
 LEFT JOIN Products p ON p.ProductId = si.ProductId
 LEFT JOIN ConsignmentItems ci ON ci.ConsignItemId = si.ConsignItemId
 LEFT JOIN Consignments c ON c.ConsignId = ci.ConsignId
+LEFT JOIN (
+    SELECT
+        ci2.ProductId,
+        COALESCE(ci2.BranchId, c2.BranchId) AS BranchId,
+        MIN(ci2.ConsignId) AS ConsignId,
+        MIN(c2.SupplierId) AS SupplierId,
+        MIN(ci2.UnitId) AS UnitId,
+        MIN(ci2.UnitPrice) AS UnitPrice,
+        MIN(c2.OrderDate) AS FirstConsignDate
+    FROM ConsignmentItems ci2
+    JOIN Consignments c2 ON c2.ConsignId = ci2.ConsignId
+    GROUP BY ci2.ProductId, COALESCE(ci2.BranchId, c2.BranchId)
+) cfp ON cfp.ProductId = si.ProductId AND cfp.BranchId = s.BranchId
 LEFT JOIN Suppliers sup ON sup.SupplierId = c.SupplierId
+LEFT JOIN Suppliers fsup ON fsup.SupplierId = cfp.SupplierId
 LEFT JOIN Branches b ON b.BranchId = s.BranchId
 LEFT JOIN Units su ON su.UnitId = si.UnitId
+LEFT JOIN Units cu ON cu.UnitId = ci.UnitId
+LEFT JOIN Units fcu ON fcu.UnitId = cfp.UnitId
 LEFT JOIN Units bu ON bu.UnitId = p.UnitId
-LEFT JOIN UnitConversions uc ON uc.ProductId = si.ProductId AND uc.FromUnitId = si.UnitId
+LEFT JOIN UnitConversions uc ON uc.ProductId = si.ProductId AND uc.FromUnitId = COALESCE(si.UnitId, ci.UnitId, cfp.UnitId)
 WHERE s.SaleDate BETWEEN @start AND @end
-  AND IFNULL(si.IsConsignment, 0) = 1
+  AND (
+      IFNULL(si.IsConsignment, 0) = 1
+      OR si.ConsignItemId IS NOT NULL
+      OR (
+          cfp.ProductId IS NOT NULL
+          AND cfp.FirstConsignDate <= s.SaleDate
+          AND NOT EXISTS (
+              SELECT 1
+              FROM PurchaseOrderItems poi2
+              JOIN PurchaseOrders po2 ON po2.POId = poi2.POId
+              WHERE poi2.ProductId = si.ProductId
+                AND po2.BranchId = s.BranchId
+                AND IFNULL(poi2.Quantity, 0) > 0
+          )
+      )
+  )
   AND (@branchId IS NULL OR s.BranchId = @branchId)
 ORDER BY s.SaleDate DESC, si.SaleItemId DESC";
 
@@ -940,7 +1033,15 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
                       AND bi.ComponentProductId IS NOT NULL
                       AND UPPER(TRIM(IFNULL(bi.ItemType,'Product'))) NOT LIKE '%SERVICE%'
                 ), 0)
-            ELSE si.Quantity * COALESCE(NULLIF(si.CostPrice, 0), p.CostPrice, 0)
+            ELSE
+                CASE
+                    WHEN IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL THEN
+                        (IFNULL(si.Quantity, 0) * IFNULL(suc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, p.CostPrice, 0)
+                    WHEN NULLIF(si.CostPrice, 0) IS NOT NULL THEN
+                        IFNULL(si.Quantity, 0) * si.CostPrice
+                    ELSE
+                        (IFNULL(si.Quantity, 0) * IFNULL(suc.Multiplier, 1)) * COALESCE(p.CostPrice, 0)
+                END
         END), 0) as TotalCost, 
         /* Gross Profit = Sales - COGS */
         IFNULL(SUM(CASE 
@@ -960,7 +1061,15 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
                       AND bi.ComponentProductId IS NOT NULL
                       AND UPPER(TRIM(IFNULL(bi.ItemType,'Product'))) NOT LIKE '%SERVICE%'
                 ), 0)
-            ELSE si.Quantity * COALESCE(NULLIF(si.CostPrice, 0), p.CostPrice, 0)
+            ELSE
+                CASE
+                    WHEN IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL THEN
+                        (IFNULL(si.Quantity, 0) * IFNULL(suc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, p.CostPrice, 0)
+                    WHEN NULLIF(si.CostPrice, 0) IS NOT NULL THEN
+                        IFNULL(si.Quantity, 0) * si.CostPrice
+                    ELSE
+                        (IFNULL(si.Quantity, 0) * IFNULL(suc.Multiplier, 1)) * COALESCE(p.CostPrice, 0)
+                END
         END), 0) as GrossProfit,
         
         /* Voucher level discounts */
@@ -986,6 +1095,8 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
     FROM SaleItems si
     JOIN Sales s ON si.SaleId = s.SaleId
     LEFT JOIN Products p ON si.ProductId = p.ProductId
+    LEFT JOIN ConsignmentItems ci ON ci.ConsignItemId = si.ConsignItemId
+    LEFT JOIN UnitConversions suc ON suc.ProductId = si.ProductId AND suc.FromUnitId = si.UnitId
     WHERE s.SaleDate BETWEEN @start AND @end 
     AND (@branchId IS NULL OR s.BranchId = @branchId)";
 
@@ -1037,8 +1148,8 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
             const string consignmentSql = @"
                 SELECT
                     IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0) END), 0) AS Revenue,
-                    IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE si.Quantity * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0) END), 0) AS Cost,
-                    IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE ((si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0)) - (si.Quantity * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0)) END), 0) AS Profit,
+                    IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE (si.Quantity * IFNULL(suc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0) END), 0) AS Cost,
+                    IFNULL(SUM(CASE WHEN IFNULL(si.IsFOC, 0) = 1 THEN 0 ELSE ((si.Quantity * si.UnitPrice) - IFNULL(si.DiscountAmount, 0)) - ((si.Quantity * IFNULL(suc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, 0)) END), 0) AS Profit,
                     IFNULL((SELECT SUM((ci2.SoldQuantity - ci2.SettledQuantity) * ci2.UnitPrice)
                             FROM ConsignmentItems ci2
                             JOIN Consignments c2 ON c2.ConsignId = ci2.ConsignId
@@ -1046,6 +1157,7 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
                 FROM SaleItems si
                 JOIN Sales s ON s.SaleId = si.SaleId
                 LEFT JOIN ConsignmentItems ci ON ci.ConsignItemId = si.ConsignItemId
+                LEFT JOIN UnitConversions suc ON suc.ProductId = si.ProductId AND suc.FromUnitId = si.UnitId
                 WHERE s.SaleDate BETWEEN @start AND @end
                   AND IFNULL(si.IsConsignment, 0) = 1
                   AND (@branchId IS NULL OR s.BranchId = @branchId)";
@@ -1186,6 +1298,9 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
                     ELSE 'Product'
                 END AS ItemTypeLabel,
                 IFNULL(si.Quantity, 0) AS Quantity,
+                COALESCE(su.UnitName, '') AS UnitName,
+                IFNULL(si.Quantity, 0) * IFNULL(suc.Multiplier, 1) AS BaseQuantity,
+                COALESCE(bu.UnitName, '') AS BaseUnitName,
                 IFNULL(si.UnitPrice, 0) AS UnitPrice,
                 IFNULL(si.DiscountAmount, 0) AS DiscountAmount,
                 IFNULL(si.IsFOC, 0) AS IsFOC,
@@ -1205,12 +1320,23 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
                               AND bi.ComponentProductId IS NOT NULL
                               AND UPPER(TRIM(IFNULL(bi.ItemType, 'Product'))) NOT LIKE '%SERVICE%'
                         ), 0)
-                    ELSE IFNULL(si.Quantity, 0) * COALESCE(NULLIF(si.CostPrice, 0), p.CostPrice, 0)
+                    ELSE
+                        CASE
+                            WHEN IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL THEN
+                                (IFNULL(si.Quantity, 0) * IFNULL(suc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, p.CostPrice, 0)
+                            WHEN NULLIF(si.CostPrice, 0) IS NOT NULL THEN
+                                IFNULL(si.Quantity, 0) * si.CostPrice
+                            ELSE
+                                (IFNULL(si.Quantity, 0) * IFNULL(suc.Multiplier, 1)) * COALESCE(p.CostPrice, 0)
+                        END
                 END AS COGS,
                 CASE
                     WHEN COALESCE(si.ServiceId, 0) > 0 OR UPPER(TRIM(IFNULL(si.ItemType, ''))) LIKE '%SERVICE%' THEN 'Service item'
                     WHEN COALESCE(si.BundleId, 0) > 0 OR UPPER(TRIM(IFNULL(si.ItemType, ''))) LIKE '%BUNDLE%' THEN 'Bundle component costs'
+                    WHEN (IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL) AND NULLIF(si.CostPrice, 0) IS NOT NULL AND IFNULL(suc.Multiplier, 1) <> 1 THEN 'Consignment base cost x unit conversion'
+                    WHEN (IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL) AND NULLIF(si.CostPrice, 0) IS NOT NULL THEN 'Consignment base cost'
                     WHEN NULLIF(si.CostPrice, 0) IS NOT NULL THEN 'Sale line cost price'
+                    WHEN IFNULL(suc.Multiplier, 1) <> 1 THEN 'Product master cost price x unit conversion'
                     ELSE 'Product master cost price'
                 END AS CostSource,
                 CASE
@@ -1229,11 +1355,23 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
                               AND bi.ComponentProductId IS NOT NULL
                               AND UPPER(TRIM(IFNULL(bi.ItemType, 'Product'))) NOT LIKE '%SERVICE%'
                         ), 0)
-                    ELSE IFNULL(si.Quantity, 0) * COALESCE(NULLIF(si.CostPrice, 0), p.CostPrice, 0)
+                    ELSE
+                        CASE
+                            WHEN IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL THEN
+                                (IFNULL(si.Quantity, 0) * IFNULL(suc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, p.CostPrice, 0)
+                            WHEN NULLIF(si.CostPrice, 0) IS NOT NULL THEN
+                                IFNULL(si.Quantity, 0) * si.CostPrice
+                            ELSE
+                                (IFNULL(si.Quantity, 0) * IFNULL(suc.Multiplier, 1)) * COALESCE(p.CostPrice, 0)
+                        END
                 END AS ItemProfit
             FROM SaleItems si
             INNER JOIN Sales s ON si.SaleId = s.SaleId
             LEFT JOIN Products p ON si.ProductId = p.ProductId
+            LEFT JOIN ConsignmentItems ci ON ci.ConsignItemId = si.ConsignItemId
+            LEFT JOIN Units su ON su.UnitId = si.UnitId
+            LEFT JOIN Units bu ON bu.UnitId = p.UnitId
+            LEFT JOIN UnitConversions suc ON suc.ProductId = si.ProductId AND suc.FromUnitId = si.UnitId
             WHERE s.SaleDate BETWEEN @start AND @end
               AND (@branchId IS NULL OR s.BranchId = @branchId)
             ORDER BY s.SaleDate DESC, si.SaleItemId DESC";
@@ -1318,7 +1456,15 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
                                   AND bi.ComponentProductId IS NOT NULL
                                   AND UPPER(TRIM(IFNULL(bi.ItemType,'Product'))) NOT LIKE '%SERVICE%'
                             ), 0)
-                        ELSE IFNULL(si.Quantity, 0) * COALESCE(NULLIF(si.CostPrice, 0), p.CostPrice, 0)
+                        ELSE
+                            CASE
+                                WHEN IFNULL(si.IsConsignment, 0) = 1 OR si.ConsignItemId IS NOT NULL THEN
+                                    (IFNULL(si.Quantity, 0) * IFNULL(suc.Multiplier, 1)) * COALESCE(NULLIF(si.CostPrice, 0), ci.UnitPrice, p.CostPrice, 0)
+                                WHEN NULLIF(si.CostPrice, 0) IS NOT NULL THEN
+                                    IFNULL(si.Quantity, 0) * si.CostPrice
+                                ELSE
+                                    (IFNULL(si.Quantity, 0) * IFNULL(suc.Multiplier, 1)) * COALESCE(p.CostPrice, 0)
+                            END
                     END
                 ), 0)
                 + IFNULL(sf.DeliveryFees, 0)
@@ -1331,6 +1477,8 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
            AND s.SaleDate BETWEEN @start AND @end
         LEFT JOIN SaleItems si ON s.SaleId = si.SaleId
         LEFT JOIN Products p ON si.ProductId = p.ProductId
+        LEFT JOIN ConsignmentItems ci ON ci.ConsignItemId = si.ConsignItemId
+        LEFT JOIN UnitConversions suc ON suc.ProductId = si.ProductId AND suc.FromUnitId = si.UnitId
         /* Sales-level fallback totals for vouchers whose item rows were removed by a full return. */
         LEFT JOIN (
             SELECT

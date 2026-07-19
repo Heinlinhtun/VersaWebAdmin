@@ -330,7 +330,7 @@
               <td class="p-4 text-center">
                 <button @click="viewProductBatches(item)"
                   class="p-2 bg-slate-50 text-slate-400 hover:text-cyan-700 transition-all shadow-sm"
-                  title="View purchase batches">
+                  title="View stock batches">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                       d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -633,7 +633,7 @@
 
         <div class="bg-[#3f3f46] p-4 sm:p-6 text-white flex justify-between items-center shrink-0">
           <div>
-            <h3 class="text-lg font-normal uppercase tracking-tight">Purchase Batches</h3>
+            <h3 class="text-lg font-normal uppercase tracking-tight">Stock Batches</h3>
             <p class="text-cyan-300 text-[10px] font-normal uppercase mt-1 tracking-widest">
               {{ selectedBatchProduct.itemName || '-' }}
             </p>
@@ -662,15 +662,18 @@
           </div>
 
           <div class="overflow-auto border border-slate-100 rounded-xl">
-            <table class="w-full min-w-[980px] text-left border-collapse">
+            <table class="w-full min-w-[1180px] text-left border-collapse">
               <thead class="bg-[#3f3f46] text-white">
                 <tr class="text-[10px] uppercase tracking-[0.15em]">
-                  <th class="p-4">PO No</th>
-                  <th class="p-4">Purchase Date</th>
+                  <th class="p-4">Ref</th>
+                  <th class="p-4">Source</th>
+                  <th class="p-4">Date</th>
                   <th class="p-4">Supplier</th>
                   <th class="p-4">Branch</th>
                   <th class="p-4 text-right">Qty</th>
                   <th class="p-4 text-right">FOC</th>
+                  <th class="p-4 text-right">Sold</th>
+                  <th class="p-4 text-right">Returned</th>
                   <th class="p-4 text-right">Remaining</th>
                   <th class="p-4">Unit</th>
                   <th class="p-4 text-right">Cost</th>
@@ -680,22 +683,33 @@
               </thead>
               <tbody class="divide-y divide-slate-100 text-xs">
                 <tr v-if="isBatchLoading">
-                  <td colspan="11" class="p-10 text-center text-slate-400 uppercase tracking-widest">
+                  <td colspan="13" class="p-10 text-center text-slate-400 uppercase tracking-widest">
                     Loading batches...
                   </td>
                 </tr>
                 <tr v-else-if="purchaseBatches.length === 0">
-                  <td colspan="11" class="p-10 text-center text-slate-400 uppercase tracking-widest">
-                    No purchase batches found
+                  <td colspan="13" class="p-10 text-center text-slate-400 uppercase tracking-widest">
+                    No stock batches found
                   </td>
                 </tr>
-                <tr v-for="batch in purchaseBatches" :key="batch.poItemId" class="hover:bg-slate-50">
-                  <td class="p-4 text-orange-600 tabular-nums">PO-{{ batch.poId }}</td>
+                <tr v-for="batch in purchaseBatches" :key="`${batch.sourceType || 'Purchase'}-${batch.batchId || batch.poItemId}`" class="hover:bg-slate-50">
+                  <td class="p-4 text-orange-600 tabular-nums">{{ formatBatchReference(batch) }}</td>
+                  <td class="p-4">
+                    <div class="flex flex-col gap-1">
+                      <span class="w-fit px-2 py-0.5 rounded-md border text-[9px] uppercase tracking-wider"
+                        :class="getBatchSourceClass(batch)">
+                        {{ batch.sourceType || 'Purchase' }}
+                      </span>
+                      <span v-if="batch.batchStatus" class="text-[10px] text-slate-400">{{ batch.batchStatus }}</span>
+                    </div>
+                  </td>
                   <td class="p-4 text-slate-500 tabular-nums">{{ formatDateTime(batch.orderDate) }}</td>
                   <td class="p-4 text-slate-800">{{ batch.supplierName || '-' }}</td>
                   <td class="p-4 text-slate-600">{{ batch.branchName || '-' }}</td>
                   <td class="p-4 text-right tabular-nums">{{ formatNumber(batch.quantity) }}</td>
                   <td class="p-4 text-right tabular-nums">{{ formatNumber(batch.focQuantity) }}</td>
+                  <td class="p-4 text-right tabular-nums">{{ formatNullableNumber(batch.soldQuantity) }}</td>
+                  <td class="p-4 text-right tabular-nums">{{ formatNullableNumber(batch.returnedQuantity) }}</td>
                   <td class="p-4 text-right tabular-nums text-emerald-700">{{ formatNumber(batch.remainingQuantity) }}</td>
                   <td class="p-4 text-slate-500">{{ batch.unitName || '-' }}</td>
                   <td class="p-4 text-right tabular-nums">{{ formatNumber(batch.costPrice) }}</td>
@@ -858,6 +872,9 @@
                   <span v-if="item.ItemType !== 'Product'">[{{ item.ItemType }}]</span>
                   @ {{ formatNumber(item.UnitPrice) }}
                 </div>
+                <div v-if="lineDiscount(item) > 0" :style="{ fontSize: receiptFont.tiny + 'px', color: '#dc2626', marginTop: '1px' }">
+                  Discount: -{{ formatNumber(lineDiscount(item)) }}
+                </div>
                 <div v-if="item.Note || item.note" :style="{ fontSize: receiptFont.tiny + 'px', color: '#555', fontStyle: 'italic', marginTop: '2px' }">
                   * {{ item.Note || item.note }}
                 </div>
@@ -989,6 +1006,9 @@
               <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ idx + 1 }}</td>
               <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold;">
                 {{ item.ItemName || item.ProductName }} {{ item.IsFOC ? '(FOC)' : '' }}
+                <div v-if="lineDiscount(item) > 0" :style="{ fontSize: receiptFont.tiny + 'px', color: '#dc2626', fontWeight: 'normal', marginTop: '2px' }">
+                  Discount: -{{ formatNumber(lineDiscount(item)) }}
+                </div>
                 <div v-if="item.Note || item.note" :style="{ fontSize: receiptFont.tiny + 'px', color: '#666', fontWeight: 'normal', fontStyle: 'italic', marginTop: '2px' }">
                   Note: {{ item.Note || item.note }}
                 </div>
@@ -1074,13 +1094,17 @@ const totalQtyDetail = computed(() => {
 });
 
 const isFocLine = (item) => Boolean(item?.IsFOC ?? item?.isFOC);
+const lineDiscount = (item) => {
+  if (!item || isFocLine(item)) return 0;
+  return Math.max(0, Number(item.DiscountAmount ?? item.discountAmount ?? 0));
+};
 const lineSubtotal = (item) => {
   if (!item || isFocLine(item)) return 0;
 
   const stored = Number(item.SubTotal ?? item.subTotal);
   const quantity = Number(item.Quantity ?? item.quantity ?? 0);
   const unitPrice = Number(item.UnitPrice ?? item.unitPrice ?? 0);
-  const discount = Number(item.DiscountAmount ?? item.discountAmount ?? 0);
+  const discount = lineDiscount(item);
   const current = Math.max(0, (quantity * unitPrice) - discount);
 
   if (!Number.isFinite(stored) || stored <= 0) return current;
@@ -1191,6 +1215,8 @@ const buildAndroidHistoryReceiptText = () => {
     lines.push(`${itemLines[0].padEnd(24, ' ')}${String(qty).padStart(5, ' ')}${formatNumber(amount).padStart(13, ' ')}`);
     itemLines.slice(1).forEach(extra => lines.push(extra));
     lines.push(`  (${item.UnitName || item.unitName || 'N/A'}) @ ${formatNumber(item.UnitPrice || item.unitPrice || 0)}`);
+    const discount = lineDiscount(item);
+    if (discount > 0) lines.push(columns('  Discount', `-${formatNumber(discount)}`));
     if (item.Note || item.note) lines.push(`  * ${clip(item.Note || item.note, width - 4)}`);
   });
 
@@ -1714,6 +1740,23 @@ const getBatchExpiryStatus = (batch) => {
   };
 };
 
+const formatNullableNumber = (value) => {
+  if (value === null || value === undefined || value === '') return '-';
+  return formatNumber(value);
+};
+
+const isConsignmentBatch = (batch) => String(batch?.sourceType || '').toLowerCase() === 'consignment';
+
+const formatBatchReference = (batch) => {
+  const prefix = isConsignmentBatch(batch) ? 'CON' : 'PO';
+  return `${prefix}-${batch?.poId || '-'}`;
+};
+
+const getBatchSourceClass = (batch) => {
+  if (isConsignmentBatch(batch)) return 'text-emerald-700 bg-emerald-50 border-emerald-100';
+  return 'text-orange-700 bg-orange-50 border-orange-100';
+};
+
 const viewProductBatches = async (product) => {
   const productId = field(product, 'ProductId', 'productId');
   if (!productId) return;
@@ -1734,8 +1777,8 @@ const viewProductBatches = async (product) => {
     });
     purchaseBatches.value = Array.isArray(res.data) ? res.data : [];
   } catch (err) {
-    console.error('Purchase batches load error:', err);
-    addToast('Purchase batches could not be loaded.', 'error');
+    console.error('Stock batches load error:', err);
+    addToast('Stock batches could not be loaded.', 'error');
   } finally {
     isBatchLoading.value = false;
   }
