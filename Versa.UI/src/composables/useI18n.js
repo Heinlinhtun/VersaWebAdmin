@@ -2223,6 +2223,10 @@ messages.en.users = {
   accessEditSuppliers: "Add, Edit, Delete Suppliers",
   accessManageUsers: "Manage Users",
   accessBusinessIntel: "Business Intelligence",
+  accessSaleReturns: "Sale Return",
+  accessPurchaseReturns: "Purchase Return",
+  accessStockAdjustments: "Stock Adjustment",
+  accessStockTransfers: "Stock Transfer",
 };
 
 messages.mm.users = {
@@ -2294,6 +2298,10 @@ messages.mm.users = {
   accessEditSuppliers: "Supplier ထည့်၊ ပြင်၊ ဖျက်",
   accessManageUsers: "အသုံးပြုသူများ စီမံ",
   accessBusinessIntel: "လုပ်ငန်းအချက်အလက်အစီရင်ခံစာ",
+  accessSaleReturns: "အရောင်း Return",
+  accessPurchaseReturns: "ဝယ်ယူမှု Return",
+  accessStockAdjustments: "စတော့ပြင်ဆင်မှု",
+  accessStockTransfers: "စတော့လွှဲပြောင်းမှု",
 };
 
 messages.en.masterData = {

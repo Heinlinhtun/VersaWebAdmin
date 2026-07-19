@@ -1084,7 +1084,11 @@ const accessSections = [
             { key: 'canEditCustomers', labelKey: 'users.accessEditCustomers' },
             { key: 'canEditSuppliers', labelKey: 'users.accessEditSuppliers' },
             { key: 'canManageUsers', labelKey: 'users.accessManageUsers' },
-            { key: 'canViewBusinessIntel', labelKey: 'users.accessBusinessIntel' }
+            { key: 'canViewBusinessIntel', labelKey: 'users.accessBusinessIntel' },
+            { key: 'canUseSaleReturns', labelKey: 'users.accessSaleReturns' },
+            { key: 'canUsePurchaseReturns', labelKey: 'users.accessPurchaseReturns' },
+            { key: 'canUseStockAdjustments', labelKey: 'users.accessStockAdjustments' },
+            { key: 'canUseStockTransfers', labelKey: 'users.accessStockTransfers' }
         ]
     }
 ];

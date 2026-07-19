@@ -20,7 +20,7 @@ const PERMISSIONS = {
   canViewProducts:        ['Admin', 'Manager', 'Staff'],
   canViewPurchases:       ['Admin', 'Manager'],
   canViewInventory:       ['Admin', 'Manager', 'Staff'],
-  canViewAdjustments:     ['Admin', 'Manager'],
+  canViewAdjustments:     ['Admin', 'Manager', 'Staff'],
   canViewHistory:         ['Admin', 'Manager', 'Staff'],
   canViewExpenses:        ['Admin', 'Manager'],
   canViewMasterData:      ['Admin'],
@@ -37,6 +37,10 @@ const PERMISSIONS = {
   canEditSuppliers:       ['Admin'],
   canManageUsers:         ['Admin'],
   canViewBusinessIntel:   ['Admin'],
+  canUseSaleReturns:      ['Admin', 'Manager', 'Staff'],
+  canUsePurchaseReturns:  ['Admin', 'Manager'],
+  canUseStockAdjustments: ['Admin', 'Manager'],
+  canUseStockTransfers:   ['Admin', 'Manager'],
 };
 
 export function usePermissions() {

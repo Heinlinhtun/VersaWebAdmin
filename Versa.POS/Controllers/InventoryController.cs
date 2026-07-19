@@ -151,6 +151,12 @@ WHERE SaleId = @SaleId
             return existing > 0;
         }
 
+        private static int? ToNullableInt(object? value)
+        {
+            if (value == null || value is DBNull) return null;
+            return Convert.ToInt32(value);
+        }
+
         private static async Task EnsurePurchaseBatchRemainingColumnAsync(MySqlConnection conn, MySqlTransaction? transaction = null)
         {
             var hasColumn = await conn.ExecuteScalarAsync<int>(@"
@@ -403,6 +409,7 @@ WHERE POItemId = @POItemId",
         }
 
         [HttpPost("adjust")]
+        [Authorize(Roles = "Admin,Manager")]
         public async Task<IActionResult> AdjustStock([FromBody] StockAdjustmentModel model)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
@@ -461,6 +468,7 @@ WHERE POItemId = @POItemId",
         }
 
         [HttpPost("full-sale-return/{saleId}")]
+        [Authorize(Roles = "Admin,Manager,Staff")]
         public async Task<IActionResult> FullSaleReturn(int saleId, [FromQuery] string reason = "Full Voucher Return")
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
@@ -469,6 +477,8 @@ WHERE POItemId = @POItemId",
 
             try
             {
+                await EnsureBundleItemsSupportsServicesAsync(conn, (MySqlTransaction)transaction);
+                await EnsureSaleReturnsSupportsItemTypesAsync(conn, (MySqlTransaction)transaction);
                 await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
 
                 var saleMaster = await conn.QueryFirstOrDefaultAsync<dynamic>(
@@ -494,40 +504,93 @@ WHERE POItemId = @POItemId",
 
                 foreach (var item in items)
                 {
-                    var conv = await conn.QueryFirstOrDefaultAsync<dynamic>(
-                        "SELECT Multiplier FROM UnitConversions WHERE ProductId = @ProductId AND FromUnitId = @UnitId",
-                        new { ProductId = (int)item.ProductId, UnitId = (int)item.UnitId }, transaction);
+                    string itemType = Convert.ToString(item.ItemType ?? "Product") ?? "Product";
+                    int? productId = ToNullableInt(item.ProductId);
+                    int? bundleId = ToNullableInt(item.BundleId);
+                    int? serviceId = ToNullableInt(item.ServiceId);
+                    int? unitId = ToNullableInt(item.UnitId);
+                    decimal quantity = Convert.ToDecimal(item.Quantity ?? 0m);
+                    decimal refundAmount = Convert.ToDecimal(item.SubTotal ?? 0m);
+                    int branchId = Convert.ToInt32(saleMaster.BranchId);
 
-                    decimal multiplier = conv?.Multiplier ?? 1;
-                    decimal baseQtyToReturn = (decimal)item.Quantity * multiplier;
-                    await RestorePurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, (int)saleMaster.BranchId, (int)item.ProductId, baseQtyToReturn);
+                    if (string.Equals(itemType, "Product", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!productId.HasValue)
+                        {
+                            await transaction.RollbackAsync();
+                            return BadRequest(new { Message = "Product sale line is missing ProductId." });
+                        }
 
-                    string returnSql = @"INSERT INTO SaleReturns (SaleId, ProductId, BranchId, Quantity, UnitId, RefundAmount, Reason, ReturnDate) 
-                                 VALUES (@saleId, @ProductId, @BranchId, @Quantity, @UnitId, @RefundAmount, @Reason, NOW())";
+                        decimal multiplier = 1;
+                        if (unitId.HasValue)
+                        {
+                            multiplier = await conn.QueryFirstOrDefaultAsync<decimal?>(
+                                "SELECT Multiplier FROM UnitConversions WHERE ProductId = @ProductId AND FromUnitId = @UnitId",
+                                new { ProductId = productId.Value, UnitId = unitId.Value }, transaction) ?? 1;
+                            if (multiplier <= 0) multiplier = 1;
+                        }
+
+                        decimal baseQtyToReturn = quantity * multiplier;
+                        await RestorePurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, branchId, productId.Value, baseQtyToReturn);
+
+                        string stockUpdate = @"UPDATE ProductStocks SET Quantity = Quantity + @baseQtyToReturn 
+                                   WHERE BranchId = @BranchId AND ProductId = @ProductId";
+                        await conn.ExecuteAsync(stockUpdate, new
+                        {
+                            baseQtyToReturn,
+                            BranchId = branchId,
+                            ProductId = productId.Value
+                        }, transaction);
+                    }
+                    else if (string.Equals(itemType, "Bundle", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!bundleId.HasValue)
+                        {
+                            await transaction.RollbackAsync();
+                            return BadRequest(new { Message = "Bundle sale line is missing BundleId." });
+                        }
+
+                        var components = await conn.QueryAsync<dynamic>(
+                            @"SELECT bi.ComponentProductId, bi.Quantity, IFNULL(uc.Multiplier, 1) as UnitMultiplier
+                              FROM BundleItems bi
+                              LEFT JOIN UnitConversions uc ON uc.ProductId = bi.ComponentProductId AND uc.FromUnitId = bi.UnitId
+                              WHERE bi.BundleId = @BundleId
+                                AND bi.ComponentProductId IS NOT NULL
+                                AND UPPER(TRIM(IFNULL(bi.ItemType,'Product'))) NOT LIKE '%SERVICE%'",
+                            new { BundleId = bundleId.Value }, transaction);
+
+                        foreach (var comp in components)
+                        {
+                            decimal compQty = Convert.ToDecimal(comp.Quantity) * Convert.ToDecimal(comp.UnitMultiplier) * quantity;
+                            int componentProductId = Convert.ToInt32(comp.ComponentProductId);
+                            await RestorePurchaseBatchesFefoAsync(conn, (MySqlTransaction)transaction, branchId, componentProductId, compQty);
+                            await conn.ExecuteAsync(
+                                "UPDATE ProductStocks SET Quantity = Quantity + @qty WHERE BranchId = @BranchId AND ProductId = @ProductId",
+                                new { qty = compQty, BranchId = branchId, ProductId = componentProductId }, transaction);
+                        }
+                    }
+
+                    string returnSql = @"
+INSERT INTO SaleReturns (SaleId, ItemType, ProductId, BundleId, ServiceId, BranchId, Quantity, UnitId, RefundAmount, Reason, ReturnPaymentMethod, ReturnDate) 
+VALUES (@saleId, @ItemType, @ProductId, @BundleId, @ServiceId, @BranchId, @Quantity, @UnitId, @RefundAmount, @Reason, NULL, NOW())";
 
                     await conn.ExecuteAsync(returnSql, new
                     {
                         saleId,
-                        ProductId = item.ProductId,
-                        BranchId = (int)saleMaster.BranchId,
-                        Quantity = item.Quantity,
-                        UnitId = item.UnitId,
-                        RefundAmount = item.SubTotal,
+                        ItemType = itemType,
+                        ProductId = productId,
+                        BundleId = bundleId,
+                        ServiceId = serviceId,
+                        BranchId = branchId,
+                        Quantity = quantity,
+                        UnitId = unitId,
+                        RefundAmount = refundAmount,
                         Reason = reason
-                    }, transaction);
-
-                    string stockUpdate = @"UPDATE ProductStocks SET Quantity = Quantity + @baseQtyToReturn 
-                                   WHERE BranchId = @BranchId AND ProductId = @ProductId";
-                    await conn.ExecuteAsync(stockUpdate, new
-                    {
-                        baseQtyToReturn,
-                        BranchId = (int)saleMaster.BranchId,
-                        ProductId = item.ProductId
                     }, transaction);
                 }
 
                 await conn.ExecuteAsync("DELETE FROM SaleItems WHERE SaleId = @saleId", new { saleId }, transaction);
-                await conn.ExecuteAsync("UPDATE Sales SET TotalAmount = 0, DiscountAmount = 0 WHERE SaleId = @saleId", new { saleId }, transaction);
+                await conn.ExecuteAsync("UPDATE Sales SET TotalAmount = 0, DiscountAmount = 0, DeliveryFee = 0, DueAmount = 0 WHERE SaleId = @saleId", new { saleId }, transaction);
                 await ApplySaleReturnToCustomerCreditAsync(conn, (MySqlTransaction)transaction, saleId, fullReturnAmount);
 
                 await transaction.CommitAsync();
@@ -541,6 +604,7 @@ WHERE POItemId = @POItemId",
         }
 
         [HttpPost("purchase-return")]
+        [Authorize(Roles = "Admin,Manager")]
         public async Task<IActionResult> PurchaseReturn([FromBody] PurchaseReturnModel model)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
@@ -625,6 +689,7 @@ WHERE POItemId = @POItemId
         }
 
         [HttpPost("sale-return")]
+        [Authorize(Roles = "Admin,Manager,Staff")]
         public async Task<IActionResult> SaleReturn([FromBody] SaleReturnModel model)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
@@ -861,6 +926,7 @@ WHERE TABLE_SCHEMA = DATABASE()
         }
 
         [HttpGet("sale-payment-methods/{saleId}")]
+        [Authorize(Roles = "Admin,Manager,Staff")]
         public async Task<IActionResult> GetSalePaymentMethods(int saleId)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
@@ -902,6 +968,7 @@ WHERE SaleId = @saleId", new { saleId });
         }
 
         [HttpPost("sale-return-any")]
+        [Authorize(Roles = "Admin,Manager,Staff")]
         public async Task<IActionResult> SaleReturnAny([FromBody] SaleReturnAnyModel model)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
@@ -1196,6 +1263,7 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
         }
 
         [HttpPost("transfer")]
+        [Authorize(Roles = "Admin,Manager")]
         public async Task<IActionResult> TransferStock([FromBody] StockTransferModel model)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));

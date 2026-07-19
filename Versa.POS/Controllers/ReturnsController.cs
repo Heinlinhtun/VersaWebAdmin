@@ -19,6 +19,7 @@ namespace Versa.POS.Controllers
 
         // ၁။ Sales Return (Customer ဆီမှ ပစ္စည်းပြန်ဝင်လာခြင်း)
         [HttpPost("sales-return")]
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager,Staff")]
         public async Task<IActionResult> ProcessSalesReturn([FromBody] ReturnEntryModel model)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
@@ -54,6 +55,7 @@ namespace Versa.POS.Controllers
 
         // ၂။ Purchase Return (Supplier ဆီသို့ ပစ္စည်းပြန်ပို့ခြင်း)
         [HttpPost("purchase-return")]
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
         public async Task<IActionResult> ProcessPurchaseReturn([FromBody] ReturnEntryModel model)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));

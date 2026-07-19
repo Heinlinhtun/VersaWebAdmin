@@ -12,25 +12,25 @@
 
     <div
       class="flex flex-wrap gap-1 mb-8 bg-slate-200/60 p-1.5 rounded-xl border border-slate-200 w-fit transition-all">
-      <button @click="activeTab = 'sale'" :class="activeTab === 'sale'
+      <button v-if="canUseSaleReturns" @click="activeTab = 'sale'" :class="activeTab === 'sale'
         ? 'bg-white text-indigo-600 shadow-sm'
         : 'text-slate-500 hover:text-slate-700'
         " class="px-8 py-2.5 rounded-lg font-normal text-[11px] uppercase tracking-wide transition-all duration-300">
         {{ tx.saleReturn }}
       </button>
-      <button @click="activeTab = 'purchase'" :class="activeTab === 'purchase'
+      <button v-if="canUsePurchaseReturns" @click="activeTab = 'purchase'" :class="activeTab === 'purchase'
         ? 'bg-white text-orange-600 shadow-sm'
         : 'text-slate-500 hover:text-slate-700'
         " class="px-8 py-2.5 rounded-lg font-normal text-[11px] uppercase tracking-wide transition-all duration-300">
         {{ tx.purchaseReturn }}
       </button>
-      <button @click="activeTab = 'adjustment'" :class="activeTab === 'adjustment'
+      <button v-if="canUseStockAdjustments" @click="activeTab = 'adjustment'" :class="activeTab === 'adjustment'
         ? 'bg-white text-slate-900 shadow-sm'
         : 'text-slate-500 hover:text-slate-700'
         " class="px-8 py-2.5 rounded-lg font-normal text-[11px] uppercase tracking-wide transition-all duration-300">
         {{ tx.adjustment }}
       </button>
-      <button @click="activeTab = 'transfer'" :class="activeTab === 'transfer'
+      <button v-if="canUseStockTransfers" @click="activeTab = 'transfer'" :class="activeTab === 'transfer'
         ? 'bg-white text-blue-600 shadow-sm'
         : 'text-slate-500 hover:text-slate-700'
         " class="px-8 py-2.5 rounded-lg font-normal text-[11px] uppercase tracking-wide transition-all duration-300">
@@ -39,7 +39,7 @@
     </div>
 
     <div class=" mx-auto">
-      <div v-if="activeTab === 'sale'" class="space-y-6 animate-in fade-in duration-300">
+      <div v-if="activeTab === 'sale' && canUseSaleReturns" class="space-y-6 animate-in fade-in duration-300">
         <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
           <h2 class="text-sm font-normal uppercase text-indigo-600 mb-6 flex items-center gap-2">{{ tx.saleVoucherReturn
             }}</h2>
@@ -97,7 +97,7 @@
         </div>
       </div>
 
-      <div v-if="activeTab === 'purchase'" class="space-y-6 animate-in fade-in duration-300">
+      <div v-if="activeTab === 'purchase' && canUsePurchaseReturns" class="space-y-6 animate-in fade-in duration-300">
         <!-- Sub-tabs for Purchase Return -->
         <div class="flex flex-wrap gap-1 mb-2 bg-slate-200/60 p-1.5 rounded-xl border border-slate-200 w-fit transition-all">
           <button @click="purchaseSubTab = 'voucher'" :class="purchaseSubTab === 'voucher'
@@ -213,7 +213,7 @@
         </div>
       </div>
 
-      <div v-if="activeTab === 'adjustment'"
+      <div v-if="activeTab === 'adjustment' && canUseStockAdjustments"
         class="mx-auto bg-white p-8 rounded-xl shadow-sm border border-slate-100 animate-in zoom-in duration-300">
         <h2 class="text-sm font-normal uppercase text-slate-800 mb-8 border-b border-slate-100 pb-4">{{ tx.adjustmentTitle
           }}</h2>
@@ -289,7 +289,7 @@
         </div>
       </div>
 
-      <div v-if="activeTab === 'transfer'"
+      <div v-if="activeTab === 'transfer' && canUseStockTransfers"
         class=" mx-auto bg-white p-8 rounded-xl shadow-sm border border-slate-100 animate-in slide-in-from-bottom-6 duration-400">
         <h2 class="text-sm font-normal uppercase text-blue-600 mb-8 border-b border-slate-100 pb-4">{{ tx.transferTitle }}
         </h2>
@@ -415,8 +415,10 @@ import { ref, onMounted, onUnmounted, watch, computed } from "vue";
 import api from "../services/api";
 import { useToast } from "../composables/useToast";
 import { useI18n } from "../composables/useI18n";
+import { usePermissions } from "../composables/usePermissions";
 const { addToast } = useToast();
 const { t } = useI18n();
+const { can } = usePermissions();
 const currentProductUnits = ref([]);
 
 const activeTab = ref("sale");
@@ -467,6 +469,18 @@ const transferForm = ref({
   Quantity: 1,
   UnitId: null,
   Note: "Manual Stock Transfer",
+});
+
+const canUseSaleReturns = computed(() => can("canUseSaleReturns"));
+const canUsePurchaseReturns = computed(() => can("canUsePurchaseReturns"));
+const canUseStockAdjustments = computed(() => can("canUseStockAdjustments"));
+const canUseStockTransfers = computed(() => can("canUseStockTransfers"));
+const firstAllowedTab = computed(() => {
+  if (canUseSaleReturns.value) return "sale";
+  if (canUsePurchaseReturns.value) return "purchase";
+  if (canUseStockAdjustments.value) return "adjustment";
+  if (canUseStockTransfers.value) return "transfer";
+  return "sale";
 });
 const tx = computed(() => ({
   title: t('inventoryAdjustments.title'),
@@ -984,6 +998,7 @@ const submitTransfer = async () => {
 };
 
 onMounted(() => {
+  activeTab.value = firstAllowedTab.value;
   fetchProducts();
   fetchBranches();
   window.addEventListener("click", handleAdjClickOutside);
@@ -1019,6 +1034,15 @@ watch(() => adjForm.value.ProductId, async (newId) => {
 }, { immediate: true });
 
 watch(activeTab, (tab) => {
+  const allowed =
+    (tab === "sale" && canUseSaleReturns.value) ||
+    (tab === "purchase" && canUsePurchaseReturns.value) ||
+    (tab === "adjustment" && canUseStockAdjustments.value) ||
+    (tab === "transfer" && canUseStockTransfers.value);
+  if (!allowed) {
+    activeTab.value = firstAllowedTab.value;
+    return;
+  }
   if (tab === "adjustment" || tab === "transfer") fetchProducts();
 });
 
