@@ -815,6 +815,8 @@ SELECT
               AND (@branchId IS NULL OR COALESCE(ci3.BranchId, c3.BranchId) = @branchId)), 0) AS AvailableQuantity
 FROM SaleItems si
 JOIN Sales s ON s.SaleId = si.SaleId
+LEFT JOIN Products p ON p.ProductId = si.ProductId
+LEFT JOIN Categories pc ON pc.CategoryId = p.CategoryId
 LEFT JOIN ConsignmentItems ci ON ci.ConsignItemId = si.ConsignItemId
 LEFT JOIN (
     SELECT
@@ -831,6 +833,7 @@ WHERE s.SaleDate BETWEEN @start AND @end
   AND (
       IFNULL(si.IsConsignment, 0) = 1
       OR si.ConsignItemId IS NOT NULL
+      OR LOWER(TRIM(IFNULL(pc.CategoryName, ''))) = 'consignment'
       OR (
           cfp.ProductId IS NOT NULL
           AND cfp.FirstConsignDate <= s.SaleDate
@@ -887,6 +890,7 @@ SELECT
 FROM SaleItems si
 JOIN Sales s ON s.SaleId = si.SaleId
 LEFT JOIN Products p ON p.ProductId = si.ProductId
+LEFT JOIN Categories pc ON pc.CategoryId = p.CategoryId
 LEFT JOIN ConsignmentItems ci ON ci.ConsignItemId = si.ConsignItemId
 LEFT JOIN Consignments c ON c.ConsignId = ci.ConsignId
 LEFT JOIN (
@@ -914,6 +918,7 @@ WHERE s.SaleDate BETWEEN @start AND @end
   AND (
       IFNULL(si.IsConsignment, 0) = 1
       OR si.ConsignItemId IS NOT NULL
+      OR LOWER(TRIM(IFNULL(pc.CategoryName, ''))) = 'consignment'
       OR (
           cfp.ProductId IS NOT NULL
           AND cfp.FirstConsignDate <= s.SaleDate
