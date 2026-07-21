@@ -301,19 +301,19 @@ WHERE POItemId = @POItemId",
         ps.ProductId, p.Name AS ProductName, p.SKU, ps.Quantity AS BaseQuantity,
         IFNULL((
             SELECT SUM(ci.Quantity - ci.SoldQuantity - ci.ReturnedQuantity)
-            FROM ConsignmentItems ci
-            JOIN Consignments c ON c.ConsignId = ci.ConsignId
-            WHERE ci.ProductId = ps.ProductId
-              AND COALESCE(ci.BranchId, c.BranchId) = ps.BranchId
-              AND c.Status = 'Active'
+              FROM ConsignmentItems ci
+              JOIN Consignments c ON c.ConsignId = ci.ConsignId
+              WHERE ci.ProductId = ps.ProductId
+                AND COALESCE(ci.BranchId, c.BranchId) = ps.BranchId
+              AND LOWER(TRIM(IFNULL(c.Status, ''))) NOT IN ('cancelled', 'canceled', 'returned')
         ), 0) AS ConsignmentQuantity,
         (ps.Quantity - IFNULL((
             SELECT SUM(ci.Quantity - ci.SoldQuantity - ci.ReturnedQuantity)
-            FROM ConsignmentItems ci
-            JOIN Consignments c ON c.ConsignId = ci.ConsignId
-            WHERE ci.ProductId = ps.ProductId
-              AND COALESCE(ci.BranchId, c.BranchId) = ps.BranchId
-              AND c.Status = 'Active'
+              FROM ConsignmentItems ci
+              JOIN Consignments c ON c.ConsignId = ci.ConsignId
+              WHERE ci.ProductId = ps.ProductId
+                AND COALESCE(ci.BranchId, c.BranchId) = ps.BranchId
+              AND LOWER(TRIM(IFNULL(c.Status, ''))) NOT IN ('cancelled', 'canceled', 'returned')
         ), 0)) AS OwnedQuantity,
         u.UnitName AS BaseUnitName, IFNULL(p.CostPrice, 0) AS CostPrice,
         (SELECT poi.CostPrice FROM PurchaseOrderItems poi 
@@ -352,14 +352,14 @@ WHERE POItemId = @POItemId",
             FROM ConsignmentItems ci
             JOIN Consignments c ON c.ConsignId = ci.ConsignId
             WHERE ci.ProductId = ps.ProductId
-              AND c.Status = 'Active'
+              AND LOWER(TRIM(IFNULL(c.Status, ''))) NOT IN ('cancelled', 'canceled', 'returned')
         ), 0) AS ConsignmentQuantity,
         (SUM(ps.Quantity) - IFNULL((
             SELECT SUM(ci.Quantity - ci.SoldQuantity - ci.ReturnedQuantity)
             FROM ConsignmentItems ci
             JOIN Consignments c ON c.ConsignId = ci.ConsignId
             WHERE ci.ProductId = ps.ProductId
-              AND c.Status = 'Active'
+              AND LOWER(TRIM(IFNULL(c.Status, ''))) NOT IN ('cancelled', 'canceled', 'returned')
         ), 0)) AS OwnedQuantity,
         u.UnitName AS BaseUnitName,
         IFNULL(p.CostPrice, 0) AS CostPrice,

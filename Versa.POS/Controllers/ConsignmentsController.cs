@@ -272,6 +272,12 @@ WHERE c.SupplierId = @SupplierId
       WHERE ci.ConsignId = c.ConsignId
         AND (ci.SoldQuantity - ci.SettledQuantity) > 0
   )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM ConsignmentItems ci
+      WHERE ci.ConsignId = c.ConsignId
+        AND (ci.Quantity - ci.SoldQuantity - ci.ReturnedQuantity) > 0
+  )
   AND EXISTS (
       SELECT 1
       FROM ConsignmentItems ci

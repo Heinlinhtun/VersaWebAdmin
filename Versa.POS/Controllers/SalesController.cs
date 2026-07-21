@@ -310,7 +310,7 @@ FROM ConsignmentItems ci
 JOIN Consignments c ON c.ConsignId = ci.ConsignId
 WHERE ci.ProductId = @ProductId
   AND COALESCE(ci.BranchId, c.BranchId) = @BranchId
-  AND c.Status = 'Active'
+  AND LOWER(TRIM(IFNULL(c.Status, ''))) NOT IN ('cancelled', 'canceled', 'returned')
   AND (ci.Quantity - ci.SoldQuantity - ci.ReturnedQuantity) > 0
 ORDER BY c.OrderDate, ci.ConsignItemId",
                 new { ProductId = productId, BranchId = branchId },
@@ -1295,7 +1295,7 @@ LIMIT 1",
             FROM ConsignmentItems ci
             JOIN Consignments c ON c.ConsignId = ci.ConsignId
             WHERE COALESCE(ci.BranchId, c.BranchId) = @branchId
-              AND c.Status = 'Active'
+              AND LOWER(TRIM(IFNULL(c.Status, ''))) NOT IN ('cancelled', 'canceled', 'returned')
             GROUP BY ci.ProductId
         ) cons ON cons.ProductId = p.ProductId
         WHERE p.IsActive = 1";
