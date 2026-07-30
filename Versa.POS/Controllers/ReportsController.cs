@@ -61,6 +61,12 @@ WHERE TABLE_SCHEMA = DATABASE()
         return string.IsNullOrWhiteSpace(method) ? "Unknown" : method.Trim();
     }
 
+    private static bool HasExplicitPaymentMethod(string? method)
+    {
+        return !string.IsNullOrWhiteSpace(method)
+            && !method.Trim().Equals("Unknown", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void DeductReturnFromChannels(
         Dictionary<string, decimal> channels,
         decimal refundAmount,
@@ -72,13 +78,7 @@ WHERE TABLE_SCHEMA = DATABASE()
         if (!string.IsNullOrWhiteSpace(preferredMethod))
         {
             var preferred = preferredMethod.Trim();
-            if (channels.TryGetValue(preferred, out var preferredAmount) && preferredAmount > 0)
-            {
-                var directDeduct = Math.Min(preferredAmount, remainingDeduct);
-                channels[preferred] = preferredAmount - directDeduct;
-                remainingDeduct -= directDeduct;
-            }
-            else if (!channels.Any(x => x.Value > 0))
+            if (HasExplicitPaymentMethod(preferred))
             {
                 channels[preferred] = channels.GetValueOrDefault(preferred) - remainingDeduct;
                 return;
@@ -643,18 +643,12 @@ WHERE TABLE_SCHEMA = DATABASE()
             var before = returnChannels.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
             DeductReturnFromChannels(returnChannels, ret.RefundAmount, ret.ReturnPaymentMethod);
 
-            foreach (var kv in before)
+            foreach (var method in before.Keys.Union(returnChannels.Keys, StringComparer.OrdinalIgnoreCase))
             {
-                var deducted = kv.Value - returnChannels.GetValueOrDefault(kv.Key);
+                var deducted = before.GetValueOrDefault(method) - returnChannels.GetValueOrDefault(method);
                 if (deducted <= 0) continue;
-                if (!methodTotals.ContainsKey(kv.Key)) methodTotals[kv.Key] = 0m;
-                methodTotals[kv.Key] -= deducted;
-            }
-
-            foreach (var kv in returnChannels.Where(x => x.Value < 0))
-            {
-                if (!methodTotals.ContainsKey(kv.Key)) methodTotals[kv.Key] = 0m;
-                methodTotals[kv.Key] += kv.Value;
+                if (!methodTotals.ContainsKey(method)) methodTotals[method] = 0m;
+                methodTotals[method] -= deducted;
             }
         }
 

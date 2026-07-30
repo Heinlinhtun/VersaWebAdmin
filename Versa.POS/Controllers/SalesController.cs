@@ -532,6 +532,11 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
                 }
 
                 // ၁။ စုစုပေါင်း ပမာဏ တွက်ချက်ခြင်း
+                if (model.PaidAmount < 0)
+                {
+                    model.PaidAmount = 0;
+                }
+
                 decimal actualItemsTotal = model.Items.Where(i => !i.IsFOC).Sum(i => (i.Quantity * i.UnitPrice) - i.DiscountAmount);
                 decimal finalTotalAmount = actualItemsTotal - model.DiscountAmount + model.DeliveryFee;
                 decimal dueAmount = Math.Max(0, finalTotalAmount - model.PaidAmount);
@@ -719,12 +724,13 @@ WHERE SaleItemId = @SaleItemId",
                         {
                             await conn.ExecuteAsync(@"
                             INSERT INTO CustomerPayments (CustomerId, Amount, PaymentMethod, PaymentDate, SaleId) 
-                            VALUES (@CustomerId, @Amount, @PaymentMethod, NOW(), @SaleId)",
+                            VALUES (@CustomerId, @Amount, @PaymentMethod, @PaymentDate, @SaleId)",
                                 new
                                 {
                                     CustomerId = resolvedCustomerId,
                                     Amount = adjustedAmount,
                                     PaymentMethod = p.PaymentMethod,
+                                    PaymentDate = saleDate,
                                     SaleId = saleId
                                 }, transaction);
                         }
@@ -732,12 +738,13 @@ WHERE SaleItemId = @SaleItemId",
                         {
                             await conn.ExecuteAsync(@"
                             INSERT INTO CustomerPayments (CustomerId, Amount, PaymentMethod, PaymentDate) 
-                            VALUES (@CustomerId, @Amount, @PaymentMethod, NOW())",
+                            VALUES (@CustomerId, @Amount, @PaymentMethod, @PaymentDate)",
                                 new
                                 {
                                     CustomerId = resolvedCustomerId,
                                     Amount = adjustedAmount,
-                                    PaymentMethod = p.PaymentMethod
+                                    PaymentMethod = p.PaymentMethod,
+                                    PaymentDate = saleDate
                                 }, transaction);
                         }
                     }
@@ -802,6 +809,11 @@ WHERE SaleItemId = @SaleItemId",
                         string insertCustomerSql = "INSERT INTO Customers (Name, Phone, Address, CurrentBalance, CreatedAt) VALUES (@Name, '', '', 0, NOW()); SELECT LAST_INSERT_ID();";
                         resolvedCustomerId = await conn.ExecuteScalarAsync<int>(insertCustomerSql, new { Name = cleanCustomerName }, transaction);
                     }
+                }
+
+                if (model.PaidAmount < 0)
+                {
+                    model.PaidAmount = 0;
                 }
 
                 decimal actualItemsTotal = model.Items.Where(i => !i.IsFOC).Sum(i => (i.Quantity * i.UnitPrice) - i.DiscountAmount);
@@ -980,12 +992,13 @@ WHERE SaleItemId = @SaleItemId",
                         {
                             await conn.ExecuteAsync(@"
                             INSERT INTO CustomerPayments (CustomerId, Amount, PaymentMethod, PaymentDate, SaleId) 
-                            VALUES (@CustomerId, @Amount, @PaymentMethod, NOW(), @SaleId)",
+                            VALUES (@CustomerId, @Amount, @PaymentMethod, @PaymentDate, @SaleId)",
                                 new
                                 {
                                     CustomerId = resolvedCustomerId,
                                     Amount = adjustedAmount,
                                     PaymentMethod = p.PaymentMethod,
+                                    PaymentDate = saleDate,
                                     SaleId = saleId
                                 }, transaction);
                         }
@@ -993,12 +1006,13 @@ WHERE SaleItemId = @SaleItemId",
                         {
                             await conn.ExecuteAsync(@"
                             INSERT INTO CustomerPayments (CustomerId, Amount, PaymentMethod, PaymentDate) 
-                            VALUES (@CustomerId, @Amount, @PaymentMethod, NOW())",
+                            VALUES (@CustomerId, @Amount, @PaymentMethod, @PaymentDate)",
                                 new
                                 {
                                     CustomerId = resolvedCustomerId,
                                     Amount = adjustedAmount,
-                                    PaymentMethod = p.PaymentMethod
+                                    PaymentMethod = p.PaymentMethod,
+                                    PaymentDate = saleDate
                                 }, transaction);
                         }
                     }

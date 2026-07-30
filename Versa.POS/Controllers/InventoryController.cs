@@ -151,6 +151,48 @@ WHERE SaleId = @SaleId
             return existing > 0;
         }
 
+        private static bool HasExplicitPaymentMethod(string? method)
+        {
+            return !string.IsNullOrWhiteSpace(method)
+                && !method.Trim().Equals("Unknown", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static async Task<string> ResolveReturnPaymentMethodAsync(
+            MySqlConnection conn,
+            MySqlTransaction transaction,
+            int saleId,
+            string? preferredPaymentMethod)
+        {
+            if (HasExplicitPaymentMethod(preferredPaymentMethod))
+            {
+                return preferredPaymentMethod!.Trim();
+            }
+
+            var customerPaymentMethod = await conn.QueryFirstOrDefaultAsync<string>(@"
+SELECT COALESCE(NULLIF(PaymentMethod, ''), 'Unknown')
+FROM CustomerPayments
+WHERE SaleId = @SaleId
+GROUP BY COALESCE(NULLIF(PaymentMethod, ''), 'Unknown')
+ORDER BY SUM(IFNULL(Amount, 0)) DESC
+LIMIT 1",
+                new { SaleId = saleId },
+                transaction);
+
+            if (HasExplicitPaymentMethod(customerPaymentMethod))
+            {
+                return customerPaymentMethod!.Trim();
+            }
+
+            var salePaymentMethod = await conn.QueryFirstOrDefaultAsync<string>(@"
+SELECT COALESCE(NULLIF(PaymentMethod, ''), 'Unknown')
+FROM Sales
+WHERE SaleId = @SaleId",
+                new { SaleId = saleId },
+                transaction);
+
+            return HasExplicitPaymentMethod(salePaymentMethod) ? salePaymentMethod!.Trim() : "Unknown";
+        }
+
         private static int? ToNullableInt(object? value)
         {
             if (value == null || value is DBNull) return null;
@@ -502,6 +544,12 @@ WHERE POItemId = @POItemId",
                     return BadRequest(new { Message = "Return amount exceeds remaining sale amount." });
                 }
 
+                var fullReturnPaymentMethod = await ResolveReturnPaymentMethodAsync(
+                    conn,
+                    (MySqlTransaction)transaction,
+                    saleId,
+                    null);
+
                 foreach (var item in items)
                 {
                     string itemType = Convert.ToString(item.ItemType ?? "Product") ?? "Product";
@@ -572,7 +620,7 @@ WHERE POItemId = @POItemId",
 
                     string returnSql = @"
 INSERT INTO SaleReturns (SaleId, ItemType, ProductId, BundleId, ServiceId, BranchId, Quantity, UnitId, RefundAmount, Reason, ReturnPaymentMethod, ReturnDate) 
-VALUES (@saleId, @ItemType, @ProductId, @BundleId, @ServiceId, @BranchId, @Quantity, @UnitId, @RefundAmount, @Reason, NULL, NOW())";
+VALUES (@saleId, @ItemType, @ProductId, @BundleId, @ServiceId, @BranchId, @Quantity, @UnitId, @RefundAmount, @Reason, @ReturnPaymentMethod, NOW())";
 
                     await conn.ExecuteAsync(returnSql, new
                     {
@@ -585,7 +633,8 @@ VALUES (@saleId, @ItemType, @ProductId, @BundleId, @ServiceId, @BranchId, @Quant
                         Quantity = quantity,
                         UnitId = unitId,
                         RefundAmount = refundAmount,
-                        Reason = reason
+                        Reason = reason,
+                        ReturnPaymentMethod = fullReturnPaymentMethod
                     }, transaction);
                 }
 
@@ -734,7 +783,11 @@ WHERE POItemId = @POItemId
                     return BadRequest(new { Message = "Return amount exceeds remaining sale amount." });
                 }
 
-                var legacyReturnPaymentMethod = string.IsNullOrWhiteSpace(model.PreferredPaymentMethod) ? null : model.PreferredPaymentMethod.Trim();
+                var legacyReturnPaymentMethod = await ResolveReturnPaymentMethodAsync(
+                    conn,
+                    (MySqlTransaction)transaction,
+                    model.SaleId,
+                    model.PreferredPaymentMethod);
                 if (await HasRecentMatchingSaleReturnAsync(
                     conn,
                     (MySqlTransaction)transaction,
@@ -1024,7 +1077,11 @@ WHERE SaleId = @saleId", new { saleId });
                         return BadRequest(new { Message = "Return amount exceeds remaining sale amount." });
                     }
 
-                    var productReturnPaymentMethod = string.IsNullOrWhiteSpace(model.PreferredPaymentMethod) ? null : model.PreferredPaymentMethod.Trim();
+                    var productReturnPaymentMethod = await ResolveReturnPaymentMethodAsync(
+                        conn,
+                        (MySqlTransaction)transaction,
+                        model.SaleId,
+                        model.PreferredPaymentMethod);
                     if (await HasRecentMatchingSaleReturnAsync(
                         conn,
                         (MySqlTransaction)transaction,
@@ -1089,7 +1146,11 @@ VALUES (@SaleId, 'Product', @ProductId, NULL, NULL, @BranchId, @Quantity, @UnitI
                         return BadRequest(new { Message = "Return amount exceeds remaining sale amount." });
                     }
 
-                    var bundleReturnPaymentMethod = string.IsNullOrWhiteSpace(model.PreferredPaymentMethod) ? null : model.PreferredPaymentMethod.Trim();
+                    var bundleReturnPaymentMethod = await ResolveReturnPaymentMethodAsync(
+                        conn,
+                        (MySqlTransaction)transaction,
+                        model.SaleId,
+                        model.PreferredPaymentMethod);
                     if (await HasRecentMatchingSaleReturnAsync(
                         conn,
                         (MySqlTransaction)transaction,
@@ -1165,7 +1226,11 @@ VALUES (@SaleId, 'Bundle', NULL, @BundleId, NULL, @BranchId, @Quantity, NULL, @R
                         return BadRequest(new { Message = "Return amount exceeds remaining sale amount." });
                     }
 
-                    var serviceReturnPaymentMethod = string.IsNullOrWhiteSpace(model.PreferredPaymentMethod) ? null : model.PreferredPaymentMethod.Trim();
+                    var serviceReturnPaymentMethod = await ResolveReturnPaymentMethodAsync(
+                        conn,
+                        (MySqlTransaction)transaction,
+                        model.SaleId,
+                        model.PreferredPaymentMethod);
                     if (await HasRecentMatchingSaleReturnAsync(
                         conn,
                         (MySqlTransaction)transaction,

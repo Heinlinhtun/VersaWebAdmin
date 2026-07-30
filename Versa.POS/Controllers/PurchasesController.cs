@@ -83,7 +83,7 @@ WHERE poi.RemainingQuantity IS NULL",
                     return BadRequest(new { Message = "Invalid purchase item. Product, unit, quantity and cost are required." });
 
                 decimal total = model.TotalAmount;
-                decimal paid = model.PaidAmount.GetValueOrDefault(0m);
+                decimal paid = Math.Max(0m, model.PaidAmount.GetValueOrDefault(0m));
                 decimal due = total - paid;
 
                 // ၁။ Status သတ်မှတ်ခြင်း Logic
@@ -104,7 +104,7 @@ WHERE poi.RemainingQuantity IS NULL",
                     model.SupplierId,
                     model.BranchId,
                     model.TotalAmount,
-                    model.PaidAmount,
+                    PaidAmount = paid,
                     model.Remarks, // Remarks ပါ တစ်ခါတည်းသိမ်းသည်
                     OrderDate = purchaseDate,
                     Status = poStatus
@@ -117,7 +117,7 @@ WHERE poi.RemainingQuantity IS NULL",
                 {
                     string paymentNote = $"Paid for Purchase {invoiceNo}. (Total: {total:N0}, Paid: {paid:N0}, {due:N0} added to debt)";
                     string paymentSql = @"INSERT INTO SupplierPayments (SupplierId, Amount, PaymentMethod, ReferenceNo, Note, PaymentDate) 
-                                VALUES (@SupplierId, @Amount, @PaymentMethod, @ReferenceNo, @Note, NOW())";
+                                VALUES (@SupplierId, @Amount, @PaymentMethod, @ReferenceNo, @Note, @PaymentDate)";
 
                     await conn.ExecuteAsync(paymentSql, new
                     {
@@ -125,7 +125,8 @@ WHERE poi.RemainingQuantity IS NULL",
                         Amount = paid,
                         PaymentMethod = string.IsNullOrWhiteSpace(model.PaymentMethod) ? "Cash" : model.PaymentMethod.Trim(),
                         ReferenceNo = invoiceNo,
-                        Note = paymentNote
+                        Note = paymentNote,
+                        PaymentDate = purchaseDate
                     }, transaction);
                 }
 
