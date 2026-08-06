@@ -1381,6 +1381,7 @@ const showInvoicePreview = ref(false);
 const saveInvoiceAsImage = ref(true);
 const invoicePreviewRef = ref(null);
 const capturedPrintHtml = ref('');
+const capturedReceiptText = ref('');
 const invoicePreviewData = ref({
   items: [],
   payments: [],
@@ -2360,8 +2361,18 @@ const applyLocalStockDeduction = (payload) => {
   saveCurrentCatalogForAndroid();
 };
 
-const buildReceiptText = (saleNo) => {
-  const width = 42;
+const buildReceiptText = (saleNo, options = {}) => {
+  const width = Number(options.width || 42);
+  const items = options.items || cart.value;
+  const payments = options.payments || receiptData.value.payments;
+  const discountAmount = Number(options.discountAmount ?? saleForm.value.DiscountAmount ?? 0);
+  const deliveryFee = Number(options.deliveryFee ?? saleForm.value.DeliveryFee ?? 0);
+  const voucherNote = options.voucherNote ?? saleForm.value.Note ?? '';
+  const receiptTotalQty = Number(options.totalQty ?? items.reduce((sum, i) => sum + Number(i.Quantity || 0), 0));
+  const subTotal = Number(options.subTotal ?? items.reduce((sum, i) => sum + (i.isFOC ? 0 : Number(i.Quantity || 0) * Number(i.SelectedPrice || 0)), 0));
+  const finalTotal = Number(options.totalAmount ?? Math.max(0, subTotal - discountAmount + deliveryFee));
+  const paidTotal = Number(options.paidAmount ?? payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0));
+  const balance = paidTotal - finalTotal;
   const lines = [];
   const line = '-'.repeat(width);
   const doubleLine = '='.repeat(width);
@@ -2410,19 +2421,23 @@ const buildReceiptText = (saleNo) => {
     lines.push(clip(`${selectedCustomerObj.value.phone || ''} ${selectedCustomerObj.value.address || ''}`.trim(), width));
   }
   lines.push(line);
-  lines.push(`${'Name'.padEnd(24, ' ')}${'Qty'.padStart(5, ' ')}${'Amount'.padStart(13, ' ')}`);
+  const qtyWidth = 5;
+  const amountWidth = Math.min(14, Math.max(10, width - 21));
+  const nameWidth = Math.max(12, width - qtyWidth - amountWidth);
+
+  lines.push(`${'Name'.padEnd(nameWidth, ' ')}${'Qty'.padStart(qtyWidth, ' ')}${'Amount'.padStart(amountWidth, ' ')}`);
   lines.push(line);
 
-  cart.value.forEach(item => {
+  items.forEach(item => {
     const qty = Number(item.Quantity || 0);
     const price = Number(item.SelectedPrice || 0);
     const total = item.isFOC ? 0 : (qty * price) - Number(item.DiscountAmount || 0);
     const itemName = `${item.Name || ''}${item.isFOC ? ' (FOC)' : ''}`;
-    const itemLines = wrap(itemName, 24);
+    const itemLines = wrap(itemName, nameWidth);
     const qtyText = `${qty}`;
     const totalText = formatNumber(total);
 
-    lines.push(`${itemLines[0].padEnd(24, ' ')}${qtyText.padStart(5, ' ')}${totalText.padStart(13, ' ')}`);
+    lines.push(`${itemLines[0].padEnd(nameWidth, ' ')}${qtyText.padStart(qtyWidth, ' ')}${totalText.padStart(amountWidth, ' ')}`);
     itemLines.slice(1).forEach(extra => lines.push(extra));
     lines.push(`  (${getUnitName(item.UnitId)}) @ ${formatNumber(price)}`);
     if (item.DiscountAmount > 0 && !item.isFOC) {
@@ -2432,24 +2447,24 @@ const buildReceiptText = (saleNo) => {
   });
 
   lines.push(line);
-  lines.push(columns('Total Qty', formatNumber(totalQty.value)));
-  lines.push(columns('Sub-Total:', money(cart.value.reduce((sum, i) => sum + (i.isFOC ? 0 : i.Quantity * i.SelectedPrice), 0))));
-  if (saleForm.value.DiscountAmount > 0) {
-    lines.push(columns('Discount (-):', money(saleForm.value.DiscountAmount)));
+  lines.push(columns('Total Qty', formatNumber(receiptTotalQty)));
+  lines.push(columns('Sub-Total:', money(subTotal)));
+  if (discountAmount > 0) {
+    lines.push(columns('Discount (-):', money(discountAmount)));
   }
-  if (saleForm.value.DeliveryFee > 0) {
-    lines.push(columns('Delivery (+):', money(saleForm.value.DeliveryFee)));
+  if (deliveryFee > 0) {
+    lines.push(columns('Delivery (+):', money(deliveryFee)));
   }
-  if (saleForm.value.Note && saleForm.value.Note.trim() !== '') {
-    lines.push(`Note: ${clip(saleForm.value.Note, width - 6)}`);
+  if (voucherNote && String(voucherNote).trim() !== '') {
+    lines.push(`Note: ${clip(voucherNote, width - 6)}`);
   }
   lines.push(doubleLine);
-  lines.push(columns('TOTAL:', money(totalAmount.value)));
-  receiptData.value.payments.forEach(payment => {
+  lines.push(columns('TOTAL:', money(finalTotal)));
+  payments.forEach(payment => {
     lines.push(columns(`PAID(${payment.method}):`, money(payment.amount || 0)));
   });
-  if (balanceAmount.value !== 0) {
-    lines.push(columns(balanceAmount.value > 0 ? 'CHANGE:' : 'DUE:', money(Math.abs(balanceAmount.value))));
+  if (balance !== 0) {
+    lines.push(columns(balance > 0 ? 'CHANGE:' : 'DUE:', money(Math.abs(balance))));
   }
   lines.push(doubleLine);
   lines.push('');
@@ -2457,12 +2472,18 @@ const buildReceiptText = (saleNo) => {
   return lines.join('\n');
 };
 
-const printWithAndroidIfPossible = async (receiptText) => {
+const printWithAndroidIfPossible = async (receiptText, showSuccessToast = false) => {
   if (!androidBridge.supportsNativePrint()) return false;
-  const result = androidBridge.printReceipt(receiptText, shopInfo.value.LogoData || '');
+  let result = androidBridge.printReceipt(receiptText, shopInfo.value.LogoData || '');
+  if (!result?.ok && shopInfo.value.LogoData) {
+    result = androidBridge.printReceipt(receiptText, '');
+  }
   if (!result?.ok) {
     addToast(result?.message || 'Bluetooth printing failed.', 'warning');
     return false;
+  }
+  if (showSuccessToast) {
+    addToast(result.message || t('history.printPopupOpened') || 'Receipt sent to printer.', 'success');
   }
   return true;
 };
@@ -2996,7 +3017,7 @@ const capturePreviewElement = async () => {
 
     const isThermal = receiptSize.value === '80mm';
     const bodyWidth = isThermal ? '80mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
-    const captureWidth = isThermal ? '90mm' : bodyWidth;
+    const captureWidth = bodyWidth;
 
     // Build logo HTML
     const hasLogo = shopInfo.value.LogoData &&
@@ -3070,7 +3091,7 @@ const capturePreviewElement = async () => {
     const targetEl = captureRoot || iframeDoc.body;
     const { default: html2canvas } = await import('html2canvas');
     const canvas = await html2canvas(targetEl, {
-      scale: Math.max(3, window.devicePixelRatio || 2),
+      scale: androidBridge.isAndroid() && isThermal ? 2 : Math.max(3, window.devicePixelRatio || 2),
       backgroundColor: '#ffffff',
       useCORS: true,
       allowTaint: true,
@@ -3155,24 +3176,27 @@ const printFromPreview = async () => {
   const fullPrintHtml = logoHtml + content;
 
   if (androidBridge.isAndroid()) {
+    if (isThermal) {
+      const blob = await capturePreviewElement();
+      if (blob) {
+        const imageData = await blobToDataUrl(blob);
+        const imagePrintResult = androidBridge.printImage(imageData);
+        if (imagePrintResult?.ok) {
+          addToast(imagePrintResult.message || t('history.printPopupOpened') || 'Receipt sent to printer.', 'success');
+          return;
+        }
+        console.warn('[PrintInvoice] Android image print failed:', imagePrintResult?.message || imagePrintResult);
+      }
+
+      const receiptText = capturedReceiptText.value || buildReceiptText(lastSaleNo.value, { width: 38 });
+      await printWithAndroidIfPossible(receiptText, true);
+      return;
+    }
+
     const htmlPrintResult = androidBridge.printHtml(fullPrintHtml, 'Invoice - ' + (lastSaleNo.value || ''));
     if (htmlPrintResult?.ok) {
       addToast(t('history.printPopupOpened') || 'Print preview opened.', 'success');
       return;
-    }
-
-    const receiptText = buildReceiptText(lastSaleNo.value);
-    const result = androidBridge.printReceipt(receiptText, shopInfo.value.LogoData || '');
-    if (result?.ok) {
-      addToast(t('history.printPopupOpened') || 'Receipt sent to printer.', 'success');
-      return;
-    }
-    if (!result?.ok && shopInfo.value.LogoData) {
-      const result2 = androidBridge.printReceipt(receiptText, '');
-      if (result2?.ok) {
-        addToast(t('history.printPopupOpened') || 'Receipt sent to printer.', 'success');
-        return;
-      }
     }
   }
 
@@ -3443,6 +3467,17 @@ const confirmSale = async () => {
     if (!capturedPrintHtml.value) {
       capturedPrintHtml.value = buildInvoiceHtml(receiptSize.value);
     }
+    capturedReceiptText.value = buildReceiptText(lastSaleNo.value, {
+      width: androidBridge.isAndroid() ? 38 : 42,
+      items: cart.value,
+      payments: receiptData.value.payments,
+      discountAmount: saleForm.value.DiscountAmount || 0,
+      deliveryFee: saleForm.value.DeliveryFee || 0,
+      voucherNote: saleForm.value.Note || '',
+      totalAmount: totalAmount.value,
+      paidAmount: totalPaid.value,
+      totalQty: totalQty.value
+    });
 
     // ၆။ CLEAR UI STATE IMMEDIATELY
     addToast(savedOffline ? (t('sale.offlineSaleSaved') || 'Offline sale saved. It will sync when internet returns.') : t('sale.saleSuccess'), savedOffline ? "info" : "success");

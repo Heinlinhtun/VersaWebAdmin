@@ -13,6 +13,7 @@ builder.Services.Configure<TelegramAlertOptions>(builder.Configuration.GetSectio
 builder.Services.AddSingleton<IDropboxBackupUploadService, DropboxBackupUploadService>();
 builder.Services.AddHttpClient<ITelegramAlertService, TelegramAlertService>();
 builder.Services.AddScoped<ITenantBackupService, TenantBackupService>();
+builder.Services.AddSingleton<ISystemHealthService, SystemHealthService>();
 builder.Services.AddHostedService<DailyTenantBackupHostedService>();
 // Add services to the container.
 builder.Services.AddControllersWithViews();

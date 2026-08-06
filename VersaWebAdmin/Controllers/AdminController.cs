@@ -16,18 +16,28 @@ public class AdminController : Controller
     private readonly EncryptionService _encryptionService;
     private readonly ITenantBackupService _tenantBackupService;
     private readonly IWebHostEnvironment _env;
+    private readonly ISystemHealthService _systemHealthService;
 
     public AdminController(
         DatabaseService dbService,
         EncryptionService encryptionService,
         ITenantBackupService tenantBackupService,
-        IWebHostEnvironment env)
+        IWebHostEnvironment env,
+        ISystemHealthService systemHealthService)
     {
         _dbService = dbService;
         _encryptionService = encryptionService;
         _tenantBackupService = tenantBackupService;
         _env = env;
+        _systemHealthService = systemHealthService;
     }
+
+    public async Task<IActionResult> SystemHealth(CancellationToken cancellationToken) =>
+        View(await _systemHealthService.GetSnapshotAsync(cancellationToken));
+
+    [HttpGet]
+    public async Task<IActionResult> SystemHealthSnapshot(CancellationToken cancellationToken) =>
+        Json(await _systemHealthService.GetSnapshotAsync(cancellationToken));
 
     // ဆိုင်အသစ်ဖွင့်ပေးမယ့် Form View
     public IActionResult Index() => View(new RegisterShopViewModel());

@@ -1,0 +1,68 @@
+@model VersaWebAdmin.Models.SystemHealthViewModel
+
+@{
+    ViewData["Title"] = "System Health";
+}
+
+<div class="system-health py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-4">
+        <div>
+            <div class="text-uppercase text-primary fw-semibold small mb-1">Live server metrics</div>
+            <h1 class="h3 mb-1">System Health</h1>
+            <p class="text-muted mb-0">CPU, memory, and application storage at a glance.</p>
+        </div>
+        <div class="health-live"><span></span> Live · <span id="measuredAt">@Model.MeasuredAt.ToLocalTime().ToString("HH:mm:ss")</span></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <partial name="_SystemMetricCard" model='new SystemMetricCardViewModel("CPU", "Processing load", "cpu", Model.CpuUsagePercent, 0, 0)' />
+        </div>
+        <div class="col-lg-4">
+            <partial name="_SystemMetricCard" model='new SystemMetricCardViewModel("Memory", "Physical memory", "memory", Model.MemoryUsagePercent, Model.MemoryUsedBytes, Model.MemoryTotalBytes)' />
+        </div>
+        <div class="col-lg-4">
+            <partial name="_SystemMetricCard" model='new SystemMetricCardViewModel("Storage", $"Volume {Model.StorageName}", "storage", Model.StorageUsagePercent, Model.StorageUsedBytes, Model.StorageTotalBytes)' />
+        </div>
+    </div>
+
+    <div id="healthError" class="alert alert-warning mt-4 d-none" role="alert">Live metrics are temporarily unavailable. Retrying automatically.</div>
+</div>
+
+@section Scripts {
+<script>
+(() => {
+    const formatBytes = bytes => {
+        if (!bytes) return '0 GB';
+        const gb = bytes / 1073741824;
+        return `${gb.toLocaleString(undefined, { maximumFractionDigits: gb >= 100 ? 0 : 1 })} GB`;
+    };
+
+    const update = (key, percent, used, total) => {
+        const value = document.querySelector(`[data-value="${key}"]`);
+        const bar = document.querySelector(`[data-bar="${key}"]`);
+        value.textContent = `${percent.toFixed(1)}%`;
+        bar.style.width = `${percent}%`;
+        bar.setAttribute('aria-valuenow', percent);
+        if (key !== 'cpu') document.querySelector(`[data-detail="${key}"]`).textContent = `${formatBytes(used)} used of ${formatBytes(total)}`;
+    };
+
+    async function refresh() {
+        try {
+            const response = await fetch('@Url.Action("SystemHealthSnapshot", "Admin")', { cache: 'no-store' });
+            if (!response.ok) throw new Error('Metrics request failed');
+            const data = await response.json();
+            update('cpu', data.cpuUsagePercent, 0, 0);
+            update('memory', data.memoryUsagePercent, data.memoryUsedBytes, data.memoryTotalBytes);
+            update('storage', data.storageUsagePercent, data.storageUsedBytes, data.storageTotalBytes);
+            document.getElementById('measuredAt').textContent = new Date(data.measuredAt).toLocaleTimeString();
+            document.getElementById('healthError').classList.add('d-none');
+        } catch {
+            document.getElementById('healthError').classList.remove('d-none');
+        }
+    }
+
+    setInterval(refresh, 5000);
+})();
+</script>
+}

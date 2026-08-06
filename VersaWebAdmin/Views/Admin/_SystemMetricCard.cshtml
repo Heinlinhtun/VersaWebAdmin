@@ -1,0 +1,29 @@
+@model VersaWebAdmin.Models.SystemMetricCardViewModel
+
+<article class="health-card h-100">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h2 class="h5 mb-1">@Model.Title</h2>
+            <div class="text-muted small">@Model.Subtitle</div>
+        </div>
+        <div class="health-icon health-icon-@Model.Key" aria-hidden="true"></div>
+    </div>
+    <div class="health-value" data-value="@Model.Key">@Model.Percent.ToString("F1")%</div>
+    <div class="progress health-progress mt-3" role="progressbar" aria-label="@Model.Title usage" aria-valuenow="@Model.Percent" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-bar health-bar-@Model.Key" data-bar="@Model.Key" style="width: @Model.Percent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+    </div>
+    <div class="health-detail mt-3" data-detail="@Model.Key">
+        @if (Model.Key == "cpu")
+        {
+            <span>Current total processor utilization</span>
+        }
+        else
+        {
+            <span>@FormatBytes(Model.Used) used of @FormatBytes(Model.Total)</span>
+        }
+    </div>
+</article>
+
+@functions {
+    private static string FormatBytes(long bytes) => $"{bytes / 1073741824d:N1} GB";
+}

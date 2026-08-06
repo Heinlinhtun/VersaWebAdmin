@@ -1257,11 +1257,35 @@ const printWithAndroidIfPossible = () => {
   return true;
 };
 
+const printAndroidDetailImageIfPossible = async () => {
+  if (!androidBridge.supportsNativePrint()) return false;
+
+  await nextTick();
+  const elementId = receiptSize.value === '80mm' ? 'print-area' : 'print-area-a4';
+  const el = document.getElementById(elementId);
+  if (!el || typeof androidBridge.printImage !== 'function') return false;
+
+  const blob = await captureDetailInvoiceElement(el);
+  if (!blob) return false;
+
+  const dataUrl = await blobToDataUrl(blob);
+  const result = androidBridge.printImage(dataUrl);
+  if (!result?.ok) {
+    console.warn('[HistoryPrint] Android image print failed:', result?.message || result);
+    return false;
+  }
+
+  addToast(result.message || t('history.printPopupOpened') || 'Receipt sent to printer.', 'success');
+  return true;
+};
+
 const printFromDetail = async (preOpenedWindow = null) => {
   const saleId = selectedSale.value?.sale?.SaleId || selectedSale.value?.sale?.saleId;
   if (!saleId) return;
 
-  if (printWithAndroidIfPossible()) return;
+  const isThermal = receiptSize.value === '80mm';
+  if (isThermal && await printAndroidDetailImageIfPossible()) return;
+  if (isThermal && printWithAndroidIfPossible()) return;
 
   const hasPrintWindow = preOpenedWindow?.document && typeof preOpenedWindow.document.write === 'function';
   const printWindow = hasPrintWindow ? preOpenedWindow : window.open('', '_blank', 'width=900,height=800');
@@ -1272,7 +1296,6 @@ const printFromDetail = async (preOpenedWindow = null) => {
 
   await nextTick();
 
-  const isThermal = receiptSize.value === '80mm';
   const elementId = isThermal ? 'print-area' : 'print-area-a4';
   const printArea = document.getElementById(elementId);
   if (!printArea) {
@@ -1506,7 +1529,7 @@ const captureDetailInvoiceElement = async (el) => {
     const captureRoot = iframeDoc.getElementById('capture-root') || iframeDoc.body;
     const { default: html2canvas } = await import('html2canvas');
     const canvas = await html2canvas(captureRoot, {
-      scale: Math.max(3, window.devicePixelRatio || 2),
+      scale: androidBridge.isAndroid() && isThermal ? 2 : Math.max(3, window.devicePixelRatio || 2),
       backgroundColor: '#ffffff',
       useCORS: true,
       allowTaint: true,
@@ -1800,7 +1823,7 @@ const viewTransferDetail = async (id) => {
 };
 
 const reprint = async (saleId) => {
-  const useAndroidNativePrint = androidBridge.supportsNativePrint();
+  const useAndroidNativePrint = androidBridge.supportsNativePrint() && receiptSize.value === '80mm';
   const preOpenedPrintWindow = useAndroidNativePrint ? null : window.open('', '_blank', 'width=900,height=800');
   if (!useAndroidNativePrint && !preOpenedPrintWindow) {
     addToast(t('history.popupBlocked') || 'Popup blocked. Please allow popups to print.', 'warning');

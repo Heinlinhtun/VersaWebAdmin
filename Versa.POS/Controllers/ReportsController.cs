@@ -1274,41 +1274,54 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
         {
             const string returnsSql = @"
                 SELECT
-                    IFNULL(SUM(sr.RefundAmount), 0) AS TotalReturnedRevenue,
-                    IFNULL(SUM(CASE WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%SERVICE%' THEN sr.RefundAmount ELSE 0 END), 0) AS ReturnedServiceRevenue,
-                    IFNULL(SUM(CASE WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%SERVICE%' THEN 0 ELSE sr.RefundAmount END), 0) AS ReturnedItemRevenue,
-                    IFNULL(SUM(CASE
-                        WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%SERVICE%' THEN 0
-                        WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%BUNDLE%' THEN
-                            sr.Quantity * IFNULL((
-                                SELECT SUM((bi.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(p2.CostPrice, 0))
-                                FROM BundleItems bi
-                                JOIN Products p2 ON bi.ComponentProductId = p2.ProductId
-                                LEFT JOIN UnitConversions uc ON uc.ProductId = bi.ComponentProductId AND uc.FromUnitId = bi.UnitId
-                                WHERE bi.BundleId = sr.BundleId
-                                  AND bi.ComponentProductId IS NOT NULL
-                                  AND UPPER(TRIM(IFNULL(bi.ItemType,'Product'))) NOT LIKE '%SERVICE%'
-                            ), 0)
-                        ELSE
-                            /* Prefer the cost captured on the original sale line; fallback to current product cost. */
-                            sr.Quantity * COALESCE(
-                                NULLIF((
-                                    SELECT si.CostPrice
-                                    FROM SaleItems si
-                                    WHERE si.SaleId = sr.SaleId
-                                      AND si.ProductId = sr.ProductId
-                                      AND (sr.UnitId IS NULL OR si.UnitId = sr.UnitId)
-                                    ORDER BY si.SaleItemId DESC
-                                    LIMIT 1
-                                ), 0),
-                                (SELECT p.CostPrice FROM Products p WHERE p.ProductId = sr.ProductId),
-                                0
-                            )
-                    END), 0) AS ReturnedCost
-                FROM SaleReturns sr
-                INNER JOIN Sales rs ON rs.SaleId = sr.SaleId
-                WHERE rs.SaleDate BETWEEN @start AND @end
-                  AND (@branchId IS NULL OR rs.BranchId = @branchId)";
+                    IFNULL(SUM(x.CappedReturnedRevenue), 0) AS TotalReturnedRevenue,
+                    IFNULL(SUM(CASE WHEN x.RawReturnedRevenue > 0 THEN x.RawReturnedServiceRevenue * x.CappedReturnedRevenue / x.RawReturnedRevenue ELSE 0 END), 0) AS ReturnedServiceRevenue,
+                    IFNULL(SUM(CASE WHEN x.RawReturnedRevenue > 0 THEN x.RawReturnedItemRevenue * x.CappedReturnedRevenue / x.RawReturnedRevenue ELSE 0 END), 0) AS ReturnedItemRevenue,
+                    IFNULL(SUM(CASE WHEN x.RawReturnedRevenue > 0 THEN x.RawReturnedCost * x.CappedReturnedRevenue / x.RawReturnedRevenue ELSE 0 END), 0) AS ReturnedCost
+                FROM (
+                    SELECT
+                        rs.SaleId,
+                        SUM(IFNULL(sr.RefundAmount, 0)) AS RawReturnedRevenue,
+                        SUM(CASE WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%SERVICE%' THEN IFNULL(sr.RefundAmount, 0) ELSE 0 END) AS RawReturnedServiceRevenue,
+                        SUM(CASE WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%SERVICE%' THEN 0 ELSE IFNULL(sr.RefundAmount, 0) END) AS RawReturnedItemRevenue,
+                        LEAST(
+                            SUM(IFNULL(sr.RefundAmount, 0)),
+                            GREATEST(0, COALESCE(NULLIF(rs.TotalAmount, 0), IFNULL(rs.PaidAmount, 0) + IFNULL(rs.DueAmount, 0)))
+                        ) AS CappedReturnedRevenue,
+                        SUM(CASE
+                            WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%SERVICE%' THEN 0
+                            WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%BUNDLE%' THEN
+                                sr.Quantity * IFNULL((
+                                    SELECT SUM((bi.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(p2.CostPrice, 0))
+                                    FROM BundleItems bi
+                                    JOIN Products p2 ON bi.ComponentProductId = p2.ProductId
+                                    LEFT JOIN UnitConversions uc ON uc.ProductId = bi.ComponentProductId AND uc.FromUnitId = bi.UnitId
+                                    WHERE bi.BundleId = sr.BundleId
+                                      AND bi.ComponentProductId IS NOT NULL
+                                      AND UPPER(TRIM(IFNULL(bi.ItemType,'Product'))) NOT LIKE '%SERVICE%'
+                                ), 0)
+                            ELSE
+                                /* Prefer the cost captured on the original sale line; fallback to current product cost. */
+                                sr.Quantity * COALESCE(
+                                    NULLIF((
+                                        SELECT si.CostPrice
+                                        FROM SaleItems si
+                                        WHERE si.SaleId = sr.SaleId
+                                          AND si.ProductId = sr.ProductId
+                                          AND (sr.UnitId IS NULL OR si.UnitId = sr.UnitId)
+                                        ORDER BY si.SaleItemId DESC
+                                        LIMIT 1
+                                    ), 0),
+                                    (SELECT p.CostPrice FROM Products p WHERE p.ProductId = sr.ProductId),
+                                    0
+                                )
+                        END) AS RawReturnedCost
+                    FROM SaleReturns sr
+                    INNER JOIN Sales rs ON rs.SaleId = sr.SaleId
+                    WHERE rs.SaleDate BETWEEN @start AND @end
+                      AND (@branchId IS NULL OR rs.BranchId = @branchId)
+                    GROUP BY rs.SaleId, rs.TotalAmount, rs.PaidAmount, rs.DueAmount
+                ) x";
 
             var ret = await conn.QueryFirstOrDefaultAsync<dynamic>(returnsSql, new { start, end, branchId = scopedBranchId });
             if (ret != null)
@@ -1638,40 +1651,52 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
         /* Returns are aggregated per branch on the same SaleDate window (matches GetProfitReport). */
         LEFT JOIN (
             SELECT
-                rs.BranchId,
-                IFNULL(SUM(sr.RefundAmount), 0) AS ReturnedRevenue,
-                IFNULL(SUM(CASE
-                    WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%SERVICE%' THEN 0
-                    WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%BUNDLE%' THEN
-                        IFNULL(sr.Quantity, 0) * IFNULL((
-                            SELECT SUM((bi.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(p2.CostPrice, 0))
-                            FROM BundleItems bi
-                            JOIN Products p2 ON bi.ComponentProductId = p2.ProductId
-                            LEFT JOIN UnitConversions uc ON uc.ProductId = bi.ComponentProductId AND uc.FromUnitId = bi.UnitId
-                            WHERE bi.BundleId = sr.BundleId
-                              AND bi.ComponentProductId IS NOT NULL
-                              AND UPPER(TRIM(IFNULL(bi.ItemType,'Product'))) NOT LIKE '%SERVICE%'
-                        ), 0)
-                    ELSE
-                        /* Prefer the cost captured on the original sale line; fallback to current product cost. */
-                        IFNULL(sr.Quantity, 0) * COALESCE(
-                            NULLIF((
-                                SELECT si2.CostPrice
-                                FROM SaleItems si2
-                                WHERE si2.SaleId = sr.SaleId
-                                  AND si2.ProductId = sr.ProductId
-                                  AND (sr.UnitId IS NULL OR si2.UnitId = sr.UnitId)
-                                ORDER BY si2.SaleItemId DESC
-                                LIMIT 1
-                            ), 0),
-                            (SELECT p3.CostPrice FROM Products p3 WHERE p3.ProductId = sr.ProductId),
-                            0
-                        )
-                END), 0) AS ReturnedCost
-            FROM SaleReturns sr
-            INNER JOIN Sales rs ON rs.SaleId = sr.SaleId
-            WHERE rs.SaleDate BETWEEN @start AND @end
-            GROUP BY rs.BranchId
+                x.BranchId,
+                IFNULL(SUM(x.CappedReturnedRevenue), 0) AS ReturnedRevenue,
+                IFNULL(SUM(CASE WHEN x.RawReturnedRevenue > 0 THEN x.RawReturnedCost * x.CappedReturnedRevenue / x.RawReturnedRevenue ELSE 0 END), 0) AS ReturnedCost
+            FROM (
+                SELECT
+                    rs.SaleId,
+                    rs.BranchId,
+                    SUM(IFNULL(sr.RefundAmount, 0)) AS RawReturnedRevenue,
+                    LEAST(
+                        SUM(IFNULL(sr.RefundAmount, 0)),
+                        GREATEST(0, COALESCE(NULLIF(rs.TotalAmount, 0), IFNULL(rs.PaidAmount, 0) + IFNULL(rs.DueAmount, 0)))
+                    ) AS CappedReturnedRevenue,
+                    SUM(CASE
+                        WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%SERVICE%' THEN 0
+                        WHEN UPPER(TRIM(IFNULL(sr.ItemType, 'Product'))) LIKE '%BUNDLE%' THEN
+                            IFNULL(sr.Quantity, 0) * IFNULL((
+                                SELECT SUM((bi.Quantity * IFNULL(uc.Multiplier, 1)) * COALESCE(p2.CostPrice, 0))
+                                FROM BundleItems bi
+                                JOIN Products p2 ON bi.ComponentProductId = p2.ProductId
+                                LEFT JOIN UnitConversions uc ON uc.ProductId = bi.ComponentProductId AND uc.FromUnitId = bi.UnitId
+                                WHERE bi.BundleId = sr.BundleId
+                                  AND bi.ComponentProductId IS NOT NULL
+                                  AND UPPER(TRIM(IFNULL(bi.ItemType,'Product'))) NOT LIKE '%SERVICE%'
+                            ), 0)
+                        ELSE
+                            /* Prefer the cost captured on the original sale line; fallback to current product cost. */
+                            IFNULL(sr.Quantity, 0) * COALESCE(
+                                NULLIF((
+                                    SELECT si2.CostPrice
+                                    FROM SaleItems si2
+                                    WHERE si2.SaleId = sr.SaleId
+                                      AND si2.ProductId = sr.ProductId
+                                      AND (sr.UnitId IS NULL OR si2.UnitId = sr.UnitId)
+                                    ORDER BY si2.SaleItemId DESC
+                                    LIMIT 1
+                                ), 0),
+                                (SELECT p3.CostPrice FROM Products p3 WHERE p3.ProductId = sr.ProductId),
+                                0
+                            )
+                    END) AS RawReturnedCost
+                FROM SaleReturns sr
+                INNER JOIN Sales rs ON rs.SaleId = sr.SaleId
+                WHERE rs.SaleDate BETWEEN @start AND @end
+                GROUP BY rs.SaleId, rs.BranchId, rs.TotalAmount, rs.PaidAmount, rs.DueAmount
+            ) x
+            GROUP BY x.BranchId
         ) r ON r.BranchId = b.BranchId
         LEFT JOIN (
             SELECT

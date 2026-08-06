@@ -102,6 +102,10 @@ export const androidBridge = {
     return callJson('printHtml', html || '', title || 'Invoice');
   },
 
+  printImage(imageData = '') {
+    return callJson('printImage', imageData || '');
+  },
+
   shareImage(imageData, fileName = 'invoice.png', title = 'Invoice', text = '') {
     return callJson('shareImage', imageData || '', fileName || 'invoice.png', title || 'Invoice', text || '');
   }
