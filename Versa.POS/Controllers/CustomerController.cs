@@ -265,7 +265,7 @@ FROM (
                         Amount = appliedAmount,
                         model.PaymentMethod,
                         model.ReferenceNo,
-                        model.Note,
+                        Note = string.IsNullOrWhiteSpace(model.Note) ? "Debt payment" : model.Note.Trim(),
                         PaymentDate = paymentDate,
                         SaleId = saleId
                     }, trans);
@@ -303,6 +303,12 @@ FROM (
                 s.SaleDate,
                 s.SaleType,
                 s.DueAmount,
+                CASE
+                    WHEN cp.SaleId IS NULL THEN 'Debt Payment'
+                    WHEN cp.PaymentDate > COALESCE(s.SaleDate, cp.PaymentDate) THEN 'Debt Payment'
+                    WHEN COALESCE(cp.Note, '') <> '' THEN 'Debt Payment'
+                    ELSE 'Sale Payment'
+                END AS PaymentType,
                 CASE
                     WHEN cp.SaleId IS NULL THEN NULL
                     ELSE CONCAT('SA', LPAD(cp.SaleId, 7, '0'))

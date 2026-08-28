@@ -115,7 +115,15 @@ FROM (
             // ၁။ ငွေပေးချေမှုမှတ်တမ်းကို အရင်သွင်းပါ
             string insertPaymentSql = @"INSERT INTO SupplierPayments (SupplierId, Amount, PaymentMethod, ReferenceNo, Note, PaymentDate) 
                                    VALUES (@SupplierId, @Amount, @PaymentMethod, @ReferenceNo, @Note, @PaymentDate)";
-            await conn.ExecuteAsync(insertPaymentSql, model, transaction);
+            await conn.ExecuteAsync(insertPaymentSql, new
+            {
+                model.SupplierId,
+                model.Amount,
+                PaymentMethod = string.IsNullOrWhiteSpace(model.PaymentMethod) ? "Cash" : model.PaymentMethod.Trim(),
+                model.ReferenceNo,
+                Note = string.IsNullOrWhiteSpace(model.Note) ? "Debt payment" : model.Note.Trim(),
+                PaymentDate = model.PaymentDate == default ? DateTime.Now : model.PaymentDate
+            }, transaction);
 
             // ၂။ Supplier ထံမှ အကြွေးမကျေသေးသော ဘောက်ချာများကို အဟောင်းဆုံးကနေ စယူပါ
             // (PaidAmount < TotalAmount) ဖြစ်နေသော ဘောက်ချာများကို စစ်ထုတ်ပါသည်
@@ -169,9 +177,17 @@ FROM (
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
 
         // ရက်စွဲအလိုက် နောက်ဆုံးပေးထားတာတွေကို အပေါ်မှာပြရန်
-        string sql = @"SELECT * FROM SupplierPayments 
-                   WHERE SupplierId = @id 
-                   ORDER BY PaymentDate DESC";
+        string sql = @"
+            SELECT
+                sp.*,
+                CASE
+                    WHEN COALESCE(sp.Note, '') = 'Debt payment' THEN 'Debt Payment'
+                    WHEN sp.ReferenceNo LIKE 'PU%' THEN 'Purchase Payment'
+                    ELSE 'Debt Payment'
+                END AS PaymentType
+            FROM SupplierPayments sp
+            WHERE sp.SupplierId = @id
+            ORDER BY sp.PaymentDate DESC, sp.PaymentId DESC";
 
         var payments = await conn.QueryAsync<dynamic>(sql, new { id });
         return Ok(payments);

@@ -34,6 +34,20 @@
 
         <!-- ===================== CUSTOMERS TAB ===================== -->
         <div v-if="activeTab === 'customers'">
+            <div class="mb-6 flex justify-end">
+                <div class="w-full sm:w-auto sm:min-w-72 bg-white rounded-xl border border-rose-100 shadow-sm px-5 py-4">
+                    <div class="flex items-center justify-between gap-8">
+                        <div>
+                            <p class="text-[10px] uppercase tracking-widest text-slate-400">{{ t('customers.totalCredit') }}</p>
+                            <p class="mt-1 text-[10px] text-slate-400">{{ customerDebtorCount }} {{ t('customers.withOutstanding') }}</p>
+                        </div>
+                        <div class="text-right text-2xl font-normal text-rose-600 tabular-nums whitespace-nowrap">
+                            {{ customerTotalCredit.toLocaleString() }}
+                            <span class="text-[10px] text-slate-400">KS</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4">
                 <div class="relative flex-1 md:w-80">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
@@ -459,31 +473,29 @@
                         </div>
                         <div class="mt-6 border border-slate-100 rounded-xl overflow-hidden">
                             <div class="bg-slate-50 px-4 py-3 border-b border-slate-100">
-                                <h4 class="text-[10px] font-normal uppercase tracking-widest text-slate-500">Debt Detail</h4>
+                                <h4 class="text-[10px] font-normal uppercase tracking-widest text-slate-500">Payment History</h4>
                             </div>
                             <div class="max-h-56 overflow-y-auto">
                                 <table class="w-full text-left text-xs">
                                     <thead class="bg-[#3f3f46] sticky top-0 text-[10px] uppercase text-white">
                                         <tr>
                                             <th class="py-2 px-4 font-normal">Date</th>
+                                            <th class="py-2 px-4 font-normal">Type</th>
                                             <th class="py-2 px-4 font-normal">Voucher No</th>
-                                            <th class="py-2 px-4 font-normal text-right">Amount</th>
-                                            <th class="py-2 px-4 font-normal text-right">Paid</th>
-                                            <th class="py-2 px-4 font-normal text-right">Remain</th>
                                             <th class="py-2 px-4 font-normal">Method</th>
+                                            <th class="py-2 px-4 font-normal text-right">Amount</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-50">
-                                        <tr v-for="sale in cust.debtSources" :key="sale.SaleId || sale.saleId" class="hover:bg-slate-50/50">
-                                            <td class="py-2 px-4 text-slate-500">{{ formatDateOnly(sale.SaleDate || sale.saleDate) }}</td>
-                                            <td class="py-2 px-4 text-blue-600 font-normal">{{ getSaleNo(sale) }}</td>
-                                            <td class="py-2 px-4 text-right tabular-nums text-slate-700 font-normal">{{ (sale.TotalAmount || sale.totalAmount || 0).toLocaleString() }}</td>
-                                            <td class="py-2 px-4 text-right tabular-nums text-emerald-600 font-normal">{{ (sale.PaidAmount || sale.paidAmount || 0).toLocaleString() }}</td>
-                                            <td class="py-2 px-4 text-right tabular-nums text-rose-600 font-normal">{{ (sale.DueAmount || sale.dueAmount || 0).toLocaleString() }}</td>
-                                            <td class="py-2 px-4 text-slate-500">{{ sale.PaymentMethod || sale.paymentMethod || '-' }}</td>
+                                        <tr v-for="payment in cust.paymentHistory" :key="payment.PaymentId || payment.paymentId" class="hover:bg-slate-50/50">
+                                            <td class="py-2 px-4 text-slate-500">{{ formatDateOnly(payment.PaymentDate || payment.paymentDate) }}</td>
+                                            <td class="py-2 px-4 text-slate-500">{{ payment.PaymentType || payment.paymentType || 'Payment' }}</td>
+                                            <td class="py-2 px-4 text-blue-600 font-normal">{{ getSaleNo(payment) }}</td>
+                                            <td class="py-2 px-4 text-slate-500">{{ payment.PaymentMethod || payment.paymentMethod || '-' }}</td>
+                                            <td class="py-2 px-4 text-right tabular-nums text-emerald-600 font-normal">{{ Number(payment.Amount || payment.amount || 0).toLocaleString() }}</td>
                                         </tr>
-                                        <tr v-if="!cust.debtSources?.length">
-                                            <td colspan="6" class="py-4 text-center text-emerald-600 text-[10px] uppercase">No Outstanding Credit Sales</td>
+                                        <tr v-if="!cust.paymentHistory?.length">
+                                            <td colspan="5" class="py-4 text-center text-slate-400 text-[10px] uppercase">No Payment History</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -502,6 +514,20 @@
 
         <!-- ===================== SUPPLIERS TAB ===================== -->
         <div v-if="activeTab === 'suppliers'">
+            <div class="mb-6 flex justify-end">
+                <div class="w-full sm:w-auto sm:min-w-72 bg-white rounded-xl border border-orange-100 shadow-sm px-5 py-4">
+                    <div class="flex items-center justify-between gap-8">
+                        <div>
+                            <p class="text-[10px] uppercase tracking-widest text-slate-400">{{ t('suppliers.totalDebt') }}</p>
+                            <p class="mt-1 text-[10px] text-slate-400">{{ supplierCreditorCount }} {{ t('suppliers.withOutstanding') }}</p>
+                        </div>
+                        <div class="text-right text-2xl font-normal text-orange-600 tabular-nums whitespace-nowrap">
+                            {{ supplierTotalDebt.toLocaleString() }}
+                            <span class="text-[10px] text-slate-400">KS</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4">
                 <div class="relative flex-1 md:w-80">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
@@ -817,6 +843,36 @@
                             <h3 class="text-lg font-normal uppercase tracking-tight">{{ t('users.accessInfoTitle') }}</h3>
                             <p class="text-[10px] text-white/50 uppercase tracking-widest mt-1">{{ t('users.accessInfoSubtitle') }}</p>
                         </div>
+                        <div class="mt-6 border border-slate-100 rounded-xl overflow-hidden">
+                            <div class="bg-slate-50 px-4 py-3 border-b border-slate-100">
+                                <h4 class="text-[10px] font-normal uppercase tracking-widest text-slate-500">Payment History</h4>
+                            </div>
+                            <div class="max-h-56 overflow-y-auto">
+                                <table class="w-full text-left text-xs">
+                                    <thead class="bg-[#3f3f46] sticky top-0 text-[10px] uppercase text-white">
+                                        <tr>
+                                            <th class="py-2 px-4 font-normal">Date</th>
+                                            <th class="py-2 px-4 font-normal">Type</th>
+                                            <th class="py-2 px-4 font-normal">Reference</th>
+                                            <th class="py-2 px-4 font-normal">Method</th>
+                                            <th class="py-2 px-4 font-normal text-right">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-50">
+                                        <tr v-for="payment in supp.paymentHistory" :key="payment.PaymentId || payment.paymentId" class="hover:bg-slate-50/50">
+                                            <td class="py-2 px-4 text-slate-500">{{ formatDateOnly(payment.PaymentDate || payment.paymentDate) }}</td>
+                                            <td class="py-2 px-4 text-slate-500">{{ payment.PaymentType || payment.paymentType || 'Payment' }}</td>
+                                            <td class="py-2 px-4 text-blue-600 font-normal">{{ payment.ReferenceNo || payment.referenceNo || '-' }}</td>
+                                            <td class="py-2 px-4 text-slate-500">{{ payment.PaymentMethod || payment.paymentMethod || '-' }}</td>
+                                            <td class="py-2 px-4 text-right tabular-nums text-emerald-600 font-normal">{{ Number(payment.Amount || payment.amount || 0).toLocaleString() }}</td>
+                                        </tr>
+                                        <tr v-if="!supp.paymentHistory?.length">
+                                            <td colspan="5" class="py-4 text-center text-slate-400 text-[10px] uppercase">No Payment History</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                         <button @click="showAccessModal = false"
                             class="text-white/60 hover:text-white transition-colors text-2xl leading-none">&times;</button>
                     </div>
@@ -1129,7 +1185,7 @@ const cust = reactive({
     selectedOrder: null,
     orderPaymentForm: { Amount: 0, PaymentMethod: 'Cash', ReferenceNo: '', Note: '', PaymentDate: new Date().toISOString().substr(0, 10) },
     paymentForm: { CustomerId: 0, Amount: 0, PaymentMethod: 'Cash', ReferenceNo: '', Note: '', PaymentDate: new Date().toISOString().substr(0, 10) },
-    debtSources: [],
+    paymentHistory: [],
     filtered: computed(() => {
         const q = cust.searchQuery.toLowerCase();
         return q ? cust.list.filter(c => (c.Name || c.name || '').toLowerCase().includes(q) || (c.Phone || c.phone || '').includes(q)) : cust.list;
@@ -1140,10 +1196,10 @@ const cust = reactive({
         cust.selectedCustomer = item;
         const customerId = item.CustomerId || item.customerId;
         try {
-            const debtSourcesRes = await api.get(`/customers/${customerId}/debt-sources`);
-            cust.debtSources = debtSourcesRes.data || [];
+            const paymentsRes = await api.get(`/customers/${customerId}/payments`);
+            cust.paymentHistory = paymentsRes.data || [];
         } catch (e) {
-            cust.debtSources = [];
+            cust.paymentHistory = [];
         }
         cust.showDetailModal = true;
     },
@@ -1278,6 +1334,7 @@ const supp = reactive({
     list: [], showModal: false, showDetailModal: false, showPaymentModal: false, isEdit: false, searchQuery: '', currentPage: 1, pageSize: 10,
     form: { SupplierId: 0, SupplierName: '', ContactPerson: '', Phone: '', Address: '' },
     selectedSupplier: null,
+    paymentHistory: [],
     paymentForm: { SupplierId: 0, Amount: 0, PaymentMethod: 'Cash', ReferenceNo: '', Note: '', PaymentDate: new Date().toISOString().split('T')[0] },
     filtered: computed(() => {
         const q = supp.searchQuery.toLowerCase();
@@ -1285,8 +1342,15 @@ const supp = reactive({
     }),
     totalPages: computed(() => Math.max(1, Math.ceil(supp.filtered.length / supp.pageSize))),
     paginated: computed(() => { const s = (supp.currentPage - 1) * supp.pageSize; return supp.filtered.slice(s, s + supp.pageSize); }),
-    openDetail(item) {
+    async openDetail(item) {
         supp.selectedSupplier = item;
+        const supplierId = item.SupplierId || item.supplierId;
+        try {
+            const paymentsRes = await api.get(`/suppliers/${supplierId}/payments`);
+            supp.paymentHistory = paymentsRes.data || [];
+        } catch (e) {
+            supp.paymentHistory = [];
+        }
         supp.showDetailModal = true;
     },
     openModal(item = null) {
@@ -1327,6 +1391,21 @@ const supp = reactive({
     },
 });
 watch(() => supp.searchQuery, () => { supp.currentPage = 1; });
+
+const customerTotalCredit = computed(() => cust.list.reduce(
+    (total, customer) => total + Math.max(0, Number(customer.CurrentBalance ?? customer.currentBalance ?? 0) || 0),
+    0
+));
+const customerDebtorCount = computed(() => cust.list.filter(
+    customer => (Number(customer.CurrentBalance ?? customer.currentBalance ?? 0) || 0) > 0
+).length);
+const supplierTotalDebt = computed(() => supp.list.reduce(
+    (total, supplier) => total + Math.max(0, Number(supplier.CurrentDebt ?? supplier.currentDebt ?? 0) || 0),
+    0
+));
+const supplierCreditorCount = computed(() => supp.list.filter(
+    supplier => (Number(supplier.CurrentDebt ?? supplier.currentDebt ?? 0) || 0) > 0
+).length);
 
 // ── STAFF ──────────────────────────────────────────────
 const staff = reactive({

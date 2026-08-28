@@ -1013,6 +1013,10 @@
               <td style="text-align: right; padding-top: 5px; font-weight: bold;">{{
                 formatNumber(Math.abs(receiptBalanceDetail)) }}</td>
             </tr>
+            <tr v-if="receiptTotalCreditDetail > 0">
+              <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ t('sale.totalCredit') }}:</td>
+              <td style="text-align: right; padding-top: 5px; font-weight: bold; color: #dc2626;">{{ formatNumber(receiptTotalCreditDetail) }}</td>
+            </tr>
           </tfoot>
         </table>
 
@@ -1139,6 +1143,12 @@
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">{{
                 formatNumber(Math.abs(receiptBalanceDetail)) }}</td>
             </tr>
+            <tr v-if="receiptTotalCreditDetail > 0">
+              <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
+                {{ t('sale.totalCredit') }}:</td>
+              <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold; color: #dc2626;">
+                {{ formatNumber(receiptTotalCreditDetail) }}</td>
+            </tr>
           </tbody>
         </table>
 
@@ -1238,6 +1248,9 @@ const receiptTotalDetail = computed(() =>
 const receiptBalanceDetail = computed(() =>
   Number(selectedSale.value?.sale?.DueAmount ?? selectedSale.value?.sale?.dueAmount ?? 0)
 );
+const receiptTotalCreditDetail = computed(() => toNonNegativeAmount(
+  selectedSale.value?.sale?.CustomerCurrentBalance ?? selectedSale.value?.sale?.customerCurrentBalance
+));
 const receiptPaidLabel = (method) => `${t('history.amountPaid')}${method ? ` (${method})` : ''}:`;
 const receiptBalanceLabel = (balance) => (
   balance > 0
@@ -1359,6 +1372,9 @@ const buildAndroidHistoryReceiptText = () => {
   selectedSalePayments.value.forEach(payment => lines.push(columns(receiptPaidLabel(payment.method), formatNumber(payment.amount || 0))));
   if (receiptBalanceDetail.value !== 0) {
     lines.push(columns(receiptBalanceLabel(receiptBalanceDetail.value), formatNumber(Math.abs(receiptBalanceDetail.value))));
+  }
+  if (receiptTotalCreditDetail.value > 0) {
+    lines.push(columns(`${t('sale.totalCredit')}:`, formatNumber(receiptTotalCreditDetail.value)));
   }
   lines.push(doubleLine, '');
   receiptFooterLines.value.forEach(footerLine => lines.push(center(footerLine)));

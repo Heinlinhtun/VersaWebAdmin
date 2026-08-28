@@ -1145,7 +1145,7 @@ VALUES
                         Amount = req.Amount,
                         PaymentMethod = method,
                         ReferenceNo = req.ReferenceNo ?? "",
-                        Note = req.Note ?? "",
+                        Note = string.IsNullOrWhiteSpace(req.Note) ? "Partial debt payment" : req.Note.Trim(),
                         PaymentDate = payDate,
                         SaleId = saleId
                     }, transaction);
@@ -1466,7 +1466,9 @@ LIMIT 1",
 
             // ၁။ အရောင်း Master Data ကိုအရင်ယူသည်
             string masterSql = @"
-        SELECT s.*, COALESCE(c.Name, 'Walk-in') as CustomerName, c.Phone as CustomerPhone, c.Address as CustomerAddress, COALESCE(u.Username, 'System') as CashierName
+        SELECT s.*, COALESCE(c.Name, 'Walk-in') as CustomerName, c.Phone as CustomerPhone,
+               c.Address as CustomerAddress, GREATEST(IFNULL(c.CurrentBalance, 0), 0) as CustomerCurrentBalance,
+               COALESCE(u.Username, 'System') as CashierName
         FROM Sales s 
         LEFT JOIN Customers c ON s.CustomerId = c.CustomerId 
         LEFT JOIN ShopUsers u ON s.UserId = u.UserId

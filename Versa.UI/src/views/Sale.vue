@@ -780,6 +780,10 @@
                 <td style="text-align: right; padding-top: 5px; font-weight: bold;">{{
                   formatNumber(Math.abs(balanceAmount)) }}</td>
               </tr>
+              <tr v-if="receiptTotalCredit > 0">
+                <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ t('sale.totalCredit') }}:</td>
+                <td style="text-align: right; padding-top: 5px; font-weight: bold; color: #dc2626;">{{ formatNumber(receiptTotalCredit) }}</td>
+              </tr>
             </tfoot>
           </table>
 
@@ -909,6 +913,12 @@
                   {{ receiptBalanceLabel(balanceAmount) }}</td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">{{
                   formatNumber(Math.abs(balanceAmount)) }}</td>
+              </tr>
+              <tr v-if="receiptTotalCredit > 0">
+                <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
+                  {{ t('sale.totalCredit') }}:</td>
+                <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold; color: #dc2626;">
+                  {{ formatNumber(receiptTotalCredit) }}</td>
               </tr>
             </tbody>
           </table>
@@ -1413,6 +1423,7 @@ const invoicePreviewData = ref({
   deliveryFee: 0,
   voucherNote: '',
   customerName: '',
+  totalCredit: 0,
   branchName: '',
 });
 
@@ -1475,6 +1486,7 @@ const receiptBalance = computed(() => {
   );
   return paidTotal - receiptTotal.value;
 });
+const receiptTotalCredit = computed(() => toNonNegativeAmount(invoicePreviewData.value.totalCredit));
 const receiptPaidLabel = (method) => `${t('sale.totalPaid')}${method ? ` (${method})` : ''}:`;
 const receiptBalanceLabel = (balance) => (
   balance > 0
@@ -2481,6 +2493,7 @@ const buildReceiptText = (saleNo, options = {}) => {
   const finalTotal = Number(options.totalAmount ?? Math.max(0, subTotal - discountAmount + deliveryFee));
   const paidTotal = Number(options.paidAmount ?? payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0));
   const balance = paidTotal - finalTotal;
+  const totalCredit = toNonNegativeAmount(options.totalCredit ?? invoicePreviewData.value.totalCredit);
   const lines = [];
   const line = '-'.repeat(width);
   const doubleLine = '='.repeat(width);
@@ -2573,6 +2586,9 @@ const buildReceiptText = (saleNo, options = {}) => {
   });
   if (balance !== 0) {
     lines.push(columns(receiptBalanceLabel(balance), money(Math.abs(balance))));
+  }
+  if (totalCredit > 0) {
+    lines.push(columns(`${t('sale.totalCredit')}:`, money(totalCredit)));
   }
   lines.push(doubleLine);
   lines.push('');
@@ -2720,7 +2736,8 @@ const normalizeCustomerVm = (raw) => ({
   customerId: raw.customerId ?? raw.CustomerId,
   name: raw.name ?? raw.Name,
   phone: raw.phone ?? raw.Phone,
-  address: raw.address ?? raw.Address
+  address: raw.address ?? raw.Address,
+  currentBalance: toNonNegativeAmount(raw.currentBalance ?? raw.CurrentBalance)
 });
 
 const ensureCustomerForOrder = async ({ requireCustomer }) => {
@@ -3035,6 +3052,9 @@ const buildInvoiceHtml = (format = null) => {
   const balanceHtml = (balance !== 0 && Number.isFinite(balance))
     ? `<div style="display:flex;justify-content:${isThermal ? 'space-between' : 'flex-end'};${isThermal ? '' : 'gap:100px'};margin-top:4px;font-weight:bold;font-size:${isThermal ? font.total : 12}px;color:${balance > 0 ? '#16a34a' : '#dc2626'}"><span>${receiptBalanceLabel(balance)}</span><span>${formatMoney(Math.abs(balance))}</span></div>`
     : '';
+  const totalCreditHtml = receiptTotalCredit.value > 0
+    ? `<div style="display:flex;justify-content:${isThermal ? 'space-between' : 'flex-end'};${isThermal ? '' : 'gap:100px'};margin-top:4px;font-weight:bold;font-size:${isThermal ? font.total : 12}px;color:#dc2626"><span>${t('sale.totalCredit')}:</span><span>${formatMoney(receiptTotalCredit.value)}</span></div>`
+    : '';
 
   if (isThermal) {
     return `
@@ -3071,6 +3091,7 @@ const buildInvoiceHtml = (format = null) => {
           <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:${font.total}px;margin-top:4px;padding-top:4px;border-top:1px double black"><span>Total:</span><span>${formatMoney(receiptTotal.value)}</span></div>
           ${paymentsHtml}
           ${balanceHtml}
+          ${totalCreditHtml}
         </div>
         ${data.voucherNote && data.voucherNote !== 'null' ? `<div style="margin-top:8px;font-size:${font.tiny}px;font-style:italic;text-align:center">Note: ${data.voucherNote}</div>` : ''}
         ${footerHtml}
@@ -3111,6 +3132,7 @@ const buildInvoiceHtml = (format = null) => {
         <div style="display:flex;justify-content:flex-end;gap:100px;font-weight:bold;font-size:${font.total}px;margin-top:4px;padding-top:4px;border-top:1px double #333"><span>Total:</span><span>${formatMoney(receiptTotal.value)}</span></div>
         ${paymentsHtml}
         ${balanceHtml}
+        ${totalCreditHtml}
       </div>
       ${data.voucherNote && data.voucherNote !== 'null' ? `<div style="margin-top:10px;font-size:${font.small}px;font-style:italic;text-align:center">Note: ${data.voucherNote}</div>` : ''}
       ${footerHtml}
@@ -3567,6 +3589,8 @@ const confirmSale = async () => {
       deliveryFee: saleForm.value.DeliveryFee || 0,
       voucherNote: saleForm.value.Note || '',
       customerName: saleForm.value.CustomerName || t('common.walkInCustomer'),
+      totalCredit: toNonNegativeAmount(selectedCustomerObj.value?.currentBalance ?? selectedCustomerObj.value?.CurrentBalance)
+        + Math.max(0, totalAmount.value - totalPaid.value),
       branchName: receiptBranchName.value,
     };
 
@@ -3596,6 +3620,7 @@ const confirmSale = async () => {
       voucherNote: saleForm.value.Note || '',
       totalAmount: totalAmount.value,
       paidAmount: totalPaid.value,
+      totalCredit: invoicePreviewData.value.totalCredit,
       totalQty: totalQty.value
     });
 
