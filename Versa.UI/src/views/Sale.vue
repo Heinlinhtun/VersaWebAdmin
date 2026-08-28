@@ -497,7 +497,7 @@
                   <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2" />
                 </svg></span>
               <input v-model="customerSearch" @input="handleCustomerSearch"
-                @focus="showCustomerResults = customerSearch.length > 0"
+                @focus="openCustomerResults"
                 @keydown.down.prevent="moveSearchDown(filteredCustomersForSearch)"
                 @keydown.up.prevent="moveSearchUp(filteredCustomersForSearch)"
                 @keydown.enter.prevent="selectHighlightedProductFromSearch(filteredCustomersForSearch, 'customer')"
@@ -522,15 +522,24 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-50 pt-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-slate-50 pt-4">
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">Discount Type</label>
+              <select v-model="voucherDiscountType" @change="syncVoucherDiscount"
+                class="w-full p-3 bg-orange-50 border border-orange-100 rounded-lg font-normal outline-none text-orange-600">
+                <option value="amount">Amount ({{ currencySymbol }})</option>
+                <option value="percentage">Percentage (%)</option>
+              </select>
+            </div>
             <div class="space-y-1.5">
               <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{
                 t('sale.voucherDiscount') }}</label>
               <div class="relative">
-                <input v-model.number="saleForm.DiscountAmount" type="number"
+                <input v-model.number="voucherDiscountInput" @input="syncVoucherDiscount" type="number" min="0"
+                  :max="voucherDiscountType === 'percentage' ? 100 : undefined"
                   class="w-full p-3 bg-orange-50 border border-orange-100 rounded-lg font-normal outline-none text-orange-600"
                   placeholder="0">
-                <span class="absolute right-3 top-3 opacity-30">{{ currencySymbol }}</span>
+                <span class="absolute right-3 top-3 opacity-30">{{ voucherDiscountType === 'percentage' ? '%' : currencySymbol }}</span>
               </div>
             </div>
             <div class="space-y-1.5">
@@ -561,7 +570,8 @@
                   class="w-1/3 p-2 bg-white border border-slate-200 rounded font-normal text-xs outline-none">
                   <option v-for="m in availableMethods" :key="m" :value="m">{{ m }}</option>
                 </select>
-                <input v-model.number="p.amount" @input="markPaymentAmountAsManual" type="number"
+                <input v-model.number="p.amount" @input="markPaymentAmountAsManual" @blur="clampPaymentAmount(p)"
+                  type="number" min="0" inputmode="decimal"
                   class="w-full p-2 border border-slate-200 rounded text-right font-normal text-slate-800 outline-none tabular-nums focus:border-blue-400">
                 <button
                   v-if="paymentDetails.length > 1"
@@ -659,7 +669,7 @@
 
       <div id="print-area" style="display: none;">
         <div
-          :style="{ width: '80mm', padding: '5px', fontFamily: 'Pyidaungsu, Segoe UI, sans-serif', fontSize: receiptFont.body + 'px', color: 'black', lineHeight: '1.4' }">
+          :style="{ width: '76mm', padding: '5px', fontFamily: 'Pyidaungsu, Segoe UI, sans-serif', fontSize: receiptFont.body + 'px', color: 'black', lineHeight: '1.4' }">
           <div style="text-align: center; margin-bottom: 5px;">
             <h2 :style="{ fontSize: receiptFont.h2 + 'px', margin: 0, textTransform: 'uppercase', fontWeight: 'bold' }">{{ shopInfo.ShopName
             }}</h2>
@@ -737,7 +747,7 @@
               </tr>
 
               <tr v-if="saleForm.DiscountAmount > 0">
-                <td colspan="2" style="text-align: left; color: #444;">Discount (-):</td>
+                <td colspan="2" style="text-align: left; color: #444;">{{ currentVoucherDiscountLabel }}</td>
                 <td style="text-align: right; color: #444;">{{ formatNumber(saleForm.DiscountAmount) }}</td>
               </tr>
 
@@ -760,14 +770,13 @@
               </tr>
 
               <tr v-for="p in receiptData.payments" :key="p.method">
-                <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">PAID({{ p.method }}):
+                <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ receiptPaidLabel(p.method) }}
                 </td>
                 <td style="text-align: right; padding-top: 5px; font-weight: bold;">{{ formatNumber(p.amount) }}</td>
               </tr>
 
               <tr v-if="balanceAmount !== 0">
-                <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ balanceAmount > 0 ?
-                  'CHANGE:' : 'DUE:' }}</td>
+                <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ receiptBalanceLabel(balanceAmount) }}</td>
                 <td style="text-align: right; padding-top: 5px; font-weight: bold;">{{
                   formatNumber(Math.abs(balanceAmount)) }}</td>
               </tr>
@@ -869,7 +878,7 @@
               </tr>
               <tr v-if="invoicePreviewData.discount > 0">
                 <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; color: #ea580c;">
-                  Discount (-):</td>
+                  {{ receiptVoucherDiscountLabel }}</td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right; color: #ea580c;">{{
                   formatNumber(invoicePreviewData.discount) }}</td>
               </tr>
@@ -892,8 +901,14 @@
               </tr>
               <tr v-for="p in receiptData.payments" :key="p.method">
                 <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
-                  PAID({{ p.method }}):</td>
+                  {{ receiptPaidLabel(p.method) }}</td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(p.amount) }}</td>
+              </tr>
+              <tr v-if="balanceAmount !== 0">
+                <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
+                  {{ receiptBalanceLabel(balanceAmount) }}</td>
+                <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">{{
+                  formatNumber(Math.abs(balanceAmount)) }}</td>
               </tr>
             </tbody>
           </table>
@@ -1330,6 +1345,8 @@ const createDefaultSaleForm = () => ({
   Note: ''
 });
 const saleForm = ref(createDefaultSaleForm());
+const voucherDiscountType = ref('amount');
+const voucherDiscountInput = ref(0);
 const toBooleanSetting = (value) => value === true || value === 1 || value === '1' || value === 'true' || value === 'True';
 const readCachedShopSettings = () => {
   try {
@@ -1367,7 +1384,11 @@ const quantityButtonStep = computed(() => useDecimalQuantity.value ? 0.01 : 1);
 const lastSaleNo = ref('');
 const lastSaleDate = ref('');
 const cashierName = ref('');
-const receiptSize = ref('80mm');
+const normalizeReceiptSize = (value) => ['80mm', 'A4', 'A5'].includes(value) ? value : '80mm';
+const preferredReceiptSize = () => normalizeReceiptSize(
+  shopInfo.value.PreferredPaperSize ?? shopInfo.value.preferredPaperSize
+);
+const receiptSize = ref(preferredReceiptSize());
 const branchName = ref(localStorage.getItem('BranchName') || 'Main Branch');
 const branches = ref([]);
 const isExpanded = ref(false);
@@ -1378,19 +1399,27 @@ const connectionStatus = ref(navigator.onLine ? 'online' : 'offline');
 const connectionNotice = ref('');
 let connectionNoticeTimer = null;
 const showInvoicePreview = ref(false);
-const saveInvoiceAsImage = ref(true);
+const saveInvoiceAsImage = ref(false);
 const invoicePreviewRef = ref(null);
 const capturedPrintHtml = ref('');
 const capturedReceiptText = ref('');
 const invoicePreviewData = ref({
   items: [],
   payments: [],
+  balance: 0,
   discount: 0,
+  discountType: 'amount',
+  discountInput: 0,
   deliveryFee: 0,
   voucherNote: '',
   customerName: '',
   branchName: '',
 });
+
+const toNonNegativeAmount = (value) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+};
 
 const currentTab = ref('all');
 const catalogTabs = computed(() => ([
@@ -1437,9 +1466,21 @@ const receiptTotal = computed(() =>
   receiptSubtotal.value - (invoicePreviewData.value.discount || 0) + (invoicePreviewData.value.deliveryFee || 0)
 );
 const receiptBalance = computed(() => {
-  const totalPaid = invoicePreviewData.value.payments.reduce((sum, p) => sum + (p.amount || 0), 0);
-  return totalPaid - receiptTotal.value;
+  const capturedBalance = Number(invoicePreviewData.value.balance);
+  if (Number.isFinite(capturedBalance)) return capturedBalance;
+
+  const paidTotal = invoicePreviewData.value.payments.reduce(
+    (sum, payment) => sum + toNonNegativeAmount(payment.amount),
+    0
+  );
+  return paidTotal - receiptTotal.value;
 });
+const receiptPaidLabel = (method) => `${t('sale.totalPaid')}${method ? ` (${method})` : ''}:`;
+const receiptBalanceLabel = (balance) => (
+  balance > 0
+    ? `${t('sale.change')}:`
+    : `${t('sale.dueBalance')}:`
+);
 
 const showConnectionNotice = (message, status = 'offline', persist = false) => {
   connectionStatus.value = status;
@@ -1703,6 +1744,44 @@ const paymentDetails = ref([{ method: 'Cash', amount: 0 }]);
 const isPaymentAmountAutoFilled = ref(false);
 
 // --- Computed Properties ---
+const voucherDiscountBase = computed(() => cart.value.reduce((sum, item) => {
+  if (item.isFOC) return sum;
+  const price = parseFloat(item.SelectedPrice) || 0;
+  const quantity = parseFloat(item.Quantity) || 0;
+  const itemDiscount = parseFloat(item.DiscountAmount) || 0;
+  return sum + (quantity * price) - itemDiscount;
+}, 0));
+
+const syncVoucherDiscount = () => {
+  const input = toNonNegativeAmount(voucherDiscountInput.value);
+  voucherDiscountInput.value = input;
+  saleForm.value.DiscountAmount = voucherDiscountType.value === 'percentage'
+    ? voucherDiscountBase.value * Math.min(input, 100) / 100
+    : input;
+};
+
+watch([voucherDiscountType, voucherDiscountInput, voucherDiscountBase], syncVoucherDiscount);
+
+const formatDiscountPercent = (value) => {
+  const percent = Math.min(toNonNegativeAmount(value), 100);
+  return Number.isInteger(percent)
+    ? String(percent)
+    : percent.toFixed(2).replace(/\.?0+$/, '');
+};
+
+const voucherDiscountLabel = (type, input) => (
+  type === 'percentage' && toNonNegativeAmount(input) > 0
+    ? `Discount (${formatDiscountPercent(input)}%):`
+    : 'Discount (-):'
+);
+
+const currentVoucherDiscountLabel = computed(() =>
+  voucherDiscountLabel(voucherDiscountType.value, voucherDiscountInput.value)
+);
+const receiptVoucherDiscountLabel = computed(() =>
+  voucherDiscountLabel(invoicePreviewData.value.discountType, invoicePreviewData.value.discountInput)
+);
+
 const totalAmount = computed(() => {
   if (!cart.value) return 0;
 
@@ -1726,7 +1805,10 @@ watch(totalAmount, (newTotal) => {
   if (!showPaymentModal.value || !isPaymentAmountAutoFilled.value || paymentDetails.value.length !== 1) return;
   paymentDetails.value[0].amount = newTotal;
 });
-const totalPaid = computed(() => paymentDetails.value.reduce((sum, p) => sum + (p.amount || 0), 0));
+const totalPaid = computed(() => paymentDetails.value.reduce(
+  (sum, payment) => sum + toNonNegativeAmount(payment.amount),
+  0
+));
 const balanceAmount = computed(() => totalPaid.value - totalAmount.value);
 const totalQty = computed(() => cart.value.reduce((sum, i) => sum + i.Quantity, 0));
 const receiptData = computed(() => ({
@@ -1779,6 +1861,8 @@ const loadHeldSales = async () => {
 const resetCurrentSaleDraftState = () => {
   cart.value = [];
   saleForm.value = createDefaultSaleForm();
+  voucherDiscountType.value = 'amount';
+  voucherDiscountInput.value = 0;
   resetCustomerSelection();
   paymentDetails.value = [{ method: availableMethods.value[0], amount: 0 }];
   activeHeldSaleId.value = null;
@@ -1809,6 +1893,8 @@ const holdCurrentSale = async () => {
     totalAmount: totalAmount.value,
     preview: cart.value.map(i => `${i.Name} x ${i.Quantity}`).slice(0, 4).join(', '),
     saleForm: cloneDraftValue(saleForm.value),
+    voucherDiscountType: voucherDiscountType.value,
+    voucherDiscountInput: voucherDiscountInput.value,
     cart: cloneDraftValue(cart.value),
     paymentDetails: cloneDraftValue(paymentDetails.value)
   };
@@ -1848,6 +1934,9 @@ const loadHeldSale = (draft) => {
     showPriceMenu: false
   }));
   saleForm.value = { ...createDefaultSaleForm(), ...(draft.saleForm || {}) };
+  voucherDiscountType.value = draft.voucherDiscountType === 'percentage' ? 'percentage' : 'amount';
+  voucherDiscountInput.value = Number(draft.voucherDiscountInput ?? saleForm.value.DiscountAmount ?? 0);
+  syncVoucherDiscount();
   paymentDetails.value = Array.isArray(draft.paymentDetails) && draft.paymentDetails.length
     ? cloneDraftValue(draft.paymentDetails)
     : [{ method: availableMethods.value[0], amount: totalAmount.value }];
@@ -2178,10 +2267,15 @@ const selectSupplier = (s) => {
 };
 
 const handleCustomerSearch = () => {
-  showCustomerResults.value = customerSearch.value.length > 0;
   saleForm.value.CustomerName = customerSearch.value;
   saleForm.value.CustomerId = null;
+  showCustomerResults.value = filteredCustomersForSearch.value.length > 0;
   highlightedIndex.value = -1;
+};
+
+const openCustomerResults = () => {
+  showCustomerResults.value = filteredCustomersForSearch.value.length > 0;
+  highlightedIndex.value = filteredCustomersForSearch.value.length > 0 ? 0 : -1;
 };
 
 const selectCustomer = (c) => {
@@ -2257,9 +2351,16 @@ const filteredSuppliers = computed(() => {
 });
 
 const filteredCustomersForSearch = computed(() => {
-  if (!customerSearch.value) return [];
-  const q = customerSearch.value.toLowerCase();
-  return customers.value.filter(c => c.name.toLowerCase().includes(q));
+  const q = customerSearch.value.trim().toLowerCase();
+  if (!q) return customers.value.slice(0, 50);
+
+  return customers.value
+    .filter(c => {
+      const name = (c.name || '').toLowerCase();
+      const phone = (c.phone || '').toLowerCase();
+      return name.includes(q) || phone.includes(q);
+    })
+    .slice(0, 50);
 });
 
 const filteredCategoriesForSearch = computed(() => {
@@ -2276,6 +2377,10 @@ const filteredUnitsForSearch = computed(() => {
 
 const markPaymentAmountAsManual = () => {
   isPaymentAmountAutoFilled.value = false;
+};
+
+const clampPaymentAmount = (payment) => {
+  payment.amount = toNonNegativeAmount(payment.amount);
 };
 
 const addPaymentMethod = () => {
@@ -2366,6 +2471,9 @@ const buildReceiptText = (saleNo, options = {}) => {
   const items = options.items || cart.value;
   const payments = options.payments || receiptData.value.payments;
   const discountAmount = Number(options.discountAmount ?? saleForm.value.DiscountAmount ?? 0);
+  const discountType = options.discountType ?? voucherDiscountType.value;
+  const discountInput = options.discountInput ?? voucherDiscountInput.value;
+  const discountLabel = voucherDiscountLabel(discountType, discountInput);
   const deliveryFee = Number(options.deliveryFee ?? saleForm.value.DeliveryFee ?? 0);
   const voucherNote = options.voucherNote ?? saleForm.value.Note ?? '';
   const receiptTotalQty = Number(options.totalQty ?? items.reduce((sum, i) => sum + Number(i.Quantity || 0), 0));
@@ -2450,7 +2558,7 @@ const buildReceiptText = (saleNo, options = {}) => {
   lines.push(columns('Total Qty', formatNumber(receiptTotalQty)));
   lines.push(columns('Sub-Total:', money(subTotal)));
   if (discountAmount > 0) {
-    lines.push(columns('Discount (-):', money(discountAmount)));
+    lines.push(columns(discountLabel, money(discountAmount)));
   }
   if (deliveryFee > 0) {
     lines.push(columns('Delivery (+):', money(deliveryFee)));
@@ -2461,10 +2569,10 @@ const buildReceiptText = (saleNo, options = {}) => {
   lines.push(doubleLine);
   lines.push(columns('TOTAL:', money(finalTotal)));
   payments.forEach(payment => {
-    lines.push(columns(`PAID(${payment.method}):`, money(payment.amount || 0)));
+    lines.push(columns(receiptPaidLabel(payment.method), money(payment.amount || 0)));
   });
   if (balance !== 0) {
-    lines.push(columns(balance > 0 ? 'CHANGE:' : 'DUE:', money(Math.abs(balance))));
+    lines.push(columns(receiptBalanceLabel(balance), money(Math.abs(balance))));
   }
   lines.push(doubleLine);
   lines.push('');
@@ -2753,6 +2861,7 @@ const processCheckout = () => {
       resetCustomerSelection();
     }
     saleForm.value.SaleDate = new Date().toISOString().split('T')[0];
+    receiptSize.value = preferredReceiptSize();
     showPaymentModal.value = true;
 
   } catch (err) {
@@ -2875,6 +2984,7 @@ const buildInvoiceHtml = (format = null) => {
   const isThermal = (format || receiptSize.value) === '80mm';
   const data = invoicePreviewData.value;
   const font = receiptFont.value;
+  const discountLabel = voucherDiscountLabel(data.discountType, data.discountInput);
 
   const itemsHtml = isThermal
     ? data.items.map(item => {
@@ -2913,7 +3023,7 @@ const buildInvoiceHtml = (format = null) => {
       }).join('');
 
   const paymentsHtml = data.payments.map(p =>
-    `<div style="display:flex;justify-content:${isThermal ? 'space-between' : 'flex-end'};${isThermal ? '' : 'gap:100px'};margin-top:2px;font-size:${isThermal ? font.small : 12}px"><span>Paid (${p.method || 'Cash'}):</span><span>${formatMoney(p.amount || 0)}</span></div>`
+    `<div style="display:flex;justify-content:${isThermal ? 'space-between' : 'flex-end'};${isThermal ? '' : 'gap:100px'};margin-top:2px;font-size:${isThermal ? font.small : 12}px"><span>${receiptPaidLabel(p.method || 'Cash')}</span><span>${formatMoney(p.amount || 0)}</span></div>`
   ).join('');
 
   const footerHtml = receiptFooterLines.value
@@ -2923,12 +3033,12 @@ const buildInvoiceHtml = (format = null) => {
 
   const balance = receiptBalance.value;
   const balanceHtml = (balance !== 0 && Number.isFinite(balance))
-    ? `<div style="display:flex;justify-content:${isThermal ? 'space-between' : 'flex-end'};${isThermal ? '' : 'gap:100px'};margin-top:4px;font-weight:bold;font-size:${isThermal ? font.total : 12}px;color:${balance > 0 ? '#16a34a' : '#dc2626'}"><span>${balance > 0 ? 'Change:' : 'Due:'}</span><span>${formatMoney(Math.abs(balance))}</span></div>`
+    ? `<div style="display:flex;justify-content:${isThermal ? 'space-between' : 'flex-end'};${isThermal ? '' : 'gap:100px'};margin-top:4px;font-weight:bold;font-size:${isThermal ? font.total : 12}px;color:${balance > 0 ? '#16a34a' : '#dc2626'}"><span>${receiptBalanceLabel(balance)}</span><span>${formatMoney(Math.abs(balance))}</span></div>`
     : '';
 
   if (isThermal) {
     return `
-      <div style="width:80mm;padding:5px;font-family:Pyidaungsu,sans-serif;color:black;line-height:1.4;background:white">
+      <div style="width:76mm;padding:5px;font-family:Pyidaungsu,sans-serif;color:black;line-height:1.4;background:white">
         <div style="text-align:center;margin-bottom:5px">
           <h2 style="font-size:${font.h2}px;margin:0;text-transform:uppercase;font-weight:bold">${shopInfo.value.ShopName || ''}</h2>
           <p style="margin:2px 0;font-weight:bold">(${receiptBranchName.value || ''})</p>
@@ -2956,7 +3066,7 @@ const buildInvoiceHtml = (format = null) => {
         <div style="border-bottom:1px dashed black;margin:5px 0"></div>
         <div style="font-size:${font.small}px">
           <div style="display:flex;justify-content:space-between"><span>Subtotal:</span><span>${formatMoney(receiptSubtotal.value)}</span></div>
-          ${data.discount > 0 ? `<div style="display:flex;justify-content:space-between;color:#dc2626"><span>Discount:</span><span>- ${formatMoney(data.discount)}</span></div>` : ''}
+          ${data.discount > 0 ? `<div style="display:flex;justify-content:space-between;color:#dc2626"><span>${discountLabel}</span><span>- ${formatMoney(data.discount)}</span></div>` : ''}
           ${data.deliveryFee > 0 ? `<div style="display:flex;justify-content:space-between"><span>Delivery:</span><span>${formatMoney(data.deliveryFee)}</span></div>` : ''}
           <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:${font.total}px;margin-top:4px;padding-top:4px;border-top:1px double black"><span>Total:</span><span>${formatMoney(receiptTotal.value)}</span></div>
           ${paymentsHtml}
@@ -2996,7 +3106,7 @@ const buildInvoiceHtml = (format = null) => {
       </table>
       <div style="margin-top:10px;font-size:${font.small}px;text-align:right">
         <div style="display:flex;justify-content:flex-end;gap:100px"><span>Subtotal:</span><span>${formatMoney(receiptSubtotal.value)}</span></div>
-        ${data.discount > 0 ? `<div style="display:flex;justify-content:flex-end;gap:100px;color:#dc2626"><span>Discount:</span><span>- ${formatMoney(data.discount)}</span></div>` : ''}
+        ${data.discount > 0 ? `<div style="display:flex;justify-content:flex-end;gap:100px;color:#dc2626"><span>${discountLabel}</span><span>- ${formatMoney(data.discount)}</span></div>` : ''}
         ${data.deliveryFee > 0 ? `<div style="display:flex;justify-content:flex-end;gap:100px"><span>Delivery:</span><span>${formatMoney(data.deliveryFee)}</span></div>` : ''}
         <div style="display:flex;justify-content:flex-end;gap:100px;font-weight:bold;font-size:${font.total}px;margin-top:4px;padding-top:4px;border-top:1px double #333"><span>Total:</span><span>${formatMoney(receiptTotal.value)}</span></div>
         ${paymentsHtml}
@@ -3016,7 +3126,7 @@ const capturePreviewElement = async () => {
     }
 
     const isThermal = receiptSize.value === '80mm';
-    const bodyWidth = isThermal ? '80mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
+    const bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
     const captureWidth = bodyWidth;
 
     // Build logo HTML
@@ -3031,7 +3141,7 @@ const capturePreviewElement = async () => {
     };
     const logoSizePx = getLogoPx(shopInfo.value.LogoSize || 'Large');
     const logoHtml = hasLogo
-      ? `<div style="text-align:center;margin-top:15px;margin-bottom:5px;padding-top:10px"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
+      ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:0"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
       : '';
 
     // Build complete document exactly like print
@@ -3154,7 +3264,7 @@ const printFromPreview = async () => {
 
   const isThermal = receiptSize.value === '80mm';
   const pageSize = isThermal ? '80mm auto' : (receiptSize.value === 'A5' ? '148mm 210mm' : '210mm 297mm');
-  const bodyWidth = isThermal ? '80mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
+  const bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
 
   // Build logo HTML
   const hasLogo = shopInfo.value.LogoData &&
@@ -3168,7 +3278,7 @@ const printFromPreview = async () => {
   };
   const logoSizePx = getLogoPx(shopInfo.value.LogoSize || 'Large');
   const logoHtml = hasLogo
-    ? `<div style="text-align:center;margin-top:15px;margin-bottom:5px;padding-top:10px"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
+    ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:0"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
     : '';
 
   // Use the captured print-area HTML (captured before cart was cleared)
@@ -3249,7 +3359,7 @@ const printReceipt = async (htmlContent = null, preOpenedWindow = null) => {
     return;
   }
   let pageSize = isThermal ? '80mm auto' : (receiptSize.value === 'A5' ? '148mm 210mm' : '210mm 297mm');
-  let bodyWidth = isThermal ? '80mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
+  let bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
 
   // ပုံစာသား (Base64) တကယ်ရှိမရှိ သေချာစစ်ဆေးခြင်း
   const hasLogo = shopInfo.value.LogoData &&
@@ -3266,7 +3376,7 @@ const printReceipt = async (htmlContent = null, preOpenedWindow = null) => {
   const logoSizePx = getLogoPx(shopInfo.value.LogoSize || 'Large');
 
   const logoHtml = hasLogo
-    ? `<div style="text-align: center; margin-top: 15px; margin-bottom: 5px; padding-top: 10px;">
+    ? `<div style="text-align: center; margin-top: 2px; margin-bottom: 5px; padding-top: 0;">
          <img src="${shopInfo.value.LogoData}" 
               style="width: ${logoSizePx}; height: ${logoSizePx}; object-fit: contain; border: none;">
        </div>`
@@ -3351,6 +3461,8 @@ const confirmSale = async () => {
 
       TotalAmount: itemsSubTotal, // ပစ္စည်းဖိုး သီးသန့်
       DiscountAmount: saleForm.value.DiscountAmount || 0,
+      DiscountType: voucherDiscountType.value,
+      DiscountInput: voucherDiscountInput.value,
       DeliveryFee: saleForm.value.DeliveryFee || 0,
       PaidAmount: totalPaid.value,
 
@@ -3389,7 +3501,7 @@ const confirmSale = async () => {
       // ✅ Payments Mapping (Backend မှ PaymentDetailModel အတွက်)
       Payments: paymentDetails.value.map(p => ({
         PaymentMethod: p.method,
-        Amount: p.amount
+        Amount: toNonNegativeAmount(p.amount)
       }))
     };
 
@@ -3444,8 +3556,14 @@ const confirmSale = async () => {
 
     invoicePreviewData.value = {
       items: [...cart.value.map(i => ({ ...i }))],
-      payments: [...paymentDetails.value.map(p => ({ ...p }))],
+      payments: paymentDetails.value.map(p => ({
+        ...p,
+        amount: toNonNegativeAmount(p.amount)
+      })),
+      balance: totalPaid.value - totalAmount.value,
       discount: saleForm.value.DiscountAmount || 0,
+      discountType: voucherDiscountType.value,
+      discountInput: voucherDiscountInput.value,
       deliveryFee: saleForm.value.DeliveryFee || 0,
       voucherNote: saleForm.value.Note || '',
       customerName: saleForm.value.CustomerName || t('common.walkInCustomer'),
@@ -3472,6 +3590,8 @@ const confirmSale = async () => {
       items: cart.value,
       payments: receiptData.value.payments,
       discountAmount: saleForm.value.DiscountAmount || 0,
+      discountType: voucherDiscountType.value,
+      discountInput: voucherDiscountInput.value,
       deliveryFee: saleForm.value.DeliveryFee || 0,
       voucherNote: saleForm.value.Note || '',
       totalAmount: totalAmount.value,
@@ -3487,6 +3607,8 @@ const confirmSale = async () => {
     showPaymentModal.value = false;
     cart.value = [];
     saleForm.value.DiscountAmount = 0;
+    voucherDiscountType.value = 'amount';
+    voucherDiscountInput.value = 0;
     saleForm.value.DeliveryFee = 0;
     saleForm.value.Note = '';
     resetCustomerSelection();
@@ -3537,6 +3659,8 @@ const confirmPreorder = async () => {
 
       TotalAmount: itemsSubTotal,
       DiscountAmount: saleForm.value.DiscountAmount || 0,
+      DiscountType: voucherDiscountType.value,
+      DiscountInput: voucherDiscountInput.value,
       DeliveryFee: saleForm.value.DeliveryFee || 0,
       PaidAmount: totalPaid.value,
 
@@ -3572,7 +3696,7 @@ const confirmPreorder = async () => {
 
       Payments: paymentDetails.value.map(p => ({
         PaymentMethod: p.method,
-        Amount: p.amount
+        Amount: toNonNegativeAmount(p.amount)
       }))
     };
 
@@ -3583,6 +3707,8 @@ const confirmPreorder = async () => {
     showPaymentModal.value = false;
     cart.value = [];
     saleForm.value.DiscountAmount = 0;
+    voucherDiscountType.value = 'amount';
+    voucherDiscountInput.value = 0;
     saleForm.value.DeliveryFee = 0;
     saleForm.value.Note = '';
     resetCustomerSelection();
@@ -3660,6 +3786,7 @@ const fetchSettings = async () => {
     const res = await api.get('/Settings');
     if (res.data) {
       applyShopSettings(res.data);
+      receiptSize.value = preferredReceiptSize();
       // ✅ ရလာတဲ့ LogoData (Base64) ကို LocalStorage မှာပါ Update လုပ်ပေးခြင်း
       localStorage.setItem('ShopLogo', res.data.LogoData || '');
       localStorage.setItem('ShopSettings', JSON.stringify(shopInfo.value));

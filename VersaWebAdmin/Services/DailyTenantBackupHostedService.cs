@@ -7,13 +7,13 @@ public class DailyTenantBackupHostedService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<DailyTenantBackupHostedService> _logger;
-    private readonly IOptions<DropboxBackupOptions> _options;
+    private readonly IOptionsMonitor<DropboxBackupOptions> _options;
     private DateOnly? _lastScheduledRunDate;
 
     public DailyTenantBackupHostedService(
         IServiceProvider serviceProvider,
         ILogger<DailyTenantBackupHostedService> logger,
-        IOptions<DropboxBackupOptions> options)
+        IOptionsMonitor<DropboxBackupOptions> options)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
@@ -28,7 +28,7 @@ public class DailyTenantBackupHostedService : BackgroundService
         {
             try
             {
-                if (!_options.Value.Enabled)
+                if (!_options.CurrentValue.Enabled)
                 {
                     _logger.LogInformation("Daily tenant backup is disabled. Waiting 1 hour before checking again.");
                     await Task.Delay(TimeSpan.FromHours(1), stoppingToken);

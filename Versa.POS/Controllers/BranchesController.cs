@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using MySqlConnector;
 using Versa.Core.Services;
 using Versa.Core.Models; // Model ကို သုံးရန်
+using System.Security.Claims;
 
 namespace Versa.POS.Controllers
 {
@@ -12,6 +13,13 @@ namespace Versa.POS.Controllers
     {
         private readonly DatabaseService _dbService;
         public BranchesController(DatabaseService dbService) { _dbService = dbService; }
+
+        private bool CanManageBranches =>
+            User.IsInRole("Admin") &&
+            bool.TryParse(User.FindFirstValue("AllowBranch"), out var allowed) && allowed;
+
+        private IActionResult BranchManagementDenied() =>
+            StatusCode(StatusCodes.Status403Forbidden, new { Message = "Branch management is not enabled for this shop." });
 
         [HttpGet]
         public async Task<IActionResult> GetAll()
@@ -25,6 +33,7 @@ namespace Versa.POS.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] Branch branch) // dynamic အစား Branch ကို သုံးထားသည်
         {
+            if (!CanManageBranches) return BranchManagementDenied();
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
 
             if (branch.IsMainBranch)
@@ -42,6 +51,7 @@ namespace Versa.POS.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(int id, [FromBody] Branch branch) // Branch Model ကို သုံးသည်
         {
+            if (!CanManageBranches) return BranchManagementDenied();
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
 
             // URL Id နှင့် Body Id ကို ကိုက်ညီမှု ရှိမရှိ စစ်ဆေးခြင်း
@@ -67,6 +77,7 @@ namespace Versa.POS.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
+            if (!CanManageBranches) return BranchManagementDenied();
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
 
             var usageCount = await conn.ExecuteScalarAsync<int>(@"

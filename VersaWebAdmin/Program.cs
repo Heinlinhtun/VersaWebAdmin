@@ -13,8 +13,10 @@ builder.Services.Configure<TelegramAlertOptions>(builder.Configuration.GetSectio
 builder.Services.AddSingleton<IDropboxBackupUploadService, DropboxBackupUploadService>();
 builder.Services.AddHttpClient<ITelegramAlertService, TelegramAlertService>();
 builder.Services.AddScoped<ITenantBackupService, TenantBackupService>();
+builder.Services.AddSingleton<IManualBackupQueue, ManualBackupQueue>();
 builder.Services.AddSingleton<ISystemHealthService, SystemHealthService>();
 builder.Services.AddHostedService<DailyTenantBackupHostedService>();
+builder.Services.AddHostedService<ManualBackupHostedService>();
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 
@@ -38,6 +40,16 @@ var dbService = app.Services.CreateScope().ServiceProvider.GetRequiredService<Da
 using (var conn = new MySqlConnection(dbService.GetMasterConnectionString()))
 {
     await conn.OpenAsync();
+    var allowBranchExists = Convert.ToInt32(await new MySqlCommand(@"
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'Tenants'
+          AND COLUMN_NAME = 'AllowBranch'", conn).ExecuteScalarAsync() ?? 0);
+    if (allowBranchExists == 0)
+    {
+        await new MySqlCommand(
+            "ALTER TABLE Tenants ADD COLUMN AllowBranch TINYINT(1) NOT NULL DEFAULT 1", conn).ExecuteNonQueryAsync();
+    }
     var count = (long)(await new MySqlCommand("SELECT COUNT(*) FROM MasterUsers", conn).ExecuteScalarAsync() ?? 0);
     if (count == 0)
     {

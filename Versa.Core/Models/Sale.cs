@@ -13,6 +13,8 @@ namespace Versa.Core.Models
         public int? UserId { get; set; }
         public decimal TotalAmount { get; set; }
         public decimal DiscountAmount { get; set; }
+        public string? DiscountType { get; set; }
+        public decimal? DiscountInput { get; set; }
         public decimal PaidAmount { get; set; }
         public decimal DueAmount { get; set; }
         public string PaymentMethod { get; set; }

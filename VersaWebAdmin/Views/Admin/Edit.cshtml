@@ -45,6 +45,14 @@
                         <input asp-for="SubscriptionPlan" class="form-control" required>
                     </div>
 
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check form-switch border rounded p-3 ps-5 bg-light">
+                            <input asp-for="AllowBranch" class="form-check-input">
+                            <label asp-for="AllowBranch" class="form-check-label fw-bold">Allow Branch Management</label>
+                            <div class="form-text">Allows access to Master Data / Branches.</div>
+                        </div>
+                    </div>
+
                     <div class="col-md-12 mb-3 mt-3">
                         <div class="p-3 bg-light rounded border border-warning">
                             <h6 class="text-danger fw-bold mb-2"><i class="bi bi-shield-lock me-1"></i> Admin Password Reset (စကားဝှက်အသစ်)</h6>

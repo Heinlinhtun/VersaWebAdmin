@@ -12,6 +12,8 @@ namespace Versa.Core.Models
         public int UserId { get; set; }
         public decimal TotalAmount { get; set; }
         public decimal DiscountAmount { get; set; }
+        public string? DiscountType { get; set; }
+        public decimal? DiscountInput { get; set; }
 
         public int? DiscountId { get; set; }
         public decimal DeliveryFee { get; set; }

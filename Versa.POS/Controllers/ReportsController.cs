@@ -72,7 +72,8 @@ WHERE TABLE_SCHEMA = DATABASE()
         decimal refundAmount,
         string? preferredMethod)
     {
-        var remainingDeduct = Math.Max(0m, refundAmount);
+        var paidChannelTotal = channels.Where(x => x.Value > 0).Sum(x => x.Value);
+        var remainingDeduct = Math.Min(Math.Max(0m, refundAmount), paidChannelTotal);
         if (remainingDeduct <= 0) return;
 
         if (!string.IsNullOrWhiteSpace(preferredMethod))
@@ -80,7 +81,9 @@ WHERE TABLE_SCHEMA = DATABASE()
             var preferred = preferredMethod.Trim();
             if (HasExplicitPaymentMethod(preferred))
             {
-                channels[preferred] = channels.GetValueOrDefault(preferred) - remainingDeduct;
+                var preferredPaid = Math.Max(0m, channels.GetValueOrDefault(preferred));
+                var deduct = Math.Min(remainingDeduct, preferredPaid);
+                channels[preferred] = channels.GetValueOrDefault(preferred) - deduct;
                 return;
             }
         }
@@ -276,11 +279,23 @@ WHERE TABLE_SCHEMA = DATABASE()
                 WHERE cp.PaymentDate BETWEEN @start AND @end
                   AND (@branchId IS NULL OR ps.BranchId = @branchId OR ps.SaleId IS NULL)
             ), 0) - IFNULL((
-                SELECT SUM(sr2.RefundAmount)
-                FROM SaleReturns sr2
-                INNER JOIN Sales rs ON rs.SaleId = sr2.SaleId
-                WHERE sr2.ReturnDate BETWEEN @start AND @end
-                  AND (@branchId IS NULL OR rs.BranchId = @branchId)
+                SELECT SUM(LEAST(x.ReturnedAmount, x.PaidAmount))
+                FROM (
+                    SELECT
+                        sr2.SaleId,
+                        SUM(IFNULL(sr2.RefundAmount, 0)) AS ReturnedAmount,
+                        CASE
+                            WHEN EXISTS (SELECT 1 FROM CustomerPayments cp2 WHERE cp2.SaleId = sr2.SaleId) THEN
+                                IFNULL((SELECT SUM(cp3.Amount) FROM CustomerPayments cp3 WHERE cp3.SaleId = sr2.SaleId), 0)
+                            ELSE
+                                IFNULL(rs.PaidAmount, 0)
+                        END AS PaidAmount
+                    FROM SaleReturns sr2
+                    INNER JOIN Sales rs ON rs.SaleId = sr2.SaleId
+                    WHERE sr2.ReturnDate BETWEEN @start AND @end
+                      AND (@branchId IS NULL OR rs.BranchId = @branchId)
+                    GROUP BY sr2.SaleId, rs.PaidAmount
+                ) x
             ), 0) as TotalCollected,
             IFNULL(SUM(GREATEST(0, s.DueAmount - IFNULL(sr.ReturnedAmount, 0))), 0) as TotalCredits
         FROM Sales s

@@ -33,8 +33,8 @@ namespace Versa.POS.Controllers
                     SELECT u.UserId, u.BranchId, u.Username, u.Role, u.IsActive, b.BranchName 
                     FROM ShopUsers u 
                     LEFT JOIN Branches b ON u.BranchId = b.BranchId 
-                    WHERE u.BranchId = @userBranchId AND u.IsActive = 1
-                    ORDER BY u.UserId DESC";
+                    WHERE u.BranchId = @userBranchId
+                    ORDER BY u.IsActive DESC, u.UserId DESC";
                 var users = await conn.QueryAsync<dynamic>(sql, new { userBranchId });
                 return Ok(users);
             }
@@ -44,8 +44,7 @@ namespace Versa.POS.Controllers
                     SELECT u.UserId, u.BranchId, u.Username, u.Role, u.IsActive, b.BranchName 
                     FROM ShopUsers u 
                     LEFT JOIN Branches b ON u.BranchId = b.BranchId 
-                    WHERE u.IsActive = 1
-                    ORDER BY u.UserId DESC";
+                    ORDER BY u.IsActive DESC, u.UserId DESC";
                 var users = await conn.QueryAsync<dynamic>(sql);
                 return Ok(users);
             }

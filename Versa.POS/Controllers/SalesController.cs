@@ -263,6 +263,39 @@ WHERE TABLE_SCHEMA = DATABASE()
                 transaction: transaction);
         }
 
+        private static async Task EnsureSalesDiscountMetaColumnsAsync(MySqlConnection conn, MySqlTransaction transaction)
+        {
+            var hasDiscountType = await conn.ExecuteScalarAsync<int>(@"
+SELECT COUNT(*)
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'Sales'
+  AND COLUMN_NAME = 'DiscountType'",
+                transaction: transaction);
+
+            if (hasDiscountType == 0)
+            {
+                await conn.ExecuteAsync(
+                    "ALTER TABLE Sales ADD COLUMN DiscountType VARCHAR(20) NOT NULL DEFAULT 'amount'",
+                    transaction: transaction);
+            }
+
+            var hasDiscountInput = await conn.ExecuteScalarAsync<int>(@"
+SELECT COUNT(*)
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'Sales'
+  AND COLUMN_NAME = 'DiscountInput'",
+                transaction: transaction);
+
+            if (hasDiscountInput == 0)
+            {
+                await conn.ExecuteAsync(
+                    "ALTER TABLE Sales ADD COLUMN DiscountInput DECIMAL(18,4) NULL",
+                    transaction: transaction);
+            }
+        }
+
         private static async Task EnsureBundleItemsSupportsUnitsAsync(MySqlConnection conn, MySqlTransaction transaction)
         {
             var hasUnitId = await conn.ExecuteScalarAsync<int>(@"
@@ -494,6 +527,7 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
                 await EnsureSalesOrderStatusColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureSalesClientSaleIdColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureSalesSaleTypeColumnAsync(conn, (MySqlTransaction)transaction);
+                await EnsureSalesDiscountMetaColumnsAsync(conn, (MySqlTransaction)transaction);
                 await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureBundleItemsSupportsUnitsAsync(conn, (MySqlTransaction)transaction);
 
@@ -552,8 +586,8 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
 
                 // ၂။ Sales Master သိမ်းဆည်းခြင်း
                 DateTime saleDate = model.SaleDate ?? DateTime.Now;
-                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DeliveryFee, PaidAmount, DueAmount, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus, ClientSaleId)  
-                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DeliveryFee, @PaidAmount, @dueAmount, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus, @ClientSaleId);
+                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DiscountType, DiscountInput, DeliveryFee, PaidAmount, DueAmount, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus, ClientSaleId)  
+                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DiscountType, @DiscountInput, @DeliveryFee, @PaidAmount, @dueAmount, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus, @ClientSaleId);
                           SELECT LAST_INSERT_ID();";
 
                 int saleId = await conn.ExecuteScalarAsync<int>(saleSql, new
@@ -563,6 +597,8 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
                     UserId = effectiveUserId,
                     actualItemsTotal,
                     model.DiscountAmount,
+                    DiscountType = model.DiscountType == "percentage" ? "percentage" : "amount",
+                    DiscountInput = model.DiscountInput,
                     model.DeliveryFee,
                     model.PaidAmount,
                     dueAmount,
@@ -792,6 +828,7 @@ WHERE SaleItemId = @SaleItemId",
                 await EnsureSalesOrderStatusColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureSalesSaleTypeColumnAsync(conn, (MySqlTransaction)transaction);
+                await EnsureSalesDiscountMetaColumnsAsync(conn, (MySqlTransaction)transaction);
                 await EnsureBundleItemsSupportsUnitsAsync(conn, (MySqlTransaction)transaction);
 
                 // 0. Resolve Customer
@@ -829,8 +866,8 @@ WHERE SaleItemId = @SaleItemId",
                 int effectiveUserId = claimUserId > 0 ? claimUserId : model.UserId;
 
                 DateTime saleDate = model.SaleDate?.Date ?? DateTime.Now.Date;
-                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DeliveryFee, PaidAmount, DueAmount, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus)  
-                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DeliveryFee, @PaidAmount, @dueAmount, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus);
+                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DiscountType, DiscountInput, DeliveryFee, PaidAmount, DueAmount, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus)  
+                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DiscountType, @DiscountInput, @DeliveryFee, @PaidAmount, @dueAmount, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus);
                           SELECT LAST_INSERT_ID();";
 
                 int saleId = await conn.ExecuteScalarAsync<int>(saleSql, new
@@ -840,6 +877,8 @@ WHERE SaleItemId = @SaleItemId",
                     UserId = effectiveUserId,
                     actualItemsTotal,
                     model.DiscountAmount,
+                    DiscountType = model.DiscountType == "percentage" ? "percentage" : "amount",
+                    DiscountInput = model.DiscountInput,
                     model.DeliveryFee,
                     model.PaidAmount,
                     dueAmount,
@@ -1422,6 +1461,8 @@ LIMIT 1",
         public async Task<IActionResult> GetSaleDetails(int saleId)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+            await conn.OpenAsync();
+            await conn.ExecuteAsync("SET time_zone = '+06:30'");
 
             // ၁။ အရောင်း Master Data ကိုအရင်ယူသည်
             string masterSql = @"

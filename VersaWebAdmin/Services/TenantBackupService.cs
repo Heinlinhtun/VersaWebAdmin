@@ -12,7 +12,7 @@ public class TenantBackupService : ITenantBackupService
     private readonly DatabaseService _databaseService;
     private readonly IDropboxBackupUploadService _dropboxBackupUploadService;
     private readonly ITelegramAlertService _telegramAlertService;
-    private readonly IOptions<DropboxBackupOptions> _options;
+    private readonly IOptionsMonitor<DropboxBackupOptions> _options;
     private readonly ILogger<TenantBackupService> _logger;
     private readonly SemaphoreSlim _backupLock = new(1, 1);
 
@@ -20,7 +20,7 @@ public class TenantBackupService : ITenantBackupService
         DatabaseService databaseService,
         IDropboxBackupUploadService dropboxBackupUploadService,
         ITelegramAlertService telegramAlertService,
-        IOptions<DropboxBackupOptions> options,
+        IOptionsMonitor<DropboxBackupOptions> options,
         ILogger<TenantBackupService> logger)
     {
         _databaseService = databaseService;
@@ -116,7 +116,7 @@ public class TenantBackupService : ITenantBackupService
 
         try
         {
-            var options = _options.Value;
+            var options = _options.CurrentValue;
             if (!options.Enabled)
             {
                 _logger.LogWarning("Backup run skipped because Dropbox backup is disabled. Trigger: {Trigger}", trigger);
@@ -279,6 +279,7 @@ public class TenantBackupService : ITenantBackupService
     private async Task<List<string>> GetTenantDatabaseNamesAsync(CancellationToken cancellationToken)
     {
         var databaseNames = new List<string>();
+        var seenDatabaseNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var masterConnectionString = _databaseService.GetMasterConnectionString();
 
         await using var connection = new MySqlConnection(masterConnectionString);
@@ -291,7 +292,7 @@ public class TenantBackupService : ITenantBackupService
         while (await reader.ReadAsync(cancellationToken))
         {
             var dbName = reader.IsDBNull(0) ? string.Empty : reader.GetString(0).Trim();
-            if (!string.IsNullOrWhiteSpace(dbName))
+            if (!string.IsNullOrWhiteSpace(dbName) && seenDatabaseNames.Add(dbName))
             {
                 databaseNames.Add(dbName);
             }
@@ -380,7 +381,7 @@ public class TenantBackupService : ITenantBackupService
     private async Task DumpDatabaseToCompressedFileAsync(string dbName, string outputFilePath, CancellationToken cancellationToken)
     {
         var connectionBuilder = new MySqlConnectionStringBuilder(_databaseService.GetTenantConnectionString(dbName));
-        var options = _options.Value;
+        var options = _options.CurrentValue;
 
         using var process = new Process
         {

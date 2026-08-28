@@ -37,6 +37,9 @@ namespace Versa.POS.Controllers
             {
                 using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
                 await EnsureSettingsSchemaAsync(conn);
+                model.PreferredPaperSize = model.PreferredPaperSize is "A4" or "A5" or "80mm"
+                    ? model.PreferredPaperSize
+                    : "80mm";
 
                 // 1. Logo Resize & Binary Logic
                 if (logo != null)
@@ -70,6 +73,7 @@ namespace Versa.POS.Controllers
                         LogoData = @LogoData,
                         LogoSize = @LogoSize,
                         ReceiptFontSize = @ReceiptFontSize,
+                        PreferredPaperSize = @PreferredPaperSize,
                         UseDecimalQuantity = @UseDecimalQuantity
                        WHERE SettingId = @SettingId OR SettingId > 0 LIMIT 1";
 
@@ -77,8 +81,8 @@ namespace Versa.POS.Controllers
 
                 if (rowsAffected == 0)
                 {
-                    string insertSql = @"INSERT INTO Settings (ShopName, Address, Phone, ReceiptFooter, TaxRate, CurrencySymbol, LogoData, LogoSize, ReceiptFontSize, UseDecimalQuantity) 
-                                 VALUES (@ShopName, @Address, @Phone, @ReceiptFooter, @TaxRate, @CurrencySymbol, @LogoData, @LogoSize, @ReceiptFontSize, @UseDecimalQuantity)";
+                    string insertSql = @"INSERT INTO Settings (ShopName, Address, Phone, ReceiptFooter, TaxRate, CurrencySymbol, LogoData, LogoSize, ReceiptFontSize, PreferredPaperSize, UseDecimalQuantity)
+                                 VALUES (@ShopName, @Address, @Phone, @ReceiptFooter, @TaxRate, @CurrencySymbol, @LogoData, @LogoSize, @ReceiptFontSize, @PreferredPaperSize, @UseDecimalQuantity)";
                     await conn.ExecuteAsync(insertSql, model);
                 }
 
@@ -114,6 +118,18 @@ namespace Versa.POS.Controllers
             if (receiptFontSizeExists == 0)
             {
                 await conn.ExecuteAsync("ALTER TABLE Settings ADD COLUMN ReceiptFontSize VARCHAR(10) NOT NULL DEFAULT 'Medium'");
+            }
+
+            var preferredPaperSizeExists = await conn.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(*)
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'Settings'
+                  AND COLUMN_NAME = 'PreferredPaperSize'");
+
+            if (preferredPaperSizeExists == 0)
+            {
+                await conn.ExecuteAsync("ALTER TABLE Settings ADD COLUMN PreferredPaperSize VARCHAR(10) NOT NULL DEFAULT '80mm'");
             }
         }
     }

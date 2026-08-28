@@ -44,7 +44,7 @@ public class AuthController : ControllerBase
             var sessionToken = Guid.NewGuid().ToString("N");
             await _dbService.UpdateSessionTokenAsync(tenant.DbName, user.UserId, sessionToken);
 
-            var token = GenerateJwtToken(user, tenant.DbName, model.ShopLoginId, sessionToken);
+            var token = GenerateJwtToken(user, tenant.DbName, model.ShopLoginId, sessionToken, tenant.AllowBranch);
             var branchName = await _dbService.GetBranchNameAsync(tenant.DbName, user.BranchId);
 
             return Ok(new
@@ -55,6 +55,7 @@ public class AuthController : ControllerBase
                 // Frontend က localStorage.getItem('Role') နဲ့ ဖတ်ဖို့အတွက်
                 Role = user.Role,
                 shopName = tenant.ShopName,
+                AllowBranch = tenant.AllowBranch,
                 // Frontend က localStorage.getItem('BranchId') နဲ့ ဖတ်ဖို့အတွက်
                 BranchId = user.BranchId,
                 BranchName = branchName
@@ -64,7 +65,7 @@ public class AuthController : ControllerBase
         return Unauthorized(new { message = "Username သို့မဟုတ် Password မှားနေပါသည်။" });
     }
 
-    private string GenerateJwtToken(ShopUser user, string dbName, string shopId, string sessionToken)
+    private string GenerateJwtToken(ShopUser user, string dbName, string shopId, string sessionToken, bool allowBranch)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
 
@@ -82,6 +83,7 @@ public class AuthController : ControllerBase
                 new Claim("TenantDb", dbName), // ဤ Claim သည် BaseShopController အတွက် အရေးကြီးပါသည်
                 new Claim("ShopId", shopId),
                 new Claim("BranchId", user.BranchId.ToString()),
+                new Claim("AllowBranch", allowBranch.ToString()),
                 new Claim("SessionToken", sessionToken) // Single-session enforcement
             }),
             Expires = DateTime.UtcNow.AddDays(7),

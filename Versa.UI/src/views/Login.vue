@@ -229,6 +229,7 @@ const handleLogin = async () => {
       localStorage.setItem('UserId', data.userId || data.UserId || 0);
       localStorage.setItem('shopName', data.shopName || 'VERSA POS');
       localStorage.setItem('Role', data.role || data.Role || 'Staff');
+      localStorage.setItem('AllowBranch', String(data.allowBranch ?? data.AllowBranch ?? false));
       localStorage.setItem('BranchId', data.branchId !== undefined ? data.branchId : (data.BranchId || 0));
       localStorage.setItem('BranchName', data.branchName || data.BranchName || 'Main Branch');
       localStorage.setItem('username', data.username || data.Username || '');

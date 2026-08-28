@@ -21,6 +21,7 @@ const messages = {
       edit: "Edit",
       saveChanges: "Save Changes",
       close: "Close",
+      clear: "Clear",
       next: "Next",
       prev: "Prev",
       seeAll: "See All",
@@ -92,6 +93,8 @@ const messages = {
         "Allow sale quantities like 1.50 kg. Turn off to keep whole-number quantities like 1.",
       receiptFooter: "Receipt Footer Note",
       receiptFontSize: "Receipt Font Size",
+      preferredPaperSize: "Preferred Paper Size",
+      preferredPaperSizeDesc: "Used by default for new Sale and Sale History printing.",
       realtimeSync: "Real-time Sync",
       realtimeSyncDesc:
         "Data saved here will automatically sync with your Local Storage and reflect on all vouchers.",
@@ -360,6 +363,7 @@ const messages = {
       edit: "ပြင်မည်",
       saveChanges: "ပြင်ဆင်ချက် သိမ်းမည်",
       close: "ပိတ်မည်",
+      clear: "ရှင်းမည်",
       next: "နောက်",
       prev: "ရှေ့",
       seeAll: "အားလုံးကြည့်ရန်",
@@ -431,6 +435,8 @@ const messages = {
         "1.50 kg လို ဒဿမအရေအတွက်ဖြင့် ရောင်းနိုင်ရန် ဖွင့်ပါ။ ပိတ်ထားပါက 1 လို ကိန်းပြည့်သာ သုံးပါမည်။",
       receiptFooter: "ဘောင်ချာ Foot Notes",
       receiptFontSize: "ဘောင်ချာ စာလုံးအရွယ်",
+      preferredPaperSize: "မူလသတ်မှတ် ဘောင်ချာစာရွက်အရွယ်",
+      preferredPaperSizeDesc: "အရောင်းနှင့် အရောင်းမှတ်တမ်း ပရင့်အသစ်များတွင် မူလရွေးချယ်မှုအဖြစ် သုံးပါမည်။",
       realtimeSync: "အချိန်နှင့်တပြေးညီ Sync လုပ်သွားပါမည်။",
       realtimeSyncDesc:
         "ဒီမှာသိမ်းထားတဲ့ဒေတာတွေ Local Storage နဲ့ အလိုအလျောက် sync လုပ်ပြီး ဘောင်ချာအားလုံးမှာ သက်ရောက်ပါမယ်။",

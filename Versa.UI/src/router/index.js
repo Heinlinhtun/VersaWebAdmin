@@ -29,7 +29,7 @@ const routes = [
       { path: "categories",          component: () => import("../views/Categories.vue"),            meta: { roles: ['Admin'] } },
       { path: "customers",           component: () => import("../views/Customers.vue"),             meta: { roles: ['Admin','Manager'] } },
       { path: "suppliers",           component: () => import("../views/Suppliers.vue"),             meta: { roles: ['Admin'] } },
-      { path: "Branches",            component: () => import("../views/Branches.vue"),              meta: { roles: ['Admin'] } },
+      { path: "Branches",            component: () => import("../views/Branches.vue"),              meta: { roles: ['Admin'], requiresBranchAccess: true } },
       { path: "Users",               component: () => import("../views/Users.vue"),                 meta: { roles: ['Admin'] } },
       { path: "StockAdjustment",     component: () => import("../views/StockAdjustment.vue"),       meta: { roles: ['Admin','Manager'] } },
       { path: "SaleReturn",          component: () => import("../views/SaleReturn.vue"),            meta: { roles: ['Admin','Manager','Staff'] } },
@@ -61,6 +61,10 @@ router.beforeEach((to, from, next) => {
       const fallback = ['Admin','Manager','Staff'].includes(userRole) ? "/dashboard" : "/Sale";
       return next(fallback);
     }
+  }
+
+  if (to.meta.requiresBranchAccess && localStorage.getItem('AllowBranch') !== 'true') {
+    return next('/master-data');
   }
 
   next();

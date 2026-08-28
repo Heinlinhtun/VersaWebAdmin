@@ -84,10 +84,19 @@ public class DatabaseService
     public async Task<Tenant?> GetTenantByLoginId(string shopLoginId)
     {
         using var conn = new MySqlConnection(_masterConn);
+        var allowBranchExists = await conn.ExecuteScalarAsync<int>(@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'Tenants'
+              AND COLUMN_NAME = 'AllowBranch'");
+        if (allowBranchExists == 0)
+        {
+            await conn.ExecuteAsync("ALTER TABLE Tenants ADD COLUMN AllowBranch TINYINT(1) NOT NULL DEFAULT 1");
+        }
         // မိတ်ဆွေရဲ့ Model ထဲက Column နာမည်တွေအတိုင်း SELECT လုပ်ခြင်း
         string sql = @"SELECT TenantId, ShopName, ShopLoginId, DbName, 
                           SubscriptionPlan, SubscriptionStartDate, 
-                          SubscriptionEndDate, IsActive, MaxUsers, 
+                          SubscriptionEndDate, IsActive, MaxUsers, AllowBranch,
                           ShopType, Address, ContactNumber, CreatedAt 
                    FROM Tenants WHERE ShopLoginId = @sid";
         return await conn.QueryFirstOrDefaultAsync<Tenant>(sql, new { sid = shopLoginId });
@@ -104,18 +113,38 @@ public class DatabaseService
         using var conn = new MySqlConnection(_masterConn);
         await conn.OpenAsync();
 
-        var tables = await conn.QueryAsync<string>(
+        var tables = (await conn.QueryAsync<string>(
             @"SELECT TABLE_NAME
               FROM INFORMATION_SCHEMA.TABLES
               WHERE TABLE_SCHEMA = @schema AND TABLE_TYPE = 'BASE TABLE'
               ORDER BY TABLE_NAME",
-            new { schema = sourceDb });
+            new { schema = sourceDb })).ToList();
 
-        foreach (var table in tables)
+        conn.ChangeDatabase(targetDb);
+        await conn.ExecuteAsync("SET FOREIGN_KEY_CHECKS = 0;");
+        try
         {
-            await new MySqlCommand(
-                $"CREATE TABLE `{EscapeIdentifier(targetDb)}`.`{EscapeIdentifier(table)}` LIKE `{EscapeIdentifier(sourceDb)}`.`{EscapeIdentifier(table)}`;",
-                conn).ExecuteNonQueryAsync();
+            foreach (var table in tables)
+            {
+                string createSql;
+                await using (var showCreateCmd = new MySqlCommand(
+                    $"SHOW CREATE TABLE `{EscapeIdentifier(sourceDb)}`.`{EscapeIdentifier(table)}`;", conn))
+                await using (var reader = await showCreateCmd.ExecuteReaderAsync())
+                {
+                    if (!await reader.ReadAsync())
+                    {
+                        continue;
+                    }
+
+                    createSql = reader.GetString(1);
+                }
+
+                await new MySqlCommand(createSql, conn).ExecuteNonQueryAsync();
+            }
+        }
+        finally
+        {
+            await conn.ExecuteAsync("SET FOREIGN_KEY_CHECKS = 1;");
         }
 
         var views = await conn.QueryAsync<string>(
@@ -152,27 +181,31 @@ public class DatabaseService
         await conn.OpenAsync();
 
         await conn.ExecuteAsync("SET FOREIGN_KEY_CHECKS = 0;");
-
-        var tables = await conn.QueryAsync<string>(
-            @"SELECT TABLE_NAME
-              FROM INFORMATION_SCHEMA.TABLES
-              WHERE TABLE_SCHEMA = @schema AND TABLE_TYPE = 'BASE TABLE'
-              ORDER BY TABLE_NAME",
-            new { schema = sourceDb });
-
-        foreach (var table in tables)
+        try
         {
-            if (excludedTables != null && excludedTables.Contains(table))
+            var tables = await conn.QueryAsync<string>(
+                @"SELECT TABLE_NAME
+                  FROM INFORMATION_SCHEMA.TABLES
+                  WHERE TABLE_SCHEMA = @schema AND TABLE_TYPE = 'BASE TABLE'
+                  ORDER BY TABLE_NAME",
+                new { schema = sourceDb });
+
+            foreach (var table in tables)
             {
-                continue;
+                if (excludedTables != null && excludedTables.Contains(table))
+                {
+                    continue;
+                }
+
+                await new MySqlCommand(
+                    $"INSERT INTO `{EscapeIdentifier(targetDb)}`.`{EscapeIdentifier(table)}` SELECT * FROM `{EscapeIdentifier(sourceDb)}`.`{EscapeIdentifier(table)}`;",
+                    conn).ExecuteNonQueryAsync();
             }
-
-            await new MySqlCommand(
-                $"INSERT INTO `{EscapeIdentifier(targetDb)}`.`{EscapeIdentifier(table)}` SELECT * FROM `{EscapeIdentifier(sourceDb)}`.`{EscapeIdentifier(table)}`;",
-                conn).ExecuteNonQueryAsync();
         }
-
-        await conn.ExecuteAsync("SET FOREIGN_KEY_CHECKS = 1;");
+        finally
+        {
+            await conn.ExecuteAsync("SET FOREIGN_KEY_CHECKS = 1;");
+        }
     }
 
     public async Task<bool> DatabaseExists(string dbName)

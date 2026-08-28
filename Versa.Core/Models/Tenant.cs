@@ -12,6 +12,7 @@ public class Tenant
     public DateTime SubscriptionEndDate { get; set; }
     public bool IsActive { get; set; }
     public int MaxUsers { get; set; } = 5;
+    public bool AllowBranch { get; set; } = true;
     public string? ShopType { get; set; }
     public string? Address { get; set; }
     public string? ContactNumber { get; set; }
@@ -31,6 +32,7 @@ public class RegisterShopViewModel
     public string? ShopType { get; set; }
     public string? Address { get; set; }
     public string? ContactNumber { get; set; }
+    public bool AllowBranch { get; set; }
 }
 
 // ViewModel for Edit Form

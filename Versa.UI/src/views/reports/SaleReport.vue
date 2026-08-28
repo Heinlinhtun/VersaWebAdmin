@@ -112,6 +112,19 @@
         </div>
 
         <div v-else-if="reportView === 'item'" class="flex-1 overflow-x-auto">
+          <div v-if="selectedItemBar" class="px-4 py-2.5 bg-blue-50 border-b border-blue-100 flex items-center justify-between gap-3">
+            <div class="min-w-0 text-[10px] font-normal uppercase tracking-wider text-blue-700 truncate">
+              {{ selectedItemBar.name }}
+              <span class="text-blue-400">({{ selectedItemBar.unit }})</span>
+            </div>
+            <button type="button" @click="clearItemFilter"
+              class="w-7 h-7 shrink-0 inline-flex items-center justify-center rounded-md text-blue-500 hover:text-blue-700 hover:bg-blue-100 transition-colors"
+              :title="tx.clearItemFilter" :aria-label="tx.clearItemFilter">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <table class="w-full text-left border-collapse min-w-[900px]">
             <thead class="bg-[#3f3f46] text-white">
               <tr class="text-[10px] font-normal uppercase tracking-[0.2em] text-white">
@@ -146,6 +159,11 @@
                 <td class="p-4 text-right text-amber-600 tabular-nums">-{{ formatNumber(item.DiscountAmount ?? item.discountAmount) }}</td>
                 <td class="p-4 text-right font-normal text-slate-900 tabular-nums bg-slate-50/30">
                   {{ formatNumber(item.LineTotal ?? item.lineTotal) }}
+                </td>
+              </tr>
+              <tr v-if="filteredSaleItems.length === 0">
+                <td colspan="9" class="p-8 text-center text-slate-400 text-[10px] uppercase tracking-widest">
+                  {{ tx.awaitingData }}
                 </td>
               </tr>
             </tbody>
@@ -211,10 +229,14 @@
             <p class="text-[10px] font-normal uppercase tracking-widest">{{ tx.awaitingData }}</p>
           </div>
 
-          <div v-for="item in soldItemBars" :key="`${item.name}|||${item.unit}`" class="space-y-1.5">
+          <button v-for="item in soldItemBars" :key="item.key" type="button" @click="toggleItemFilter(item)"
+            :class="selectedItemKey === item.key ? 'bg-blue-50 border-blue-200 shadow-sm' : 'border-transparent hover:bg-slate-50 hover:border-slate-200'"
+            class="w-full text-left p-2.5 border rounded-lg space-y-1.5 transition-colors"
+            :aria-pressed="selectedItemKey === item.key" :title="item.name">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
-                <div class="text-[11px] font-normal text-slate-700 truncate">{{ item.name }} <span class="text-[9px] text-slate-400 font-normal">({{ item.unit }})</span></div>
+                <div :class="selectedItemKey === item.key ? 'text-blue-700' : 'text-slate-700'"
+                  class="text-[11px] font-normal truncate">{{ item.name }} <span class="text-[9px] text-slate-400 font-normal">({{ item.unit }})</span></div>
                 <div class="text-[9px] font-normal text-slate-400 uppercase tracking-wider">
                   {{ formatNumber(item.quantity) }} {{ item.unit }} · {{ formatNumber(item.amount) }} Ks
                 </div>
@@ -224,9 +246,10 @@
               </div>
             </div>
             <div class="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-              <div class="h-full bg-blue-500 rounded-full transition-all duration-500" :style="{ width: `${item.percent}%` }"></div>
+              <div :class="selectedItemKey === item.key ? 'bg-blue-700' : 'bg-blue-500'"
+                class="h-full rounded-full transition-all duration-500" :style="{ width: `${item.percent}%` }"></div>
             </div>
-          </div>
+          </button>
         </div>
 
         <div v-else class="flex-1 min-h-[420px] flex gap-5 items-center">
@@ -278,6 +301,7 @@ const saleItems = ref([]);
 const collections = ref([]);
 const settlementRows = ref([]);
 const reportView = ref('voucher');
+const selectedItemKey = ref('');
 const tx = computed(() => ({
   netRevenue: t('reportViews.sale.netRevenue'),
   voucherSavings: t('reportViews.sale.voucherSavings'),
@@ -310,6 +334,7 @@ const tx = computed(() => ({
   next: t('reportViews.sale.next'),
   settlementChannels: t('reportViews.sale.settlementChannels'),
   soldItemsByName: t('reportViews.sale.soldItemsByName'),
+  clearItemFilter: t('common.clear') || 'Clear',
   awaitingData: t('reportViews.sale.awaitingData'),
   analyzingSalesFlows: t('reportViews.sale.analyzingSalesFlows')
 }));
@@ -355,8 +380,19 @@ const getSaleNetTotal = (sale) => {
   return Math.max(0, subTotal - discount + delivery - returned);
 };
 
+const itemBarKey = (item) => {
+  const itemName = item.ItemName || item.itemName || '-';
+  const unitName = item.UnitName || item.unitName || '-';
+  return `${itemName}|||${unitName}`;
+};
+
+const filteredSaleItems = computed(() => {
+  if (!selectedItemKey.value) return saleItems.value;
+  return saleItems.value.filter(item => itemBarKey(item) === selectedItemKey.value);
+});
+
 const activeRows = computed(() => {
-  if (reportView.value === 'item') return saleItems.value;
+  if (reportView.value === 'item') return filteredSaleItems.value;
   if (reportView.value === 'collection') return collections.value;
   return sales.value;
 });
@@ -369,7 +405,7 @@ const paginatedSales = computed(() => {
 
 const paginatedSaleItems = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
-  return saleItems.value.slice(start, start + itemsPerPage);
+  return filteredSaleItems.value.slice(start, start + itemsPerPage);
 });
 
 const paginatedCollections = computed(() => {
@@ -448,8 +484,8 @@ const soldItemBars = computed(() => {
     const itemName = item.ItemName || item.itemName || '-';
     const unitName = item.UnitName || item.unitName || '-';
     // Group by both item name AND unit so different units aren't summed together
-    const key = `${itemName}|||${unitName}`;
-    const existing = grouped.get(key) || { name: itemName, unit: unitName, quantity: 0, amount: 0 };
+    const key = itemBarKey(item);
+    const existing = grouped.get(key) || { key, name: itemName, unit: unitName, quantity: 0, amount: 0 };
     existing.quantity += toNumber(item.Quantity ?? item.quantity);
     existing.amount += toNumber(item.LineTotal ?? item.lineTotal);
     grouped.set(key, existing);
@@ -466,6 +502,21 @@ const soldItemBars = computed(() => {
   }));
 });
 
+const selectedItemBar = computed(() => {
+  if (!selectedItemKey.value) return null;
+  return soldItemBars.value.find(item => item.key === selectedItemKey.value) || null;
+});
+
+const clearItemFilter = () => {
+  selectedItemKey.value = '';
+  currentPage.value = 1;
+};
+
+const toggleItemFilter = (item) => {
+  selectedItemKey.value = selectedItemKey.value === item.key ? '' : item.key;
+  currentPage.value = 1;
+};
+
 const handleExportCsv = () => {
   if (reportView.value === 'item') {
     const headers = [
@@ -480,7 +531,7 @@ const handleExportCsv = () => {
       t('reportViews.sale.lineTotal')
     ];
 
-    const rows = saleItems.value.map(item => [
+    const rows = filteredSaleItems.value.map(item => [
       normalizeSaleVoucher(item.VoucherNo || item.voucherNo, item.SaleId || item.saleId),
       item.ItemName || item.itemName || '',
       item.Sku || item.sku || '',
@@ -579,6 +630,7 @@ const fetchData = async () => {
 
 watch(() => props.filters, () => {
   currentPage.value = 1;
+  selectedItemKey.value = '';
   fetchData();
 }, { deep: true });
 

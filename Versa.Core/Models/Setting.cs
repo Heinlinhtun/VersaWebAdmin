@@ -16,6 +16,7 @@ namespace Versa.Core.Models
         public string? ReceiptFooter { get; set; }
         public string LogoSize { get; set; } = "Large";
         public string ReceiptFontSize { get; set; } = "Medium";
+        public string PreferredPaperSize { get; set; } = "80mm";
         public bool UseDecimalQuantity { get; set; } = false;
     }
 }

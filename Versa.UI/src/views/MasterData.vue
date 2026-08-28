@@ -25,7 +25,7 @@
                 class="px-8 py-2.5 rounded-lg font-normal text-[11px] uppercase tracking-wide transition-all duration-300">
                 {{ t('units.title') }}
             </button>
-            <button @click="activeTab = 'branches'"
+            <button v-if="allowBranch" @click="activeTab = 'branches'"
                 :class="activeTab === 'branches' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
                 class="px-8 py-2.5 rounded-lg font-normal text-[11px] uppercase tracking-wide transition-all duration-300">
                 {{ t('branches.title') }}
@@ -308,7 +308,7 @@
         </div>
 
         <!-- ===================== BRANCHES TAB ===================== -->
-        <div v-if="activeTab === 'branches'">
+        <div v-if="allowBranch && activeTab === 'branches'">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4">
                 <div class="relative flex-1 md:w-80">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
@@ -498,10 +498,11 @@ const { addToast } = useToast();
 const { t } = useI18n();
 
 const activeTab = ref('categories');
+const allowBranch = localStorage.getItem('AllowBranch') === 'true';
 const tabs = computed(() => [
     { id: 'categories', label: t('categories.title') },
     { id: 'units', label: t('units.title') },
-    { id: 'branches', label: t('branches.title') },
+    ...(allowBranch ? [{ id: 'branches', label: t('branches.title') }] : []),
 ]);
 
 const getApiErrorMessage = (err, fallback) => (
@@ -642,7 +643,10 @@ watch(() => branch.searchQuery, () => { branch.currentPage = 1; });
 
 const fetchCategories = async () => { try { const r = await api.get('/categories'); cat.list = r.data; } catch { } };
 const fetchUnits = async () => { try { const r = await api.get('/units'); unit.list = r.data; } catch { } };
-const fetchBranches = async () => { try { const r = await api.get('/Branches'); branch.list = Array.isArray(r.data) ? r.data : []; } catch { } };
+const fetchBranches = async () => {
+    if (!allowBranch) return;
+    try { const r = await api.get('/Branches'); branch.list = Array.isArray(r.data) ? r.data : []; } catch { }
+};
 
-onMounted(() => { fetchCategories(); fetchUnits(); fetchBranches(); });
+onMounted(() => { fetchCategories(); fetchUnits(); if (allowBranch) fetchBranches(); });
 </script>

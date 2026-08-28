@@ -443,7 +443,7 @@ New POS shop registration fails:
 
 - Confirm `pos_template` exists.
 - Confirm the MySQL user has privileges on `pos_template` and `pos_%`.
-- Restaurant shops use `VersaWebAdmin/wwwroot/sql/RestaurantTemplate.sql`; normal POS shops clone `pos_template`.
+- Restaurant shops clone the live `restaurant_template` database; normal POS shops clone `pos_template`.
 
 Backups fail:
 

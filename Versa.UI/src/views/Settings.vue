@@ -79,6 +79,17 @@
                         </label>
                     </div>
                 </div>
+                <div class="mt-4">
+                    <label class="block text-xs font-normal uppercase text-gray-500 mb-2">{{
+                        t('settings.preferredPaperSize') }}</label>
+                    <select v-model="form.PreferredPaperSize"
+                        class="w-full p-3 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm text-slate-700">
+                        <option value="80mm">{{ t('common.thermal80') }}</option>
+                        <option value="A4">{{ t('common.a4') }}</option>
+                        <option value="A5">{{ t('common.a5') }}</option>
+                    </select>
+                    <p class="text-[11px] text-slate-400 mt-1.5">{{ t('settings.preferredPaperSizeDesc') }}</p>
+                </div>
             </div>
 
             <div class="lg:col-span-2 space-y-6">
@@ -199,6 +210,7 @@ const form = ref({
     LogoData: null,
     LogoSize: 'Large', // Default size
     ReceiptFontSize: 'Medium', // Default receipt font size
+    PreferredPaperSize: '80mm',
     UseDecimalQuantity: false
 });
 
@@ -241,6 +253,9 @@ const fetchSettings = async () => {
         if (res.data) {
             form.value = {
                 ...res.data,
+                PreferredPaperSize: ['80mm', 'A4', 'A5'].includes(res.data.PreferredPaperSize ?? res.data.preferredPaperSize)
+                    ? (res.data.PreferredPaperSize ?? res.data.preferredPaperSize)
+                    : '80mm',
                 UseDecimalQuantity: toBooleanSetting(res.data.UseDecimalQuantity ?? res.data.useDecimalQuantity)
             };
             if (res.data.LogoData) {

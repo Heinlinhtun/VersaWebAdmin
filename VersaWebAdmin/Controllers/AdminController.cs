@@ -48,9 +48,20 @@ public class AdminController : Controller
     {
         if (!ModelState.IsValid) return View("Index", model);
 
-        string safeLoginId = model.ShopLoginId.ToLower().Trim();
-        string newDbName = $"pos_db_{safeLoginId}";
+        string safeLoginId = model.ShopLoginId.ToLowerInvariant().Trim();
+        bool isRestaurant = IsRestaurant(model.ShopType);
+        if (!IsValidShopLoginId(safeLoginId, isRestaurant))
+        {
+            ModelState.AddModelError(nameof(model.ShopLoginId),
+                isRestaurant
+                    ? "Restaurant Shop ID must be 1-45 characters using only letters, numbers, and underscore."
+                    : "Shop ID must use only letters, numbers, and underscore.");
+            return View("Index", model);
+        }
+
+        string newDbName = BuildTenantDatabaseName(safeLoginId, isRestaurant);
         string masterConn = _dbService.GetMasterConnectionString();
+        bool databaseCreated = false;
 
         try
         {
@@ -58,21 +69,45 @@ public class AdminController : Controller
             {
                 await conn.OpenAsync();
 
+                using (var duplicateCmd = new MySqlCommand(
+                    "SELECT COUNT(*) FROM Tenants WHERE ShopLoginId = @loginId OR DbName = @dbName", conn))
+                {
+                    duplicateCmd.Parameters.AddWithValue("@loginId", safeLoginId);
+                    duplicateCmd.Parameters.AddWithValue("@dbName", newDbName);
+                    if (Convert.ToInt32(await duplicateCmd.ExecuteScalarAsync()) > 0)
+                    {
+                        ModelState.AddModelError(nameof(model.ShopLoginId), "This Shop ID is already registered.");
+                        return View("Index", model);
+                    }
+                }
+
+                if (await _dbService.DatabaseExists(newDbName))
+                {
+                    ModelState.AddModelError(nameof(model.ShopLoginId), $"Database {newDbName} already exists.");
+                    return View("Index", model);
+                }
+
                 // 1. Database အသစ်ဆောက်ခြင်း
-                using (var createDbCmd = new MySqlCommand($"CREATE DATABASE IF NOT EXISTS `{newDbName}`;", conn))
+                using (var createDbCmd = new MySqlCommand(
+                    $"CREATE DATABASE `{newDbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", conn))
                 {
                     await createDbCmd.ExecuteNonQueryAsync();
+                    databaseCreated = true;
                 }
 
                 // 2. Structure ကူးယူခြင်း သို့မဟုတ် Template Run ခြင်း
-                if (model.ShopType == "Restaurant")
+                if (isRestaurant)
                 {
-                    string sqlPath = Path.Combine(_env.WebRootPath, "sql", "RestaurantTemplate.sql");
-                    string sqlScript = await System.IO.File.ReadAllTextAsync(sqlPath);
-                    await _dbService.ExecuteSqlScriptAsync(newDbName, sqlScript);
+                    await _dbService.CloneDatabaseStructure("restaurant_template", newDbName);
+                    await _dbService.CloneDatabaseData("restaurant_template", newDbName);
 
                     // 3. Admin User သတ်မှတ်ခြင်း (Restaurant schema use Staff table)
                     await SetupRestaurantAdmin(newDbName, model.AdminUsername, model.AdminPassword);
+                    await UpdateRestaurantSettingsAsync(
+                        newDbName,
+                        model.ShopName,
+                        model.Address,
+                        model.ContactNumber);
                 }
                 else
                 {
@@ -83,7 +118,7 @@ public class AdminController : Controller
                 }
 
                 // 4. POS_Master.Tenants ထဲတွင် မှတ်ပုံတင်ခြင်း
-                DateTime startDate = DateTime.Now;
+                DateTime startDate = GetMyanmarNow();
                 DateTime endDate = startDate.AddMonths(PlanMonths);
 
                 // Plan အမည်ကို လအလိုက် သတ်မှတ်ခြင်း
@@ -98,8 +133,8 @@ public class AdminController : Controller
                 };
 
                 string insertSql = @"INSERT INTO Tenants 
-                (ShopName, ShopLoginId, DbName, SubscriptionPlan, SubscriptionStartDate, SubscriptionEndDate, IsActive, MaxUsers, ShopType, Address, ContactNumber) 
-                VALUES (@name, @loginId, @db, @plan, @start, @end, 1, @maxUsers, @type, @addr, @contact)";
+                (ShopName, ShopLoginId, DbName, SubscriptionPlan, SubscriptionStartDate, SubscriptionEndDate, IsActive, MaxUsers, AllowBranch, ShopType, Address, ContactNumber)
+                VALUES (@name, @loginId, @db, @plan, @start, @end, 1, @maxUsers, @allowBranch, @type, @addr, @contact)";
 
                 using (var insertMaster = new MySqlCommand(insertSql, conn))
                 {
@@ -110,6 +145,7 @@ public class AdminController : Controller
                     insertMaster.Parameters.AddWithValue("@start", startDate);
                     insertMaster.Parameters.AddWithValue("@end", endDate);
                     insertMaster.Parameters.AddWithValue("@maxUsers", MaxUsers);
+                    insertMaster.Parameters.AddWithValue("@allowBranch", !isRestaurant && model.AllowBranch);
                     insertMaster.Parameters.AddWithValue("@type", model.ShopType ?? "");
                     insertMaster.Parameters.AddWithValue("@addr", model.Address ?? "");
                     insertMaster.Parameters.AddWithValue("@contact", model.ContactNumber ?? "");
@@ -120,6 +156,11 @@ public class AdminController : Controller
         }
         catch (Exception ex)
         {
+            if (databaseCreated)
+            {
+                await TryDropDatabaseAsync(newDbName);
+            }
+
             ModelState.AddModelError("", "Error: " + ex.Message);
             return View("Index", model);
         }
@@ -137,7 +178,7 @@ public class AdminController : Controller
             // Subscription အချက်အလက်တွေပါ ဆွဲထုတ်ပါမယ်
             string sql = @"SELECT TenantId, ShopName, ShopLoginId, DbName, 
                               SubscriptionPlan, SubscriptionStartDate, 
-                              SubscriptionEndDate, IsActive, MaxUsers, 
+                              SubscriptionEndDate, IsActive, MaxUsers, AllowBranch,
                               ShopType, Address, ContactNumber, CreatedAt 
                        FROM Tenants ORDER BY CreatedAt DESC";
 
@@ -166,6 +207,7 @@ public class AdminController : Controller
                     IsActive = reader.IsDBNull(reader.GetOrdinal("IsActive")) ? true : reader.GetBoolean("IsActive"),
 
                     MaxUsers = reader.IsDBNull(reader.GetOrdinal("MaxUsers")) ? 5 : reader.GetInt32("MaxUsers"),
+                    AllowBranch = reader.IsDBNull(reader.GetOrdinal("AllowBranch")) || reader.GetBoolean("AllowBranch"),
                     ShopType = reader.IsDBNull(reader.GetOrdinal("ShopType")) ? "" : reader.GetString("ShopType"),
                     Address = reader.IsDBNull(reader.GetOrdinal("Address")) ? "" : reader.GetString("Address"),
                     ContactNumber = reader.IsDBNull(reader.GetOrdinal("ContactNumber")) ? "" : reader.GetString("ContactNumber"),
@@ -180,10 +222,15 @@ public class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> RunBackupNow(CancellationToken cancellationToken)
+    public IActionResult RunBackupNow([FromServices] IManualBackupQueue backupQueue)
     {
-        var result = await _tenantBackupService.RunBackupAsync("Admin manual backup", cancellationToken);
-        TempData[result.IsSuccess ? "BackupSuccess" : "BackupError"] = result.Message;
+        if (!backupQueue.TryQueueBackup())
+        {
+            TempData["BackupError"] = "A manual backup is already queued or running.";
+            return RedirectToAction("ShopList");
+        }
+
+        TempData["BackupSuccess"] = "Backup started in the background. A Telegram alert will be sent when it finishes.";
         return RedirectToAction("ShopList");
     }
 
@@ -303,7 +350,16 @@ public class AdminController : Controller
             return RedirectToAction("ShopList");
         }
 
-        var newDbName = $"pos_db_{safeLoginId}";
+        var sourceIsRestaurant = IsRestaurant(sourceTenant.ShopType);
+        if (!IsValidShopLoginId(safeLoginId, sourceIsRestaurant))
+        {
+            TempData["DuplicateError"] = sourceIsRestaurant
+                ? "Restaurant Shop ID must be 1-45 characters using only letters, numbers, and underscore."
+                : "Shop ID must use only letters, numbers, and underscore.";
+            return RedirectToAction("ShopList");
+        }
+
+        var newDbName = BuildTenantDatabaseName(safeLoginId, sourceIsRestaurant);
         if (await _dbService.DatabaseExists(newDbName))
         {
             TempData["DuplicateError"] = $"Database {newDbName} already exists.";
@@ -325,11 +381,12 @@ public class AdminController : Controller
         await using var dbConn = new MySqlConnection(connString);
         await dbConn.OpenAsync(cancellationToken);
 
-        await using var tx = await dbConn.BeginTransactionAsync(cancellationToken);
+        bool databaseCreated = false;
         try
         {
-            await new MySqlCommand($"CREATE DATABASE `{newDbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", dbConn, (MySqlTransaction)tx)
+            await new MySqlCommand($"CREATE DATABASE `{newDbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", dbConn)
                 .ExecuteNonQueryAsync(cancellationToken);
+            databaseCreated = true;
 
             await _dbService.CloneDatabaseStructure(sourceTenant.DbName, newDbName);
             await _dbService.CloneDatabaseData(sourceTenant.DbName, newDbName);
@@ -337,21 +394,26 @@ public class AdminController : Controller
             if (string.Equals(sourceTenant.ShopType, "Restaurant", StringComparison.OrdinalIgnoreCase))
             {
                 await RewriteRestaurantAdminAsync(newDbName, newAdminUsername, newAdminPassword);
+                await UpdateRestaurantSettingsAsync(
+                    newDbName,
+                    newShopName,
+                    sourceTenant.Address,
+                    sourceTenant.ContactNumber);
             }
             else
             {
                 await RewriteDefaultAdminAsync(newDbName, newAdminUsername, newAdminPassword);
             }
 
-            var now = DateTime.Now;
+            var now = GetMyanmarNow();
             var planMonths = Math.Max(1, (sourceTenant.SubscriptionEndDate - sourceTenant.SubscriptionStartDate).Days / 30);
             var newEndDate = now.AddMonths(planMonths);
 
             var insertSql = @"INSERT INTO Tenants
-                (ShopName, ShopLoginId, DbName, SubscriptionPlan, SubscriptionStartDate, SubscriptionEndDate, IsActive, MaxUsers, ShopType, Address, ContactNumber)
-                VALUES (@name, @loginId, @db, @plan, @start, @end, 1, @maxUsers, @type, @addr, @contact)";
+                (ShopName, ShopLoginId, DbName, SubscriptionPlan, SubscriptionStartDate, SubscriptionEndDate, IsActive, MaxUsers, AllowBranch, ShopType, Address, ContactNumber)
+                VALUES (@name, @loginId, @db, @plan, @start, @end, 1, @maxUsers, @allowBranch, @type, @addr, @contact)";
 
-            await using (var insertCmd = new MySqlCommand(insertSql, dbConn, (MySqlTransaction)tx))
+            await using (var insertCmd = new MySqlCommand(insertSql, dbConn))
             {
                 insertCmd.Parameters.AddWithValue("@name", newShopName);
                 insertCmd.Parameters.AddWithValue("@loginId", safeLoginId);
@@ -360,18 +422,22 @@ public class AdminController : Controller
                 insertCmd.Parameters.AddWithValue("@start", now);
                 insertCmd.Parameters.AddWithValue("@end", newEndDate);
                 insertCmd.Parameters.AddWithValue("@maxUsers", sourceTenant.MaxUsers);
+                insertCmd.Parameters.AddWithValue("@allowBranch", !sourceIsRestaurant && sourceTenant.AllowBranch);
                 insertCmd.Parameters.AddWithValue("@type", sourceTenant.ShopType ?? "");
                 insertCmd.Parameters.AddWithValue("@addr", sourceTenant.Address ?? "");
                 insertCmd.Parameters.AddWithValue("@contact", sourceTenant.ContactNumber ?? "");
                 await insertCmd.ExecuteNonQueryAsync(cancellationToken);
             }
 
-            await tx.CommitAsync(cancellationToken);
             TempData["DuplicateSuccess"] = $"{sourceTenant.ShopName} was duplicated to {newShopName}.";
         }
         catch (Exception ex)
         {
-            await tx.RollbackAsync(cancellationToken);
+            if (databaseCreated)
+            {
+                await TryDropDatabaseAsync(newDbName);
+            }
+
             TempData["DuplicateError"] = $"Duplicate failed: {ex.Message}";
         }
 
@@ -603,6 +669,7 @@ public class AdminController : Controller
                     ContactNumber = reader.IsDBNull(reader.GetOrdinal("ContactNumber")) ? "" : reader.GetString("ContactNumber"),
                     MaxUsers = reader.IsDBNull(reader.GetOrdinal("MaxUsers")) ? 5 : reader.GetInt32("MaxUsers"),
                     SubscriptionPlan = reader.IsDBNull(reader.GetOrdinal("SubscriptionPlan")) ? "" : reader.GetString("SubscriptionPlan"),
+                    AllowBranch = reader.IsDBNull(reader.GetOrdinal("AllowBranch")) || reader.GetBoolean("AllowBranch"),
                     IsActive = reader.GetBoolean("IsActive")
                 };
             }
@@ -619,7 +686,7 @@ public class AdminController : Controller
         using (var conn = new MySqlConnection(masterConn))
         {
             await conn.OpenAsync();
-            string sql = "UPDATE Tenants SET ShopName = @name, ShopType = @type, Address = @addr, ContactNumber = @contact, MaxUsers = @users, SubscriptionPlan = @plan WHERE TenantId = @id";
+            string sql = "UPDATE Tenants SET ShopName = @name, ShopType = @type, Address = @addr, ContactNumber = @contact, MaxUsers = @users, SubscriptionPlan = @plan, AllowBranch = @allowBranch WHERE TenantId = @id";
             using var cmd = new MySqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@name", model.ShopName);
             cmd.Parameters.AddWithValue("@type", model.ShopType ?? "");
@@ -627,6 +694,7 @@ public class AdminController : Controller
             cmd.Parameters.AddWithValue("@contact", model.ContactNumber ?? "");
             cmd.Parameters.AddWithValue("@users", model.MaxUsers);
             cmd.Parameters.AddWithValue("@plan", model.SubscriptionPlan);
+            cmd.Parameters.AddWithValue("@allowBranch", model.AllowBranch);
             cmd.Parameters.AddWithValue("@id", model.TenantId);
             await cmd.ExecuteNonQueryAsync();
         }
@@ -684,7 +752,9 @@ public class AdminController : Controller
         int tenantId,
         CancellationToken cancellationToken)
     {
-        const string sql = @"SELECT TenantId, ShopName, ShopLoginId, DbName, ShopType
+        const string sql = @"SELECT TenantId, ShopName, ShopLoginId, DbName, ShopType,
+                                    SubscriptionPlan, SubscriptionStartDate, SubscriptionEndDate,
+                                    MaxUsers, AllowBranch, Address, ContactNumber
                              FROM Tenants
                              WHERE TenantId = @id
                              LIMIT 1";
@@ -704,7 +774,14 @@ public class AdminController : Controller
             ShopName = reader.IsDBNull(reader.GetOrdinal("ShopName")) ? "" : reader.GetString("ShopName"),
             ShopLoginId = reader.IsDBNull(reader.GetOrdinal("ShopLoginId")) ? "" : reader.GetString("ShopLoginId"),
             DbName = reader.IsDBNull(reader.GetOrdinal("DbName")) ? "" : reader.GetString("DbName"),
-            ShopType = reader.IsDBNull(reader.GetOrdinal("ShopType")) ? "" : reader.GetString("ShopType")
+            ShopType = reader.IsDBNull(reader.GetOrdinal("ShopType")) ? "" : reader.GetString("ShopType"),
+            SubscriptionPlan = reader.IsDBNull(reader.GetOrdinal("SubscriptionPlan")) ? "Basic" : reader.GetString("SubscriptionPlan"),
+            SubscriptionStartDate = reader.IsDBNull(reader.GetOrdinal("SubscriptionStartDate")) ? DateTime.Now : reader.GetDateTime("SubscriptionStartDate"),
+            SubscriptionEndDate = reader.IsDBNull(reader.GetOrdinal("SubscriptionEndDate")) ? DateTime.Now.AddMonths(1) : reader.GetDateTime("SubscriptionEndDate"),
+            MaxUsers = reader.IsDBNull(reader.GetOrdinal("MaxUsers")) ? 5 : reader.GetInt32("MaxUsers"),
+            AllowBranch = reader.IsDBNull(reader.GetOrdinal("AllowBranch")) || reader.GetBoolean("AllowBranch"),
+            Address = reader.IsDBNull(reader.GetOrdinal("Address")) ? "" : reader.GetString("Address"),
+            ContactNumber = reader.IsDBNull(reader.GetOrdinal("ContactNumber")) ? "" : reader.GetString("ContactNumber")
         };
     }
 
@@ -749,10 +826,14 @@ public class AdminController : Controller
 
         if (string.Equals(tenant.ShopType, "Restaurant", StringComparison.OrdinalIgnoreCase))
         {
-            string sqlPath = Path.Combine(_env.WebRootPath, "sql", "RestaurantTemplate.sql");
-            string sqlScript = await System.IO.File.ReadAllTextAsync(sqlPath, cancellationToken);
-            await _dbService.ExecuteSqlScriptAsync(tenant.DbName, sqlScript);
+            await _dbService.CloneDatabaseStructure("restaurant_template", tenant.DbName);
+            await _dbService.CloneDatabaseData("restaurant_template", tenant.DbName);
             await SetupRestaurantAdmin(tenant.DbName, shopAdminUsername, newShopAdminPassword);
+            await UpdateRestaurantSettingsAsync(
+                tenant.DbName,
+                tenant.ShopName,
+                tenant.Address,
+                tenant.ContactNumber);
             return;
         }
 
@@ -854,11 +935,79 @@ public class AdminController : Controller
             {
                 cmd.Parameters.AddWithValue("@user", adminUsername);
                 cmd.Parameters.AddWithValue("@pin", adminPin);
-                cmd.Parameters.AddWithValue("@now", DateTime.UtcNow);
+                cmd.Parameters.AddWithValue("@now", GetMyanmarNow());
                 await cmd.ExecuteNonQueryAsync();
             }
         }
     }
+
+    private async Task UpdateRestaurantSettingsAsync(
+        string databaseName,
+        string shopName,
+        string? address,
+        string? contactNumber)
+    {
+        string tenantConnStr = _dbService.GetTenantConnectionString(databaseName);
+        await using var conn = new MySqlConnection(tenantConnStr);
+        await conn.OpenAsync();
+
+        const string sql = """
+            INSERT INTO Settings
+                (Id, ShopName, ShopAddress, ShopPhone, CurrencySymbol, Language)
+            VALUES
+                (1, @shopName, @address, @phone, 'Ks', 'my-MM')
+            ON DUPLICATE KEY UPDATE
+                ShopName = VALUES(ShopName),
+                ShopAddress = VALUES(ShopAddress),
+                ShopPhone = VALUES(ShopPhone),
+                CurrencySymbol = VALUES(CurrencySymbol),
+                Language = VALUES(Language);
+            """;
+        await using var cmd = new MySqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@shopName", shopName);
+        cmd.Parameters.AddWithValue("@address", address ?? string.Empty);
+        cmd.Parameters.AddWithValue("@phone", contactNumber ?? string.Empty);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private async Task TryDropDatabaseAsync(string databaseName)
+    {
+        try
+        {
+            await using var conn = new MySqlConnection(_dbService.GetMasterConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = new MySqlCommand(
+                $"DROP DATABASE IF EXISTS {QuoteIdentifier(databaseName)};", conn);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        catch
+        {
+            // Preserve the original registration error. The orphan database can
+            // still be identified by its validated, deterministic name.
+        }
+    }
+
+    private static bool IsRestaurant(string? shopType) =>
+        string.Equals(shopType, "Restaurant", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsValidShopLoginId(string shopLoginId, bool isRestaurant)
+    {
+        int maximumLength = isRestaurant ? 45 : 50;
+        return shopLoginId.Length is > 0
+            && shopLoginId.Length <= maximumLength
+            && shopLoginId.All(character =>
+                character is >= 'a' and <= 'z'
+                or >= '0' and <= '9'
+                or '_');
+    }
+
+    private static string BuildTenantDatabaseName(string shopLoginId, bool isRestaurant) =>
+        isRestaurant
+            ? $"versa_restaurantDB_{shopLoginId}"
+            : $"pos_db_{shopLoginId}";
+
+    private static DateTime GetMyanmarNow() =>
+        DateTime.UtcNow.AddMinutes(390);
 
     private async Task RewriteRestaurantAdminAsync(string newDbName, string adminUsername, string adminPin)
     {
@@ -1050,5 +1199,18 @@ public class AdminController : Controller
 
         string encryptedKey = _encryptionService.EncryptMacAddress(model.MacAddress);
         return Json(new { success = true, encryptedKey });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult GenerateAndroidLicense([FromBody] DeviceCodeRequest model)
+    {
+        if (model == null || string.IsNullOrWhiteSpace(model.DeviceCode))
+        {
+            return Json(new { success = false, message = "Invalid device code" });
+        }
+
+        string activationKey = LotusLicense.GenerateActivationKey(model.DeviceCode);
+        return Json(new { success = true, activationKey });
     }
 }

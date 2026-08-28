@@ -34,6 +34,14 @@
         <input name="MaxUsers" type="number" class="form-control shadow-sm" value="5" min="1" required>
     </div>
 
+    <div class="col-md-6 mb-3 d-flex align-items-end branch-management-field">
+        <div class="form-check form-switch border rounded p-3 ps-5 w-100 bg-light">
+            <input name="AllowBranch" class="form-check-input" type="checkbox" value="true" id="allowBranch">
+            <label class="form-check-label fw-bold" for="allowBranch">Allow Branch Management</label>
+            <div class="form-text">Allows access to Master Data / Branches.</div>
+        </div>
+    </div>
+
     <div class="col-md-6 mb-3">
         <label class="form-label fw-bold text-primary">Subscription Plan (သက်တမ်းရွေးချယ်ရန်)</label>
         <select name="PlanMonths" class="form-select border-primary shadow-sm" required>

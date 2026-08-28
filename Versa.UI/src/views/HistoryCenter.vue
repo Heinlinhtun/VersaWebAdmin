@@ -213,6 +213,15 @@
                         d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
                   </button>
+                  <button @click="printDeliForm(item.saleId || item.SaleId)"
+                    class="p-2 bg-slate-50 text-slate-400 hover:text-amber-600 transition-all shadow-sm" title="Print Deli Form">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+                    </svg>
+                  </button>
                 </div>
               </td>
             </template>
@@ -374,6 +383,75 @@
       </div>
     </div>
 
+    <div v-if="showDeliFormModal"
+      class="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in duration-200">
+        <div class="bg-[#3f3f46] p-5 text-white flex justify-between items-center">
+          <div>
+            <h3 class="text-sm font-normal uppercase tracking-tight">Edit Deli Form</h3>
+            <p class="text-amber-300 text-[10px] font-normal uppercase mt-1 tracking-widest">
+              SA{{ String(deliForm.saleId || '').padStart(7, '0') }}
+            </p>
+          </div>
+          <button @click="closeDeliFormModal" class="text-white/60 hover:text-white transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-5 space-y-4">
+          <div>
+            <label class="text-[9px] font-normal uppercase text-slate-400 ml-1 mb-1 block">Customer Name</label>
+            <input v-model="deliForm.customerName" type="text"
+              class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500/20">
+          </div>
+          <div>
+            <label class="text-[9px] font-normal uppercase text-slate-400 ml-1 mb-1 block">Phone</label>
+            <input v-model="deliForm.customerPhone" type="text"
+              class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500/20">
+          </div>
+          <div>
+            <label class="text-[9px] font-normal uppercase text-slate-400 ml-1 mb-1 block">Address</label>
+            <textarea v-model="deliForm.customerAddress" rows="3"
+              class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none resize-none focus:ring-2 focus:ring-amber-500/20"></textarea>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[9px] font-normal uppercase text-slate-400 ml-1 mb-1 block">Amount</label>
+              <input v-model.number="deliForm.amount" type="number" min="0"
+                class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none text-right focus:ring-2 focus:ring-amber-500/20">
+            </div>
+            <div>
+              <label class="text-[9px] font-normal uppercase text-slate-400 ml-1 mb-1 block">Deli Fee</label>
+              <input v-model.number="deliForm.deliveryFee" type="number" min="0"
+                class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none text-right focus:ring-2 focus:ring-amber-500/20">
+            </div>
+          </div>
+          <div class="flex justify-between items-center bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            <span class="text-[10px] font-normal uppercase text-amber-700">Total</span>
+            <span class="text-lg font-normal text-amber-900 tabular-nums">{{ formatNumber(deliFormTotal) }} Ks</span>
+          </div>
+          <div>
+            <label class="text-[9px] font-normal uppercase text-slate-400 ml-1 mb-1 block">Note</label>
+            <textarea v-model="deliForm.note" rows="2"
+              class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none resize-none focus:ring-2 focus:ring-amber-500/20"></textarea>
+          </div>
+        </div>
+
+        <div class="p-5 border-t border-slate-100 flex gap-3">
+          <button @click="closeDeliFormModal"
+            class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-lg font-normal uppercase text-[10px] hover:bg-slate-200 transition-all">
+            {{ t('common.cancel') }}
+          </button>
+          <button @click="printEditedDeliForm"
+            class="flex-1 py-3 bg-amber-600 text-white rounded-lg font-normal uppercase text-[10px] shadow-lg shadow-amber-100 hover:bg-amber-700 transition-all">
+            Print
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showDetailModal"
       class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-stretch sm:items-center justify-center p-2 sm:p-4 z-[100]">
       <div
@@ -462,7 +540,7 @@
             </div>
             <div v-if="receiptDiscountDetail > 0"
               class="flex justify-between text-[10px] font-normal text-rose-500 uppercase">
-              <span>Voucher Discount</span>
+              <span>{{ receiptDiscountSummaryLabel }}</span>
               <span class="tabular-nums">- {{ formatNumber(receiptDiscountDetail) }} Ks</span>
             </div>
             <div
@@ -820,7 +898,7 @@
     </div>
     <div id="print-area" style="display: none;">
       <div
-        :style="{ width: '80mm', padding: '5px', fontFamily: 'Pyidaungsu, Segoe UI, sans-serif', fontSize: receiptFont.body + 'px', color: 'black', lineHeight: '1.4' }">
+        :style="{ width: '76mm', padding: '5px', fontFamily: 'Pyidaungsu, Segoe UI, sans-serif', fontSize: receiptFont.body + 'px', color: 'black', lineHeight: '1.4' }">
         <div style="text-align: center; margin-bottom: 5px;">
           <h2 :style="{ fontSize: receiptFont.h2 + 'px', margin: 0, textTransform: 'uppercase', fontWeight: 'bold' }">{{ shopInfo.ShopName }}
           </h2>
@@ -906,7 +984,7 @@
             </tr>
 
             <tr v-if="receiptDiscountDetail > 0">
-              <td colspan="2" style="text-align: left; color: #444;">Discount (-):</td>
+              <td colspan="2" style="text-align: left; color: #444;">{{ receiptDiscountPrintLabel }}</td>
               <td style="text-align: right; color: #444;">{{ formatNumber(receiptDiscountDetail) }}</td>
             </tr>
 
@@ -923,17 +1001,17 @@
             </tr>
 
             <tr v-for="payment in selectedSalePayments" :key="payment.method">
-              <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">PAID({{ payment.method }}):</td>
+              <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ receiptPaidLabel(payment.method) }}</td>
               <td style="text-align: right; padding-top: 5px; font-weight: bold;">{{
                 formatNumber(payment.amount) }}</td>
             </tr>
 
-            <tr v-if="selectedSale.sale.DueAmount !== 0">
+            <tr v-if="receiptBalanceDetail !== 0">
               <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">
-                {{ selectedSale.sale.DueAmount > 0 ? 'DUE:' : 'CHANGE:' }}
+                {{ receiptBalanceLabel(receiptBalanceDetail) }}
               </td>
               <td style="text-align: right; padding-top: 5px; font-weight: bold;">{{
-                formatNumber(Math.abs(selectedSale.sale.DueAmount)) }}</td>
+                formatNumber(Math.abs(receiptBalanceDetail)) }}</td>
             </tr>
           </tfoot>
         </table>
@@ -1032,9 +1110,8 @@
               </td>
             </tr>
             <tr v-if="receiptDiscountDetail > 0">
-              <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; color: #ea580c;">Discount
-                (-):
-              </td>
+              <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; color: #ea580c;">{{
+                receiptDiscountPrintLabel }}</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right; color: #ea580c;">{{
                 formatNumber(receiptDiscountDetail) }}</td>
             </tr>
@@ -1053,8 +1130,14 @@
             </tr>
             <tr v-for="payment in selectedSalePayments" :key="payment.method">
               <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
-                PAID({{ payment.method }}):</td>
+                {{ receiptPaidLabel(payment.method) }}</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(payment.amount) }}</td>
+            </tr>
+            <tr v-if="receiptBalanceDetail !== 0">
+              <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
+                {{ receiptBalanceLabel(receiptBalanceDetail) }}</td>
+              <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">{{
+                formatNumber(Math.abs(receiptBalanceDetail)) }}</td>
             </tr>
           </tbody>
         </table>
@@ -1079,6 +1162,7 @@ import { useToast } from '../composables/useToast';
 import { useI18n } from '../composables/useI18n';
 import { useCsvExport } from '../composables/useCsvExport';
 import { normalizeReceiptPayments } from '../utils/receiptData';
+import { isMobileBrowser, openPrintWindow } from '../utils/print';
 import androidBridge from '../services/androidBridge';
 
 const { addToast } = useToast();
@@ -1119,11 +1203,46 @@ const itemsSubtotalDetail = computed(() => {
 const receiptDiscountDetail = computed(() =>
   Number(selectedSale.value?.sale?.DiscountAmount ?? selectedSale.value?.sale?.discountAmount ?? 0)
 );
+const toNonNegativeAmount = (value) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+};
+const formatDiscountPercent = (value) => {
+  const percent = Math.min(toNonNegativeAmount(value), 100);
+  return Number.isInteger(percent)
+    ? String(percent)
+    : percent.toFixed(2).replace(/\.?0+$/, '');
+};
+const saleDiscountType = computed(() =>
+  selectedSale.value?.sale?.DiscountType ?? selectedSale.value?.sale?.discountType ?? 'amount'
+);
+const saleDiscountInput = computed(() =>
+  selectedSale.value?.sale?.DiscountInput ?? selectedSale.value?.sale?.discountInput ?? 0
+);
+const receiptDiscountPrintLabel = computed(() =>
+  saleDiscountType.value === 'percentage' && toNonNegativeAmount(saleDiscountInput.value) > 0
+    ? `Discount (${formatDiscountPercent(saleDiscountInput.value)}%):`
+    : 'Discount (-):'
+);
+const receiptDiscountSummaryLabel = computed(() =>
+  saleDiscountType.value === 'percentage' && toNonNegativeAmount(saleDiscountInput.value) > 0
+    ? `Voucher Discount (${formatDiscountPercent(saleDiscountInput.value)}%)`
+    : 'Voucher Discount'
+);
 const receiptDeliveryFeeDetail = computed(() =>
   Number(selectedSale.value?.sale?.DeliveryFee ?? selectedSale.value?.sale?.deliveryFee ?? 0)
 );
 const receiptTotalDetail = computed(() =>
   Math.max(0, itemsSubtotalDetail.value - receiptDiscountDetail.value + receiptDeliveryFeeDetail.value)
+);
+const receiptBalanceDetail = computed(() =>
+  Number(selectedSale.value?.sale?.DueAmount ?? selectedSale.value?.sale?.dueAmount ?? 0)
+);
+const receiptPaidLabel = (method) => `${t('history.amountPaid')}${method ? ` (${method})` : ''}:`;
+const receiptBalanceLabel = (balance) => (
+  balance > 0
+    ? `${t('history.balanceDue')}:`
+    : `${t('sale.change')}:`
 );
 
 const getSaleNetAmount = (sale) => {
@@ -1139,7 +1258,11 @@ const getSaleNetAmount = (sale) => {
 const shopInfo = ref({});
 const receiptFontSizeMap = { Small: { body: 10, h1: 16, h2: 14, small: 8, tiny: 7, footer: 9, total: 10 }, Medium: { body: 13, h1: 20, h2: 18, small: 11, tiny: 9, footer: 11, total: 12 }, Large: { body: 16, h1: 26, h2: 22, small: 14, tiny: 11, footer: 14, total: 15 } };
 const receiptFont = computed(() => receiptFontSizeMap[shopInfo.value.ReceiptFontSize] || receiptFontSizeMap.Medium);
-const receiptSize = ref('80mm'); // Default size
+const normalizeReceiptSize = (value) => ['80mm', 'A4', 'A5'].includes(value) ? value : '80mm';
+const preferredReceiptSize = () => normalizeReceiptSize(
+  shopInfo.value.PreferredPaperSize ?? shopInfo.value.preferredPaperSize
+);
+const receiptSize = ref('80mm');
 const saveInvoiceAsImage = ref(true);
 
 // ၁။ Settings (Shop Info) ကို ယူခြင်း
@@ -1147,6 +1270,7 @@ const fetchSettings = async () => {
   try {
     const res = await api.get('/Settings');
     shopInfo.value = res.data;
+    receiptSize.value = preferredReceiptSize();
   } catch (err) { console.error(err); }
 };
 
@@ -1228,14 +1352,13 @@ const buildAndroidHistoryReceiptText = () => {
   lines.push(line);
   lines.push(columns('Total Qty', formatNumber(totalQty)));
   lines.push(columns('Sub-Total:', formatNumber(subtotal)));
-  if (discount > 0) lines.push(columns('Discount (-):', formatNumber(discount)));
+  if (discount > 0) lines.push(columns(receiptDiscountPrintLabel.value, formatNumber(discount)));
   if (deliveryFee > 0) lines.push(columns('Delivery (+):', formatNumber(deliveryFee)));
   lines.push(doubleLine);
   lines.push(columns('TOTAL:', formatNumber(finalTotal)));
-  selectedSalePayments.value.forEach(payment => lines.push(columns(`PAID(${payment.method}):`, formatNumber(payment.amount || 0))));
-  if (Number(sale.DueAmount || sale.dueAmount || 0) !== 0) {
-    const dueAmount = Number(sale.DueAmount || sale.dueAmount || 0);
-    lines.push(columns(dueAmount > 0 ? 'DUE:' : 'CHANGE:', formatNumber(Math.abs(dueAmount))));
+  selectedSalePayments.value.forEach(payment => lines.push(columns(receiptPaidLabel(payment.method), formatNumber(payment.amount || 0))));
+  if (receiptBalanceDetail.value !== 0) {
+    lines.push(columns(receiptBalanceLabel(receiptBalanceDetail.value), formatNumber(Math.abs(receiptBalanceDetail.value))));
   }
   lines.push(doubleLine, '');
   receiptFooterLines.value.forEach(footerLine => lines.push(center(footerLine)));
@@ -1317,13 +1440,13 @@ const printFromDetail = async (preOpenedWindow = null) => {
 
   const logoSizePx = getLogoPx(shopInfo.value.LogoSize || 'Large');
   const logoHtml = hasLogo
-    ? `<div style="text-align: center; margin-top: 15px; margin-bottom: 5px; padding-top: 10px;">
+    ? `<div style="text-align: center; margin-top: 2px; margin-bottom: 5px; padding-top: 0;">
          <img src="${shopInfo.value.LogoData}" style="width: ${logoSizePx}; height: ${logoSizePx}; object-fit: contain; border: none;">
        </div>`
     : '';
 
   const pageSize = isThermal ? '80mm auto' : (receiptSize.value === 'A5' ? '148mm 210mm' : '210mm 297mm');
-  const bodyWidth = isThermal ? '80mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
+  const bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
 
   printWindow.document.write(`
     <html>
@@ -1460,7 +1583,7 @@ const captureDetailInvoiceElement = async (el) => {
   let iframe = null;
   try {
     const isThermal = receiptSize.value === '80mm';
-    const bodyWidth = isThermal ? '80mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
+    const bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
     const captureWidth = bodyWidth;
     const contentHtml = el.outerHTML.replace('style="display: none;"', 'style="display: block;"');
 
@@ -1475,7 +1598,7 @@ const captureDetailInvoiceElement = async (el) => {
     };
     const logoSizePx = getLogoPx(shopInfo.value.LogoSize || 'Large');
     const logoHtml = hasLogo
-      ? `<div style="text-align:center;margin-top:15px;margin-bottom:5px;padding-top:10px"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
+      ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:0"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
       : '';
 
     const docHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
@@ -1580,6 +1703,19 @@ const historyData = ref([]);
 const totalItems = ref(0);
 const isExportingCsv = ref(false);
 const branches = ref([]);
+const showDeliFormModal = ref(false);
+const deliForm = ref({
+  saleId: null,
+  customerName: '',
+  customerPhone: '',
+  customerAddress: '',
+  amount: 0,
+  deliveryFee: 0,
+  note: ''
+});
+const deliFormTotal = computed(() =>
+  Math.max(0, Number(deliForm.value.amount || 0) + Number(deliForm.value.deliveryFee || 0))
+);
 const selectedCustomerName = computed(() => selectedSale.value.sale?.CustomerName || 'Walk-in');
 const branchName = ref(localStorage.getItem('BranchName') || 'Main Branch');
 const field = (obj, pascal, camel = pascal.charAt(0).toLowerCase() + pascal.slice(1)) => obj?.[pascal] ?? obj?.[camel];
@@ -1644,6 +1780,7 @@ const fetchSalePayments = async (saleId) => {
 
 const viewDetail = async (saleId) => {
   try {
+    receiptSize.value = preferredReceiptSize();
     const [detailRes, payments] = await Promise.all([
       api.get(`/Sales/details/${saleId}`),
       fetchSalePayments(saleId)
@@ -1823,6 +1960,7 @@ const viewTransferDetail = async (id) => {
 };
 
 const reprint = async (saleId) => {
+  receiptSize.value = preferredReceiptSize();
   const useAndroidNativePrint = androidBridge.supportsNativePrint() && receiptSize.value === '80mm';
   const preOpenedPrintWindow = useAndroidNativePrint ? null : window.open('', '_blank', 'width=900,height=800');
   if (!useAndroidNativePrint && !preOpenedPrintWindow) {
@@ -1861,6 +1999,139 @@ const reprint = async (saleId) => {
     console.error("Reprint Error:", err);
     // Error တက်လျှင် မည်သည့်နေရာမှတက်သည်ကို သိနိုင်ရန် log ထုတ်ကြည့်ပါ
     addToast("Voucher ပြန်ထုတ်၍ မရပါ - " + (err.response?.data?.Message || err.message), "error");
+  }
+};
+
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const closeDeliFormModal = () => {
+  showDeliFormModal.value = false;
+};
+
+const printDeliForm = async (saleId) => {
+  try {
+    const detailRes = await api.get(`/Sales/details/${saleId}`);
+    selectedSale.value = { ...detailRes.data, payments: detailRes.data?.payments || [] };
+    const sale = detailRes.data?.sale || {};
+    const items = detailRes.data?.items || [];
+
+    const customerName = sale.CustomerName || sale.customerName || 'Walk-in';
+    const customerPhone = sale.CustomerPhone || sale.customerPhone || '';
+    const customerAddress = sale.CustomerAddress || sale.customerAddress || '';
+
+    const subtotal = items.reduce((sum, item) => {
+      const qty = Number(item.Quantity ?? item.quantity ?? 0);
+      const price = Number(item.UnitPrice ?? item.unitPrice ?? 0);
+      const lineDisc = Number(item.DiscountAmount ?? item.discountAmount ?? 0);
+      return sum + Math.max(0, (qty * price) - lineDisc);
+    }, 0);
+
+    const discount = Number(sale.DiscountAmount ?? sale.discountAmount ?? 0);
+    const deliveryFee = Number(sale.DeliveryFee ?? sale.deliveryFee ?? 0);
+    const amount = Math.max(0, subtotal - discount);
+
+    deliForm.value = {
+      saleId,
+      customerName,
+      customerPhone,
+      customerAddress,
+      amount,
+      deliveryFee,
+      note: sale.VoucherNote || sale.voucherNote || ''
+    };
+    showDeliFormModal.value = true;
+  } catch (err) {
+    console.error("Deli Form Load Error:", err);
+    addToast("Deli Form ဖတ်၍ မရပါ - " + (err.response?.data?.Message || err.message), "error");
+  }
+};
+
+const printEditedDeliForm = () => {
+  try {
+    const form = deliForm.value;
+    const saleId = form.saleId;
+    const shopName = escapeHtml(shopInfo.value?.ShopName || '');
+    const branchName = escapeHtml(receiptBranchName.value || '');
+    const contact = receiptContact.value || {};
+    const footerLines = receiptFooterLines.value || [];
+
+    const formatMoney = (val) => Number(val || 0).toLocaleString();
+    const amount = Math.max(0, Number(form.amount || 0));
+    const deliveryFee = Math.max(0, Number(form.deliveryFee || 0));
+    const total = amount + deliveryFee;
+    const note = String(form.note || '').trim();
+
+    const html = `
+      <div style="width:76mm;padding:4mm;font-family:'Pyidaungsu','Segoe UI',sans-serif;font-size:11px;color:black;line-height:1.4;">
+        <div style="text-align:center;margin-bottom:4mm;">
+          <div style="font-size:14px;font-weight:bold;text-transform:uppercase;">${shopName}</div>
+          <div style="font-size:11px;font-weight:bold;">(${branchName})</div>
+          ${contact.Address ? `<div style="font-size:9px;">${escapeHtml(contact.Address)}</div>` : ''}
+          ${contact.Phone ? `<div style="font-size:9px;">Tel: ${escapeHtml(contact.Phone)}</div>` : ''}
+        </div>
+        <div style="border-bottom:1px dashed black;margin:3mm 0;"></div>
+        <div style="text-align:center;font-size:13px;font-weight:bold;margin:3mm 0;">DELI FORM</div>
+        <div style="border-bottom:1px dashed black;margin:3mm 0;"></div>
+        <div style="margin:2mm 0;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:1mm;">
+            <span>Name:</span>
+            <span style="font-weight:bold;text-align:right;">${escapeHtml(form.customerName || '-')}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:1mm;">
+            <span>Ph No:</span>
+            <span style="text-align:right;">${escapeHtml(form.customerPhone || '-')}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:1mm;">
+            <span>Address:</span>
+            <span style="text-align:right;max-width:48mm;white-space:pre-line;">${escapeHtml(form.customerAddress || '-')}</span>
+          </div>
+        </div>
+        <div style="border-bottom:1px dashed black;margin:3mm 0;"></div>
+        <div style="margin:2mm 0;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:1mm;">
+            <span>Amount:</span>
+            <span>${formatMoney(amount)} Ks</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:1mm;">
+            <span>Deli Fee:</span>
+            <span>${formatMoney(deliveryFee)} Ks</span>
+          </div>
+          <div style="border-bottom:1px solid black;margin:2mm 0;"></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:bold;">
+            <span>Total:</span>
+            <span>${formatMoney(total)} Ks</span>
+          </div>
+        </div>
+        <div style="border-bottom:1px dashed black;margin:3mm 0;"></div>
+        ${note ? `<div style="font-size:10px;font-style:italic;margin-top:2mm;white-space:pre-line;">Note: ${escapeHtml(note)}</div><div style="border-bottom:1px dashed black;margin:3mm 0;"></div>` : ''}
+        <div style="text-align:center;margin-top:4mm;">
+          ${footerLines.map(line => `<div style="font-size:10px;font-weight:bold;margin:1mm 0;">${escapeHtml(line)}</div>`).join('')}
+        </div>
+      </div>
+    `;
+
+    const result = openPrintWindow({
+      title: 'Deli Form - SA' + String(saleId).padStart(7, '0'),
+      pageSize: '80mm auto',
+      bodyWidth: '76mm',
+      bodyPadding: '0',
+      html: html,
+      autoPrint: !isMobileBrowser()
+    });
+
+    if (!result.ok) {
+      addToast(t('history.popupBlocked') || 'Popup blocked. Please allow popups to print.', 'warning');
+      return;
+    }
+    showDeliFormModal.value = false;
+  } catch (err) {
+    console.error("Deli Form Print Error:", err);
+    addToast("Deli Form ထုတ်၍ မရပါ - " + (err.response?.data?.Message || err.message), "error");
   }
 };
 
@@ -1994,6 +2265,18 @@ const handleExportCsv = async () => {
 
 function formatDateTime(dateStr) {
   if (!dateStr) return "-";
+
+  const raw = String(dateStr).trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/);
+
+  if (match) {
+    const [, year, month, day, hour = '00', minute = '00'] = match;
+    const hourNumber = Number(hour);
+    const hour12 = hourNumber % 12 || 12;
+    const period = hourNumber >= 12 ? 'PM' : 'AM';
+    return `${month}/${day}/${year}, ${String(hour12).padStart(2, '0')}:${minute} ${period}`;
+  }
+
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return dateStr;
   return date.toLocaleString('en-US', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -2019,7 +2302,7 @@ const nextPage = () => { filters.value.page++; loadData(); };
 onMounted(async () => {
   syncQueryToFilters(); // ၁။ Filter တွေကို အရင်ပြင်ပါ
   await fetchBranches(); // ၂။ Branch တွေယူပါ
-  fetchSettings();
+  await fetchSettings();
   await loadData();      // ၃။ ဒေတာ စတင်ခေါ်ပါ
   await openSaleDetailFromQuery();
 });
