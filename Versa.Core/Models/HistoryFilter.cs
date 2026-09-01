@@ -15,5 +15,7 @@ namespace Versa.Core.Models
         public string? StartDate { get; set; }
         public string? EndDate { get; set; }
         public string? OrderStatus { get; set; }
+        public string? CustomerName { get; set; }
+        public string? SupplierName { get; set; }
     }
 }

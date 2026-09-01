@@ -71,8 +71,9 @@ WHERE poi.RemainingQuantity IS NULL",
                 }
                 
                 int successItemCount = 0;
+                int createdProductCount = 0;
+                int updatedProductCount = 0;
                 int poCount = 0;
-                string debugInfo = "";
 
                 // Pre-filter valid rows and group by Branch Name and Supplier Name
                 var supplierGroups = rows
@@ -120,6 +121,7 @@ WHERE poi.RemainingQuantity IS NULL",
                         try
                         {
                             string sku = GetValue(dRow, "SKU/Barcode");
+                            bool hasProvidedSku = !string.IsNullOrWhiteSpace(sku);
                             string categoryName = GetValue(dRow, "Category");
                             string unitName = GetValue(dRow, "Basic Unit");
                             decimal qty = ParseDecimal(GetRawValue(dRow, "Qty"));
@@ -138,10 +140,10 @@ WHERE poi.RemainingQuantity IS NULL",
                             int? unitId = await GetOrCreateId(conn, "Units", "ShortName", "UnitId", unitName, transaction);
 
                             int productId = 0;
-                            if (!string.IsNullOrEmpty(sku))
+                            if (hasProvidedSku)
                                 productId = await conn.ExecuteScalarAsync<int>("SELECT ProductId FROM Products WHERE Sku = @sku LIMIT 1", new { sku }, transaction);
 
-                            if (productId == 0)
+                            if (productId == 0 && !hasProvidedSku)
                                 productId = await conn.ExecuteScalarAsync<int>("SELECT ProductId FROM Products WHERE Name = @itemName LIMIT 1", new { itemName }, transaction);
 
                             if (productId > 0)
@@ -173,6 +175,7 @@ WHERE poi.RemainingQuantity IS NULL",
                                     CostPrice=@calculatedNewCost, SalePrice=@sellingPrice, IsActive=1
                                     WHERE ProductId=@productId";
                                 await conn.ExecuteAsync(updateSql, new { itemName, sku, catId, unitId, calculatedNewCost, sellingPrice, productId }, transaction);
+                                updatedProductCount++;
                             }
                             else
                             {
@@ -181,6 +184,7 @@ WHERE poi.RemainingQuantity IS NULL",
                                     VALUES (@itemName, @sku, @catId, @unitId, @purchasePrice, @sellingPrice, 1);
                                     SELECT LAST_INSERT_ID();";
                                 productId = await conn.ExecuteScalarAsync<int>(insertSql, new { itemName, sku, catId, unitId, purchasePrice, sellingPrice }, transaction);
+                                createdProductCount++;
                             }
 
                             // Insert Purchase Order Item linked to the Group PO
@@ -206,7 +210,7 @@ WHERE poi.RemainingQuantity IS NULL",
                 }
 
                 await transaction.CommitAsync();
-                return Ok(new { Message = $"Success: {successItemCount} items imported across {poCount} Purchase Orders." });
+                return Ok(new { Message = $"Success: {successItemCount} rows imported across {poCount} Purchase Orders. Products created: {createdProductCount}, updated: {updatedProductCount}." });
             }
             catch (Exception ex)
             {

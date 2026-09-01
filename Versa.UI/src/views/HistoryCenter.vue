@@ -42,6 +42,58 @@
 
           </div>
         </div>
+        <div v-if="currentTab === 'sale'" ref="customerFilterRef" class="flex flex-col relative">
+          <label class="text-[9px] font-normal uppercase text-slate-400 ml-2 mb-1">{{ t('history.customer') }}</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2" />
+              </svg>
+            </span>
+            <input v-model="filters.customerName" @input="handleCustomerFilterSearch" @focus="openCustomerFilterResults"
+              @keydown.down.prevent="moveCustomerFilterDown" @keydown.up.prevent="moveCustomerFilterUp"
+              @keydown.enter.prevent="selectHighlightedCustomerFilter" type="text" :placeholder="t('history.customer')"
+              class="p-2 pl-7 pr-7 bg-slate-50 border border-slate-200 rounded-lg font-normal text-xs outline-none w-44 focus:ring-2 focus:ring-blue-500/20">
+            <button v-if="filters.customerName" @click="clearCustomerFilter" type="button"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">x</button>
+          </div>
+          <div v-if="showCustomerFilterResults && filteredCustomerOptions.length > 0"
+            class="absolute z-[100] left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+            <div v-for="(customer, index) in filteredCustomerOptions" :key="customer.customerId || customer.CustomerId || customer.name"
+              @click="selectCustomerFilter(customer)"
+              :class="['p-3 cursor-pointer border-b border-slate-50 last:border-0 hover:bg-blue-50 transition-colors',
+                customerFilterHighlightedIndex === index ? 'bg-blue-50' : '']">
+              <p class="text-xs font-normal text-slate-800">{{ customer.name }}</p>
+              <p class="text-[9px] text-slate-400 font-normal uppercase tracking-tighter">{{ customer.phone || '-' }}</p>
+            </div>
+          </div>
+        </div>
+        <div v-if="currentTab === 'purchase'" ref="supplierFilterRef" class="flex flex-col relative">
+          <label class="text-[9px] font-normal uppercase text-slate-400 ml-2 mb-1">{{ t('history.supplierName') }}</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2" />
+              </svg>
+            </span>
+            <input v-model="filters.supplierName" @input="handleSupplierFilterSearch" @focus="openSupplierFilterResults"
+              @keydown.down.prevent="moveSupplierFilterDown" @keydown.up.prevent="moveSupplierFilterUp"
+              @keydown.enter.prevent="selectHighlightedSupplierFilter" type="text" :placeholder="t('history.supplierName')"
+              class="p-2 pl-7 pr-7 bg-slate-50 border border-slate-200 rounded-lg font-normal text-xs outline-none w-44 focus:ring-2 focus:ring-blue-500/20">
+            <button v-if="filters.supplierName" @click="clearSupplierFilter" type="button"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">x</button>
+          </div>
+          <div v-if="showSupplierFilterResults && filteredSupplierOptions.length > 0"
+            class="absolute z-[100] left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+            <div v-for="(supplier, index) in filteredSupplierOptions" :key="supplier.supplierId || supplier.SupplierId || supplier.name"
+              @click="selectSupplierFilter(supplier)"
+              :class="['p-3 cursor-pointer border-b border-slate-50 last:border-0 hover:bg-blue-50 transition-colors',
+                supplierFilterHighlightedIndex === index ? 'bg-blue-50' : '']">
+              <p class="text-xs font-normal text-slate-800">{{ supplier.name }}</p>
+              <p class="text-[9px] text-slate-400 font-normal uppercase tracking-tighter">{{ supplier.phone || '-' }}</p>
+            </div>
+          </div>
+        </div>
         <div v-if="currentTab !== 'inventory-ledger'" class="flex gap-2">
           <div class="flex flex-col">
             <label class="text-[9px] font-normal uppercase text-slate-400 ml-2 mb-1">{{ t('history.startDate') }}</label>
@@ -561,6 +613,11 @@
               >
               <span>{{ t('sale.saveInvoiceAsImage') }}</span>
             </label>
+            <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+              <input v-model="showPreviousCredit" type="checkbox"
+                class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+              <span>{{ t('sale.showPreviousCredit') }}</span>
+            </label>
 
             <div class="flex flex-col sm:flex-row gap-3">
               <div class="flex-1">
@@ -1013,7 +1070,7 @@
               <td style="text-align: right; padding-top: 5px; font-weight: bold;">{{
                 formatNumber(Math.abs(receiptBalanceDetail)) }}</td>
             </tr>
-            <tr v-if="receiptTotalCreditDetail > 0">
+            <tr v-if="showPreviousCredit && receiptTotalCreditDetail > 0">
               <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ t('sale.totalCredit') }}:</td>
               <td style="text-align: right; padding-top: 5px; font-weight: bold; color: #dc2626;">{{ formatNumber(receiptTotalCreditDetail) }}</td>
             </tr>
@@ -1143,7 +1200,7 @@
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">{{
                 formatNumber(Math.abs(receiptBalanceDetail)) }}</td>
             </tr>
-            <tr v-if="receiptTotalCreditDetail > 0">
+            <tr v-if="showPreviousCredit && receiptTotalCreditDetail > 0">
               <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
                 {{ t('sale.totalCredit') }}:</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold; color: #dc2626;">
@@ -1164,7 +1221,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRoute } from 'vue-router'; // ✅ သေချာအောင် ပြန်စစ်ပါ
 import api from '../services/api';
 import { nextTick } from 'vue';
@@ -1271,12 +1328,14 @@ const getSaleNetAmount = (sale) => {
 const shopInfo = ref({});
 const receiptFontSizeMap = { Small: { body: 10, h1: 16, h2: 14, small: 8, tiny: 7, footer: 9, total: 10 }, Medium: { body: 13, h1: 20, h2: 18, small: 11, tiny: 9, footer: 11, total: 12 }, Large: { body: 16, h1: 26, h2: 22, small: 14, tiny: 11, footer: 14, total: 15 } };
 const receiptFont = computed(() => receiptFontSizeMap[shopInfo.value.ReceiptFontSize] || receiptFontSizeMap.Medium);
+const ANDROID_THERMAL_PRINT_SCALE = 0.82;
 const normalizeReceiptSize = (value) => ['80mm', 'A4', 'A5'].includes(value) ? value : '80mm';
 const preferredReceiptSize = () => normalizeReceiptSize(
   shopInfo.value.PreferredPaperSize ?? shopInfo.value.preferredPaperSize
 );
 const receiptSize = ref('80mm');
 const saveInvoiceAsImage = ref(true);
+const showPreviousCredit = ref(false);
 
 // ၁။ Settings (Shop Info) ကို ယူခြင်း
 const fetchSettings = async () => {
@@ -1298,7 +1357,9 @@ const calculateEmptyRowsDetail = () => {
 const formatNumber = (val) => new Intl.NumberFormat().format(val || 0);
 
 const buildAndroidHistoryReceiptText = () => {
-  const width = 42;
+  // The Android bridge renders text at 24px on a 576-dot 80mm canvas.
+  // 38 monospace characters fit safely; 42 wraps on common Bluetooth printers.
+  const width = 38;
   const sale = selectedSale.value?.sale || {};
   const items = selectedSale.value?.items || [];
   const line = '-'.repeat(width);
@@ -1342,14 +1403,17 @@ const buildAndroidHistoryReceiptText = () => {
   if (sale.CustomerPhone || sale.CustomerAddress) lines.push(clip(`${sale.CustomerPhone || ''} ${sale.CustomerAddress || ''}`.trim(), width));
   if (sale.VoucherNote || sale.voucherNote) lines.push(`Note: ${clip(sale.VoucherNote || sale.voucherNote, width - 6)}`);
   lines.push(line);
-  lines.push(`${'Name'.padEnd(24, ' ')}${'Qty'.padStart(5, ' ')}${'Amount'.padStart(13, ' ')}`);
+  const qtyWidth = 5;
+  const amountWidth = Math.min(14, Math.max(10, width - 21));
+  const nameWidth = Math.max(12, width - qtyWidth - amountWidth);
+  lines.push(`${'Name'.padEnd(nameWidth, ' ')}${'Qty'.padStart(qtyWidth, ' ')}${'Amount'.padStart(amountWidth, ' ')}`);
   lines.push(line);
 
   items.forEach(item => {
     const qty = Number(item.Quantity || item.quantity || 0);
     const amount = lineSubtotal(item);
-    const itemLines = wrap(`${item.ItemName || item.ProductName || item.productName || 'Item'}${item.IsFOC ? ' (FOC)' : ''}`, 24);
-    lines.push(`${itemLines[0].padEnd(24, ' ')}${String(qty).padStart(5, ' ')}${formatNumber(amount).padStart(13, ' ')}`);
+    const itemLines = wrap(`${item.ItemName || item.ProductName || item.productName || 'Item'}${item.IsFOC ? ' (FOC)' : ''}`, nameWidth);
+    lines.push(`${itemLines[0].padEnd(nameWidth, ' ')}${String(qty).padStart(qtyWidth, ' ')}${formatNumber(amount).padStart(amountWidth, ' ')}`);
     itemLines.slice(1).forEach(extra => lines.push(extra));
     lines.push(`  (${item.UnitName || item.unitName || 'N/A'}) @ ${formatNumber(item.UnitPrice || item.unitPrice || 0)}`);
     const discount = lineDiscount(item);
@@ -1373,7 +1437,7 @@ const buildAndroidHistoryReceiptText = () => {
   if (receiptBalanceDetail.value !== 0) {
     lines.push(columns(receiptBalanceLabel(receiptBalanceDetail.value), formatNumber(Math.abs(receiptBalanceDetail.value))));
   }
-  if (receiptTotalCreditDetail.value > 0) {
+  if (showPreviousCredit.value && receiptTotalCreditDetail.value > 0) {
     lines.push(columns(`${t('sale.totalCredit')}:`, formatNumber(receiptTotalCreditDetail.value)));
   }
   lines.push(doubleLine, '');
@@ -1404,7 +1468,7 @@ const printAndroidDetailImageIfPossible = async () => {
   const el = document.getElementById(elementId);
   if (!el || typeof androidBridge.printImage !== 'function') return false;
 
-  const blob = await captureDetailInvoiceElement(el);
+  const blob = await captureDetailInvoiceElement(el, { compactAndroidThermal: true });
   if (!blob) return false;
 
   const dataUrl = await blobToDataUrl(blob);
@@ -1595,11 +1659,13 @@ const shareFromDetail = async () => {
   addToast(t('history.shareDownloaded') || 'Invoice image downloaded.', 'info');
 };
 
-const captureDetailInvoiceElement = async (el) => {
+const captureDetailInvoiceElement = async (el, { compactAndroidThermal = false } = {}) => {
   let iframe = null;
   try {
     const isThermal = receiptSize.value === '80mm';
     const bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
+    const bodyHeight = isThermal ? 'auto' : (receiptSize.value === 'A5' ? '210mm' : '297mm');
+    const capturePaddingBottom = isThermal ? '18px' : '0';
     const captureWidth = bodyWidth;
     const contentHtml = el.outerHTML.replace('style="display: none;"', 'style="display: block;"');
 
@@ -1616,14 +1682,19 @@ const captureDetailInvoiceElement = async (el) => {
     const logoHtml = hasLogo
       ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:0"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
       : '';
+    const shouldCompactAndroidThermal = compactAndroidThermal && androidBridge.isAndroid() && isThermal;
+    const captureContent = shouldCompactAndroidThermal
+      ? '<div class="android-thermal-print-scale">' + logoHtml + contentHtml + '</div>'
+      : logoHtml + contentHtml;
 
     const docHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
       '@font-face{font-family:"Pyidaungsu";src:local("Pyidaungsu")}' +
       'html,body{margin:0;padding:0;background:white}' +
       'body{font-family:"Pyidaungsu","Noto Sans Myanmar","Myanmar Text",sans-serif;line-height:1.45;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}' +
-      '#capture-root{width:' + captureWidth + ';margin:0 auto;padding-bottom:18px;background:white}' +
+      '#capture-root{width:' + captureWidth + ';min-height:' + bodyHeight + ';margin:0 auto;padding-bottom:' + capturePaddingBottom + ';background:white}' +
       '#capture-root > div{margin-left:auto!important;margin-right:auto!important}' +
       '*{box-sizing:border-box;word-break:normal;overflow-wrap:anywhere}' +
+      '.android-thermal-print-scale{width:calc(100% / ' + ANDROID_THERMAL_PRINT_SCALE + ');transform:scale(' + ANDROID_THERMAL_PRINT_SCALE + ');transform-origin:top left;background:white}' +
       'p{line-height:1.45!important}' +
       '#print-area{line-height:1.45!important;padding-bottom:12px!important}' +
       '#print-area>div{overflow:visible!important}' +
@@ -1642,7 +1713,7 @@ const captureDetailInvoiceElement = async (el) => {
       '#print-area div:last-child{margin-bottom:8px!important;padding-bottom:8px!important}' +
       '#print-area-a4 thead tr{background-color:#3f3f46!important}' +
       '#print-area-a4 th{color:white!important}' +
-      '</style></head><body><div id="capture-root">' + logoHtml + contentHtml + '</div></body></html>';
+      '</style></head><body><div id="capture-root">' + captureContent + '</div></body></html>';
 
     iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
@@ -1666,6 +1737,7 @@ const captureDetailInvoiceElement = async (el) => {
     });
 
     const captureRoot = iframeDoc.getElementById('capture-root') || iframeDoc.body;
+    const captureHeight = Math.max(captureRoot.scrollHeight, captureRoot.offsetHeight);
     const { default: html2canvas } = await import('html2canvas');
     const canvas = await html2canvas(captureRoot, {
       scale: androidBridge.isAndroid() && isThermal ? 2 : Math.max(3, window.devicePixelRatio || 2),
@@ -1675,7 +1747,7 @@ const captureDetailInvoiceElement = async (el) => {
       logging: false,
       foreignObjectRendering: false,
       width: captureRoot.scrollWidth,
-      height: captureRoot.scrollHeight,
+      height: captureHeight,
     });
 
     return await new Promise((resolve) => {
@@ -1763,8 +1835,128 @@ const receiptFooterLines = computed(() => {
 const filters = ref({
   page: 1, limit: 15,
   branchId: localStorage.getItem('BranchId'),
-  query: '', startDate: '', endDate: '', orderStatus: ''
+  query: '', customerName: '', supplierName: '', startDate: '', endDate: '', orderStatus: ''
 });
+
+const customerOptions = ref([]);
+const supplierOptions = ref([]);
+const filteredCustomerOptions = ref([]);
+const filteredSupplierOptions = ref([]);
+const showCustomerFilterResults = ref(false);
+const showSupplierFilterResults = ref(false);
+const customerFilterHighlightedIndex = ref(-1);
+const supplierFilterHighlightedIndex = ref(-1);
+const customerFilterRef = ref(null);
+const supplierFilterRef = ref(null);
+
+const normalizeCustomerOption = (customer) => ({
+  customerId: customer.CustomerId ?? customer.customerId ?? customer.Id ?? customer.id ?? null,
+  name: customer.Name ?? customer.name ?? customer.CustomerName ?? customer.customerName ?? '',
+  phone: customer.Phone ?? customer.phone ?? ''
+});
+
+const normalizeSupplierOption = (supplier) => ({
+  supplierId: supplier.SupplierId ?? supplier.supplierId ?? supplier.Id ?? supplier.id ?? null,
+  name: supplier.SupplierName ?? supplier.supplierName ?? supplier.Name ?? supplier.name ?? '',
+  phone: supplier.Phone ?? supplier.phone ?? ''
+});
+
+const filterNamedOptions = (options, query) => {
+  const q = String(query || '').toLowerCase().trim();
+  return (q
+    ? options.filter(option =>
+      option.name.toLowerCase().includes(q) ||
+      String(option.phone || '').toLowerCase().includes(q)
+    )
+    : options).slice(0, 50);
+};
+
+const handleCustomerFilterSearch = () => {
+  filteredCustomerOptions.value = filterNamedOptions(customerOptions.value, filters.value.customerName);
+  showCustomerFilterResults.value = filteredCustomerOptions.value.length > 0;
+  customerFilterHighlightedIndex.value = filteredCustomerOptions.value.length > 0 ? 0 : -1;
+};
+
+const openCustomerFilterResults = () => {
+  handleCustomerFilterSearch();
+};
+
+const selectCustomerFilter = (customer) => {
+  filters.value.customerName = customer.name || '';
+  showCustomerFilterResults.value = false;
+  filteredCustomerOptions.value = [];
+  customerFilterHighlightedIndex.value = -1;
+};
+
+const clearCustomerFilter = () => {
+  filters.value.customerName = '';
+  showCustomerFilterResults.value = false;
+  filteredCustomerOptions.value = [];
+  customerFilterHighlightedIndex.value = -1;
+};
+
+const moveCustomerFilterDown = () => {
+  if (customerFilterHighlightedIndex.value < filteredCustomerOptions.value.length - 1) customerFilterHighlightedIndex.value++;
+};
+
+const moveCustomerFilterUp = () => {
+  if (customerFilterHighlightedIndex.value > 0) customerFilterHighlightedIndex.value--;
+};
+
+const selectHighlightedCustomerFilter = () => {
+  const index = customerFilterHighlightedIndex.value;
+  if (index >= 0 && index < filteredCustomerOptions.value.length) selectCustomerFilter(filteredCustomerOptions.value[index]);
+};
+
+const handleSupplierFilterSearch = () => {
+  filteredSupplierOptions.value = filterNamedOptions(supplierOptions.value, filters.value.supplierName);
+  showSupplierFilterResults.value = filteredSupplierOptions.value.length > 0;
+  supplierFilterHighlightedIndex.value = filteredSupplierOptions.value.length > 0 ? 0 : -1;
+};
+
+const openSupplierFilterResults = () => {
+  handleSupplierFilterSearch();
+};
+
+const selectSupplierFilter = (supplier) => {
+  filters.value.supplierName = supplier.name || '';
+  showSupplierFilterResults.value = false;
+  filteredSupplierOptions.value = [];
+  supplierFilterHighlightedIndex.value = -1;
+};
+
+const clearSupplierFilter = () => {
+  filters.value.supplierName = '';
+  showSupplierFilterResults.value = false;
+  filteredSupplierOptions.value = [];
+  supplierFilterHighlightedIndex.value = -1;
+};
+
+const moveSupplierFilterDown = () => {
+  if (supplierFilterHighlightedIndex.value < filteredSupplierOptions.value.length - 1) supplierFilterHighlightedIndex.value++;
+};
+
+const moveSupplierFilterUp = () => {
+  if (supplierFilterHighlightedIndex.value > 0) supplierFilterHighlightedIndex.value--;
+};
+
+const selectHighlightedSupplierFilter = () => {
+  const index = supplierFilterHighlightedIndex.value;
+  if (index >= 0 && index < filteredSupplierOptions.value.length) selectSupplierFilter(filteredSupplierOptions.value[index]);
+};
+
+const closeNameFilterResults = () => {
+  showCustomerFilterResults.value = false;
+  showSupplierFilterResults.value = false;
+  customerFilterHighlightedIndex.value = -1;
+  supplierFilterHighlightedIndex.value = -1;
+};
+
+const handleNameFilterOutsideClick = (event) => {
+  const target = event.target;
+  if (customerFilterRef.value?.contains(target) || supplierFilterRef.value?.contains(target)) return;
+  closeNameFilterResults();
+};
 
 const totalPages = computed(() => Math.ceil(totalItems.value / filters.value.limit) || 1);
 const tableColspan = computed(() => {
@@ -1797,6 +1989,7 @@ const fetchSalePayments = async (saleId) => {
 const viewDetail = async (saleId) => {
   try {
     receiptSize.value = preferredReceiptSize();
+    showPreviousCredit.value = false;
     const [detailRes, payments] = await Promise.all([
       api.get(`/Sales/details/${saleId}`),
       fetchSalePayments(saleId)
@@ -1977,6 +2170,7 @@ const viewTransferDetail = async (id) => {
 
 const reprint = async (saleId) => {
   receiptSize.value = preferredReceiptSize();
+  showPreviousCredit.value = false;
   const useAndroidNativePrint = androidBridge.supportsNativePrint() && receiptSize.value === '80mm';
   const preOpenedPrintWindow = useAndroidNativePrint ? null : window.open('', '_blank', 'width=900,height=800');
   if (!useAndroidNativePrint && !preOpenedPrintWindow) {
@@ -2311,16 +2505,40 @@ const fetchBranches = async () => {
   }
 };
 
+const fetchNameFilterOptions = async () => {
+  const [customerRes, supplierRes] = await Promise.all([
+    api.get('/customers').catch(() => ({ data: [] })),
+    api.get('/suppliers').catch(() => ({ data: [] }))
+  ]);
+
+  customerOptions.value = (Array.isArray(customerRes.data) ? customerRes.data : [])
+    .map(normalizeCustomerOption)
+    .filter(customer => customer.name);
+  supplierOptions.value = (Array.isArray(supplierRes.data) ? supplierRes.data : [])
+    .map(normalizeSupplierOption)
+    .filter(supplier => supplier.name);
+};
+
 const resetAndLoad = () => { filters.value.page = 1; loadData(); };
 const prevPage = () => { if (filters.value.page > 1) { filters.value.page--; loadData(); } };
 const nextPage = () => { filters.value.page++; loadData(); };
 
 onMounted(async () => {
+  document.addEventListener('mousedown', handleNameFilterOutsideClick);
+  document.addEventListener('touchstart', handleNameFilterOutsideClick);
   syncQueryToFilters(); // ၁။ Filter တွေကို အရင်ပြင်ပါ
-  await fetchBranches(); // ၂။ Branch တွေယူပါ
-  await fetchSettings();
+  await Promise.all([
+    fetchBranches(), // ၂။ Branch တွေယူပါ
+    fetchSettings(),
+    fetchNameFilterOptions()
+  ]);
   await loadData();      // ၃။ ဒေတာ စတင်ခေါ်ပါ
   await openSaleDetailFromQuery();
+});
+
+onUnmounted(() => {
+  document.removeEventListener('mousedown', handleNameFilterOutsideClick);
+  document.removeEventListener('touchstart', handleNameFilterOutsideClick);
 });
 
 // ✅ စာမျက်နှာပွင့်နေတုန်း နောက်ထပ် Link တစ်ခု ထပ်နှိပ်ရင်လည်း အလုပ်လုပ်အောင် စောင့်ကြည့်ပါ
@@ -2331,6 +2549,9 @@ watch(() => route.query, () => {
 
 watch(currentTab, () => {
   filters.value.page = 1;
+  filters.value.customerName = currentTab.value === 'sale' ? filters.value.customerName : '';
+  filters.value.supplierName = currentTab.value === 'purchase' ? filters.value.supplierName : '';
+  closeNameFilterResults();
   loadData();
 });
 </script>

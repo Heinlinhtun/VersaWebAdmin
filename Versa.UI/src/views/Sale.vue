@@ -637,6 +637,11 @@
                   <option value="A5">{{ t('sale.smallPage') }}</option>
                 </select>
               </div>
+              <label class="flex items-center gap-2.5 p-3 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer select-none">
+                <input v-model="showPreviousCredit" type="checkbox"
+                  class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                <span class="text-[10px] font-normal uppercase tracking-wider text-slate-600">{{ t('sale.showPreviousCredit') }}</span>
+              </label>
             </div>
           </div>
 
@@ -780,7 +785,7 @@
                 <td style="text-align: right; padding-top: 5px; font-weight: bold;">{{
                   formatNumber(Math.abs(balanceAmount)) }}</td>
               </tr>
-              <tr v-if="receiptTotalCredit > 0">
+              <tr v-if="showPreviousCredit && receiptTotalCredit > 0">
                 <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ t('sale.totalCredit') }}:</td>
                 <td style="text-align: right; padding-top: 5px; font-weight: bold; color: #dc2626;">{{ formatNumber(receiptTotalCredit) }}</td>
               </tr>
@@ -914,7 +919,7 @@
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">{{
                   formatNumber(Math.abs(balanceAmount)) }}</td>
               </tr>
-              <tr v-if="receiptTotalCredit > 0">
+              <tr v-if="showPreviousCredit && receiptTotalCredit > 0">
                 <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
                   {{ t('sale.totalCredit') }}:</td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold; color: #dc2626;">
@@ -1296,6 +1301,7 @@ const cart = ref([]);
 const createCartLineId = () =>
   `line-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const showPaymentModal = ref(false);
+const showPreviousCredit = ref(false);
 const showHeldSalesModal = ref(false);
 const heldSales = ref([]);
 const activeHeldSaleId = ref(null);
@@ -2494,6 +2500,7 @@ const buildReceiptText = (saleNo, options = {}) => {
   const paidTotal = Number(options.paidAmount ?? payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0));
   const balance = paidTotal - finalTotal;
   const totalCredit = toNonNegativeAmount(options.totalCredit ?? invoicePreviewData.value.totalCredit);
+  const includePreviousCredit = options.showPreviousCredit ?? showPreviousCredit.value;
   const lines = [];
   const line = '-'.repeat(width);
   const doubleLine = '='.repeat(width);
@@ -2587,7 +2594,7 @@ const buildReceiptText = (saleNo, options = {}) => {
   if (balance !== 0) {
     lines.push(columns(receiptBalanceLabel(balance), money(Math.abs(balance))));
   }
-  if (totalCredit > 0) {
+  if (includePreviousCredit && totalCredit > 0) {
     lines.push(columns(`${t('sale.totalCredit')}:`, money(totalCredit)));
   }
   lines.push(doubleLine);
@@ -2879,6 +2886,7 @@ const processCheckout = () => {
     }
     saleForm.value.SaleDate = new Date().toISOString().split('T')[0];
     receiptSize.value = preferredReceiptSize();
+    showPreviousCredit.value = false;
     showPaymentModal.value = true;
 
   } catch (err) {
@@ -3052,7 +3060,7 @@ const buildInvoiceHtml = (format = null) => {
   const balanceHtml = (balance !== 0 && Number.isFinite(balance))
     ? `<div style="display:flex;justify-content:${isThermal ? 'space-between' : 'flex-end'};${isThermal ? '' : 'gap:100px'};margin-top:4px;font-weight:bold;font-size:${isThermal ? font.total : 12}px;color:${balance > 0 ? '#16a34a' : '#dc2626'}"><span>${receiptBalanceLabel(balance)}</span><span>${formatMoney(Math.abs(balance))}</span></div>`
     : '';
-  const totalCreditHtml = receiptTotalCredit.value > 0
+  const totalCreditHtml = showPreviousCredit.value && receiptTotalCredit.value > 0
     ? `<div style="display:flex;justify-content:${isThermal ? 'space-between' : 'flex-end'};${isThermal ? '' : 'gap:100px'};margin-top:4px;font-weight:bold;font-size:${isThermal ? font.total : 12}px;color:#dc2626"><span>${t('sale.totalCredit')}:</span><span>${formatMoney(receiptTotalCredit.value)}</span></div>`
     : '';
 
@@ -3139,7 +3147,9 @@ const buildInvoiceHtml = (format = null) => {
     </div>`;
 };
 
-const capturePreviewElement = async () => {
+const ANDROID_THERMAL_PRINT_SCALE = 0.82;
+
+const capturePreviewElement = async ({ compactAndroidThermal = false } = {}) => {
   try {
     const html = capturedPrintHtml.value;
     if (!html) {
@@ -3149,6 +3159,8 @@ const capturePreviewElement = async () => {
 
     const isThermal = receiptSize.value === '80mm';
     const bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
+    const bodyHeight = isThermal ? 'auto' : (receiptSize.value === 'A5' ? '210mm' : '297mm');
+    const capturePaddingBottom = isThermal ? '18px' : '0';
     const captureWidth = bodyWidth;
 
     // Build logo HTML
@@ -3165,15 +3177,20 @@ const capturePreviewElement = async () => {
     const logoHtml = hasLogo
       ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:0"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
       : '';
+    const shouldCompactAndroidThermal = compactAndroidThermal && androidBridge.isAndroid() && isThermal;
+    const captureContent = shouldCompactAndroidThermal
+      ? '<div class="android-thermal-print-scale">' + logoHtml + html + '</div>'
+      : logoHtml + html;
 
     // Build complete document exactly like print
     const docHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
       '@font-face{font-family:"Pyidaungsu";src:local("Pyidaungsu")}' +
       'html,body{margin:0;padding:0;background:white}' +
       'body{font-family:"Pyidaungsu","Noto Sans Myanmar","Myanmar Text",sans-serif;line-height:1.45;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}' +
-      '#capture-root{width:' + captureWidth + ';margin:0 auto;padding-bottom:18px;background:white}' +
+      '#capture-root{width:' + captureWidth + ';min-height:' + bodyHeight + ';margin:0 auto;padding-bottom:' + capturePaddingBottom + ';background:white}' +
       '#capture-root > div{margin-left:auto!important;margin-right:auto!important}' +
       '*{box-sizing:border-box;word-break:normal;overflow-wrap:anywhere}' +
+      '.android-thermal-print-scale{width:calc(100% / ' + ANDROID_THERMAL_PRINT_SCALE + ');transform:scale(' + ANDROID_THERMAL_PRINT_SCALE + ');transform-origin:top left;background:white}' +
       'p{line-height:1.45!important}' +
       '#print-area{line-height:1.45!important;padding-bottom:12px!important}' +
       '#print-area>div{overflow:visible!important}' +
@@ -3192,7 +3209,7 @@ const capturePreviewElement = async () => {
       '#print-area div:last-child{margin-bottom:8px!important;padding-bottom:8px!important}' +
       '#print-area-a4 thead tr{background-color:#3f3f46!important}' +
       '#print-area-a4 th{color:white!important}' +
-      '</style></head><body><div id="capture-root">' + logoHtml + html + '</div></body></html>';
+      '</style></head><body><div id="capture-root">' + captureContent + '</div></body></html>';
 
     // Use an iframe for proper isolated rendering
     const iframe = document.createElement('iframe');
@@ -3221,6 +3238,7 @@ const capturePreviewElement = async () => {
 
     const captureRoot = iframeDoc.getElementById('capture-root');
     const targetEl = captureRoot || iframeDoc.body;
+    const captureHeight = Math.max(targetEl.scrollHeight, targetEl.offsetHeight);
     const { default: html2canvas } = await import('html2canvas');
     const canvas = await html2canvas(targetEl, {
       scale: androidBridge.isAndroid() && isThermal ? 2 : Math.max(3, window.devicePixelRatio || 2),
@@ -3230,7 +3248,7 @@ const capturePreviewElement = async () => {
       logging: false,
       foreignObjectRendering: false,
       width: targetEl.scrollWidth,
-      height: targetEl.scrollHeight,
+      height: captureHeight,
     });
 
     document.body.removeChild(iframe);
@@ -3309,7 +3327,7 @@ const printFromPreview = async () => {
 
   if (androidBridge.isAndroid()) {
     if (isThermal) {
-      const blob = await capturePreviewElement();
+      const blob = await capturePreviewElement({ compactAndroidThermal: true });
       if (blob) {
         const imageData = await blobToDataUrl(blob);
         const imagePrintResult = androidBridge.printImage(imageData);
@@ -3336,7 +3354,7 @@ const printFromPreview = async () => {
     title: 'Invoice - ' + (lastSaleNo.value || ''),
     pageSize,
     bodyWidth,
-    bodyPadding: isThermal ? '2mm' : '10mm',
+    bodyPadding: isThermal ? '2mm' : '0',
     html: fullPrintHtml,
     autoPrint: !isMobileBrowser(),
     extraCss:
@@ -3621,6 +3639,7 @@ const confirmSale = async () => {
       totalAmount: totalAmount.value,
       paidAmount: totalPaid.value,
       totalCredit: invoicePreviewData.value.totalCredit,
+      showPreviousCredit: showPreviousCredit.value,
       totalQty: totalQty.value
     });
 

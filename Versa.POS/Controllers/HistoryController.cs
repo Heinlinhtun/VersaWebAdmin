@@ -127,6 +127,7 @@ WHERE TABLE_SCHEMA = DATABASE()
     LEFT JOIN ShopUsers u ON s.UserId = u.UserId
     WHERE (@BranchId IS NULL OR s.BranchId = @BranchId)            
     AND (@Query = '' OR CAST(s.SaleId AS CHAR) = @Query OR s.SaleId LIKE CONCAT('%', @Query, '%'))
+    AND (@CustomerName = '' OR IFNULL(c.Name, '') LIKE CONCAT('%', @CustomerName, '%'))
     {dateFilter}
     AND (@OrderStatus = '' OR IFNULL(s.OrderStatus,'Completed') = @OrderStatus)
     ORDER BY s.SaleDate DESC LIMIT @Limit OFFSET @Offset;
@@ -134,8 +135,10 @@ WHERE TABLE_SCHEMA = DATABASE()
     -- ၂။ Pagination အတွက် Total Count
     SELECT COUNT(*) 
     FROM Sales s 
+    LEFT JOIN Customers c ON s.CustomerId = c.CustomerId
     WHERE (@BranchId IS NULL OR s.BranchId = @BranchId)
     AND (@Query = '' OR CAST(s.SaleId AS CHAR) = @Query OR s.SaleId LIKE CONCAT('%', @Query, '%'))
+    AND (@CustomerName = '' OR IFNULL(c.Name, '') LIKE CONCAT('%', @CustomerName, '%'))
     {dateFilter}
     AND (@OrderStatus = '' OR IFNULL(s.OrderStatus,'Completed') = @OrderStatus);";
 
@@ -143,6 +146,7 @@ WHERE TABLE_SCHEMA = DATABASE()
         {
             BranchId = bId,
             Query = filter.Query ?? "",
+            CustomerName = CleanText(filter.CustomerName),
             Date = CleanDate(filter.Date),
             StartDate = CleanDate(filter.StartDate),
             EndDate = CleanDate(filter.EndDate),
@@ -189,19 +193,23 @@ WHERE TABLE_SCHEMA = DATABASE()
         ) sp ON sp.ReferenceNo = CONCAT('PU', LPAD(p.POId, 7, '0'))
         WHERE (@BranchId IS NULL OR p.BranchId = @BranchId)
         AND (@Query = '' OR CAST(p.POId AS CHAR) = @Query OR p.POId LIKE CONCAT('%', @Query, '%'))
+        AND (@SupplierName = '' OR IFNULL(s.SupplierName, '') LIKE CONCAT('%', @SupplierName, '%'))
         {dateFilter}
         ORDER BY p.OrderDate DESC LIMIT @Limit OFFSET @Offset;
 
         -- Pagination အတွက် စစ်ထုတ်ထားသော Result အရေအတွက်ကို တွက်ပါသည်
         SELECT COUNT(*) FROM PurchaseOrders p
+        LEFT JOIN Suppliers s ON p.SupplierId = s.SupplierId
         WHERE (@BranchId IS NULL OR p.BranchId = @BranchId)
         AND (@Query = '' OR CAST(p.POId AS CHAR) = @Query OR p.POId LIKE CONCAT('%', @Query, '%'))
+        AND (@SupplierName = '' OR IFNULL(s.SupplierName, '') LIKE CONCAT('%', @SupplierName, '%'))
         {dateFilter};";
 
         var multi = await conn.QueryMultipleAsync(sql, new
         {
             BranchId = bId,
             Query = filter.Query ?? "",
+            SupplierName = CleanText(filter.SupplierName),
             Date = CleanDate(filter.Date),
             StartDate = CleanDate(filter.StartDate),
             EndDate = CleanDate(filter.EndDate),

@@ -132,7 +132,7 @@ const handleUpload = async () => {
       }
     });
 
-    addToast(t('inventory.importSuccess'), "success");
+    addToast(res.data?.Message || res.data?.message || t('inventory.importSuccess'), "success");
     emit('refresh');
     emit('close');
   } catch (err) {
