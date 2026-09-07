@@ -30,6 +30,29 @@ namespace Versa.POS.Controllers
             return int.TryParse(branchClaim, out var branchId) ? branchId : requestedBranchId;
         }
 
+        private static async Task EnsureStockAdjustmentLossColumnsAsync(MySqlConnection conn)
+        {
+            var existingColumns = (await conn.QueryAsync<string>(@"
+SELECT COLUMN_NAME
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'StockAdjustments'
+  AND COLUMN_NAME IN ('AdjustmentKind', 'LossReason', 'BaseQuantity', 'UnitCost', 'LossAmount')"))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var additions = new List<string>();
+            if (!existingColumns.Contains("AdjustmentKind")) additions.Add("ADD COLUMN AdjustmentKind VARCHAR(30) NOT NULL DEFAULT 'Correction'");
+            if (!existingColumns.Contains("LossReason")) additions.Add("ADD COLUMN LossReason VARCHAR(30) NULL");
+            if (!existingColumns.Contains("BaseQuantity")) additions.Add("ADD COLUMN BaseQuantity DECIMAL(18,4) NULL");
+            if (!existingColumns.Contains("UnitCost")) additions.Add("ADD COLUMN UnitCost DECIMAL(18,4) NULL");
+            if (!existingColumns.Contains("LossAmount")) additions.Add("ADD COLUMN LossAmount DECIMAL(18,4) NULL");
+
+            if (additions.Count > 0)
+            {
+                await conn.ExecuteAsync($"ALTER TABLE StockAdjustments {string.Join(", ", additions)}");
+            }
+        }
+
         private static async Task EnsureSaleReturnsPaymentMethodColumnAsync(MySqlConnection conn, MySqlTransaction transaction)
         {
             var hasColumn = await conn.ExecuteScalarAsync<int>(@"
@@ -456,6 +479,7 @@ WHERE POItemId = @POItemId",
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
             await conn.OpenAsync();
+            await EnsureStockAdjustmentLossColumnsAsync(conn);
             using var transaction = await conn.BeginTransactionAsync();
 
             try
@@ -466,26 +490,89 @@ WHERE POItemId = @POItemId",
                     return BadRequest(new { Message = "Return quantity must be greater than zero." });
                 }
 
+                if (!string.Equals(model.Type, "Addition", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(model.Type, "Subtraction", StringComparison.OrdinalIgnoreCase))
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { Message = "Adjustment type must be Addition or Subtraction." });
+                }
+
+                var isInventoryLoss = string.Equals(model.AdjustmentKind, "InventoryLoss", StringComparison.OrdinalIgnoreCase);
+                var allowedLossReasons = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "Damaged", "Destroyed", "Expired", "Lost", "Theft", "Other"
+                };
+                if (isInventoryLoss && !allowedLossReasons.Contains(model.LossReason ?? string.Empty))
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { Message = "Select a valid inventory loss reason." });
+                }
+
+                var effectiveBranchId = ResolveBranchScope(model.BranchId);
+                if (!effectiveBranchId.HasValue)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { Message = "A branch is required." });
+                }
+
                 var conv = await conn.QueryFirstOrDefaultAsync<dynamic>(
                     "SELECT Multiplier FROM UnitConversions WHERE ProductId = @ProductId AND FromUnitId = @UnitId",
                     new { model.ProductId, model.UnitId }, transaction);
 
                 decimal multiplier = conv?.Multiplier ?? 1;
                 decimal baseAdjustmentQty = model.Quantity * multiplier;
-                decimal finalQtyToUpdate = model.Type == "Addition" ? baseAdjustmentQty : -baseAdjustmentQty;
+                var isAddition = string.Equals(model.Type, "Addition", StringComparison.OrdinalIgnoreCase) && !isInventoryLoss;
+                decimal finalQtyToUpdate = isAddition ? baseAdjustmentQty : -baseAdjustmentQty;
 
-                string adjSql = @"INSERT INTO StockAdjustments (BranchId, ProductId, Type, Quantity, UnitId, Reason, AdjustmentDate, UserId)  
-                          VALUES (@BranchId, @ProductId, @Type, @Quantity, @UnitId, @Reason, NOW(), @UserId)";
+                var stock = await conn.QueryFirstOrDefaultAsync<dynamic>(@"
+SELECT ps.Quantity, IFNULL(p.CostPrice, 0) AS UnitCost
+FROM ProductStocks ps
+JOIN Products p ON p.ProductId = ps.ProductId
+WHERE ps.BranchId = @BranchId AND ps.ProductId = @ProductId
+FOR UPDATE", new { BranchId = effectiveBranchId.Value, model.ProductId }, transaction);
+
+                if (stock == null)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { Message = "This product does not have stock at the selected branch." });
+                }
+
+                var currentStock = Convert.ToDecimal(stock.Quantity);
+                if (!isAddition && baseAdjustmentQty > currentStock)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { Message = $"Only {currentStock:0.####} base units are available." });
+                }
+
+                decimal? unitCost = isInventoryLoss ? Convert.ToDecimal(stock.UnitCost) : null;
+                decimal? lossAmount = isInventoryLoss ? baseAdjustmentQty * unitCost.GetValueOrDefault() : null;
+                var adjustmentKind = isInventoryLoss ? "InventoryLoss" : "Correction";
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var effectiveUserId = int.TryParse(userIdClaim, out var authenticatedUserId)
+                    ? authenticatedUserId
+                    : model.UserId;
+
+                string adjSql = @"INSERT INTO StockAdjustments
+                          (BranchId, ProductId, Type, Quantity, UnitId, Reason, AdjustmentDate, UserId,
+                           AdjustmentKind, LossReason, BaseQuantity, UnitCost, LossAmount)
+                          VALUES
+                          (@BranchId, @ProductId, @Type, @Quantity, @UnitId, @Reason, NOW(), @UserId,
+                           @AdjustmentKind, @LossReason, @BaseQuantity, @UnitCost, @LossAmount)";
 
                 await conn.ExecuteAsync(adjSql, new
                 {
-                    model.BranchId,
+                    BranchId = effectiveBranchId.Value,
                     model.ProductId,
-                    model.Type,
+                    Type = isAddition ? "Addition" : "Subtraction",
                     model.Quantity,
                     model.UnitId,
                     model.Reason,
-                    model.UserId
+                    UserId = effectiveUserId,
+                    AdjustmentKind = adjustmentKind,
+                    LossReason = isInventoryLoss ? model.LossReason : null,
+                    BaseQuantity = baseAdjustmentQty,
+                    UnitCost = unitCost,
+                    LossAmount = lossAmount
                 }, transaction);
 
                 string stockUpdate = @"UPDATE ProductStocks 
@@ -495,12 +582,16 @@ WHERE POItemId = @POItemId",
                 await conn.ExecuteAsync(stockUpdate, new
                 {
                     finalQtyToUpdate,
-                    model.BranchId,
+                    BranchId = effectiveBranchId.Value,
                     model.ProductId
                 }, transaction);
 
                 await transaction.CommitAsync();
-                return Ok(new { Message = "Stock adjustment completed successfully." });
+                return Ok(new
+                {
+                    Message = isInventoryLoss ? "Inventory loss recorded successfully." : "Stock adjustment completed successfully.",
+                    LossAmount = lossAmount ?? 0m
+                });
             }
             catch (Exception ex)
             {
@@ -1286,9 +1377,13 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
             }
         }
 
-        [HttpGet("find-po/{poId}")]
-        public async Task<IActionResult> GetPOItems(int poId, [FromQuery] int? branchId = null)
+        [HttpGet("find-po/{poReference}")]
+        public async Task<IActionResult> GetPOItems(string poReference, [FromQuery] int? branchId = null)
         {
+            var numericReference = new string((poReference ?? string.Empty).Where(char.IsDigit).ToArray());
+            if (!int.TryParse(numericReference, out var poId) || poId <= 0)
+                return BadRequest(new { Message = "Enter a valid PO number, for example 15, PO-00015, or PU0000015." });
+
             using (var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName)))
             {
                 try
@@ -1433,9 +1528,11 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
         public async Task<IActionResult> GetStockAdjustments([FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate, [FromQuery] int? branchId)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+            await conn.OpenAsync();
+            await EnsureStockAdjustmentLossColumnsAsync(conn);
             var scopedBranchId = ResolveBranchScope(branchId);
             
-            string whereClause = "WHERE (@branchId IS NULL OR sa.BranchId = @branchId)";
+            string whereClause = "WHERE (@branchId IS NULL OR sa.BranchId = @branchId) AND sa.AdjustmentKind <> 'InventoryLoss'";
             if (fromDate.HasValue && toDate.HasValue)
             {
                 var start = fromDate.Value.Date;
@@ -1467,6 +1564,49 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
                 end = toDate?.Date.AddDays(1).AddTicks(-1),
                 branchId = scopedBranchId
             });
+            return Ok(items);
+        }
+
+        [HttpGet("losses")]
+        public async Task<IActionResult> GetInventoryLosses([FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate, [FromQuery] int? branchId)
+        {
+            using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+            await conn.OpenAsync();
+            await EnsureStockAdjustmentLossColumnsAsync(conn);
+            var scopedBranchId = ResolveBranchScope(branchId);
+
+            var start = fromDate?.Date;
+            var end = toDate?.Date.AddDays(1).AddTicks(-1);
+            const string sql = @"
+SELECT
+    sa.AdjustmentId AS LossId,
+    sa.AdjustmentDate AS LossDate,
+    p.Name AS ProductName,
+    p.SKU AS Sku,
+    sa.Quantity,
+    IFNULL(sa.BaseQuantity, sa.Quantity * IFNULL(uc.Multiplier, 1)) AS BaseQuantity,
+    u.UnitName,
+    bu.UnitName AS BaseUnitName,
+    sa.LossReason,
+    sa.Reason AS Notes,
+    IFNULL(sa.UnitCost, p.CostPrice) AS UnitCost,
+    IFNULL(sa.LossAmount, IFNULL(sa.BaseQuantity, sa.Quantity * IFNULL(uc.Multiplier, 1)) * IFNULL(sa.UnitCost, p.CostPrice)) AS LossAmount,
+    b.BranchName,
+    COALESCE(us.Username, 'System') AS UserName
+FROM StockAdjustments sa
+JOIN Products p ON p.ProductId = sa.ProductId
+LEFT JOIN Units u ON u.UnitId = sa.UnitId
+LEFT JOIN Units bu ON bu.UnitId = p.UnitId
+LEFT JOIN UnitConversions uc ON uc.ProductId = sa.ProductId AND uc.FromUnitId = sa.UnitId
+LEFT JOIN Branches b ON b.BranchId = sa.BranchId
+LEFT JOIN ShopUsers us ON us.UserId = sa.UserId
+WHERE sa.AdjustmentKind = 'InventoryLoss'
+  AND (@branchId IS NULL OR sa.BranchId = @branchId)
+  AND (@start IS NULL OR sa.AdjustmentDate >= @start)
+  AND (@end IS NULL OR sa.AdjustmentDate <= @end)
+ORDER BY sa.AdjustmentDate DESC, sa.AdjustmentId DESC";
+
+            var items = await conn.QueryAsync<dynamic>(sql, new { start, end, branchId = scopedBranchId });
             return Ok(items);
         }
 

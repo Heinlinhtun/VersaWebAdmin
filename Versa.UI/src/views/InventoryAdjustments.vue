@@ -30,6 +30,12 @@
         " class="px-8 py-2.5 rounded-lg font-normal text-[11px] uppercase tracking-wide transition-all duration-300">
         {{ tx.adjustment }}
       </button>
+      <button v-if="canUseStockAdjustments" @click="activeTab = 'loss'" :class="activeTab === 'loss'
+        ? 'bg-white text-rose-600 shadow-sm'
+        : 'text-slate-500 hover:text-slate-700'
+        " class="px-8 py-2.5 rounded-lg font-normal text-[11px] uppercase tracking-wide transition-all duration-300">
+        {{ tx.itemRemoval }}
+      </button>
       <button v-if="canUseStockTransfers" @click="activeTab = 'transfer'" :class="activeTab === 'transfer'
         ? 'bg-white text-blue-600 shadow-sm'
         : 'text-slate-500 hover:text-slate-700'
@@ -119,7 +125,7 @@
           <h2 class="text-sm font-normal uppercase text-orange-600 mb-6 flex items-center gap-2">{{
             tx.purchaseSupplierReturn }}</h2>
           <div class="flex gap-4">
-            <input v-model="searchPOId" type="number" :placeholder="tx.enterPoId"
+            <input v-model.trim="searchPOId" type="text" @keydown.enter.prevent="searchPO" :placeholder="tx.enterPoId"
               class="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl font-normal outline-none focus:ring-2 focus:ring-orange-500/20 transition-all text-sm" />
             <button @click="searchPO"
               class="bg-orange-600 text-white px-10 rounded-xl font-normal uppercase text-xs tracking-widest hover:bg-orange-700 transition">
@@ -213,10 +219,13 @@
         </div>
       </div>
 
-      <div v-if="activeTab === 'adjustment' && canUseStockAdjustments"
+      <div v-if="(activeTab === 'adjustment' || activeTab === 'loss') && canUseStockAdjustments"
         class="mx-auto bg-white p-8 rounded-xl shadow-sm border border-slate-100 animate-in zoom-in duration-300">
-        <h2 class="text-sm font-normal uppercase text-slate-800 mb-8 border-b border-slate-100 pb-4">{{ tx.adjustmentTitle
+        <h2 class="text-sm font-normal uppercase" :class="activeTab === 'loss' ? 'text-rose-600 mb-2' : 'text-slate-800 mb-8 border-b border-slate-100 pb-4'">{{ activeTab === 'loss' ? tx.inventoryLossTitle : tx.adjustmentTitle
           }}</h2>
+        <p v-if="activeTab === 'loss'" class="text-[10px] text-slate-400 uppercase tracking-widest mb-8 border-b border-slate-100 pb-4">
+          {{ tx.inventoryLossHelp }}
+        </p>
         <div class="space-y-6">
           <div class="space-y-1.5">
             <label class="text-[10px] font-normal text-slate-400 uppercase ml-1 block">{{ tx.selectProduct }}</label>
@@ -252,12 +261,24 @@
             </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="col-span-2 space-y-1.5">
+            <div v-if="activeTab === 'adjustment'" class="col-span-2 space-y-1.5">
               <label class="text-[10px] font-normal text-slate-400 uppercase ml-1 block">{{ tx.type }}</label>
               <select v-model="adjForm.Type"
                 class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-normal outline-none text-sm">
                 <option value="Addition">{{ tx.addition }}</option>
                 <option value="Subtraction">{{ tx.subtraction }}</option>
+              </select>
+            </div>
+            <div v-else class="col-span-2 space-y-1.5">
+              <label class="text-[10px] font-normal text-slate-400 uppercase ml-1 block">{{ tx.lossReason }}</label>
+              <select v-model="adjForm.LossReason"
+                class="w-full p-3 bg-rose-50/50 border border-rose-100 rounded-xl font-normal outline-none text-sm">
+                <option value="Damaged">{{ tx.damaged }}</option>
+                <option value="Destroyed">{{ tx.destroyed }}</option>
+                <option value="Expired">{{ tx.expiredLoss }}</option>
+                <option value="Lost">{{ tx.lost }}</option>
+                <option value="Theft">{{ tx.theft }}</option>
+                <option value="Other">{{ tx.other }}</option>
               </select>
             </div>
 
@@ -277,14 +298,22 @@
               </select>
             </div>
           </div>
+          <div v-if="activeTab === 'loss' && selectedAdjProduct" class="rounded-xl border border-rose-100 bg-rose-50/50 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p class="text-[9px] text-rose-500 uppercase tracking-widest">{{ tx.estimatedLoss }}</p>
+              <p class="text-lg text-rose-700 tabular-nums">{{ formatMoney(estimatedLossAmount) }} Ks</p>
+            </div>
+            <p class="text-[10px] text-slate-500">{{ tx.profitDeductionNotice }}</p>
+          </div>
           <div class="space-y-1.5">
-            <label class="text-[10px] font-normal text-slate-400 uppercase ml-1 block">{{ tx.reason }}</label>
+            <label class="text-[10px] font-normal text-slate-400 uppercase ml-1 block">{{ activeTab === 'loss' ? tx.notes : tx.reason }}</label>
             <textarea v-model="adjForm.Reason" rows="3"
               class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none font-normal text-xs"></textarea>
           </div>
-          <button @click="submitAdjustment"
-            class="w-full bg-slate-800 text-white py-4 rounded-xl font-normal uppercase text-[11px] tracking-widest shadow-md hover:bg-black transition">
-            {{ tx.confirmAdjustment }}
+          <button @click="submitAdjustment" :disabled="isSubmittingAdjustment"
+            class="w-full text-white py-4 rounded-xl font-normal uppercase text-[11px] tracking-widest shadow-md transition disabled:opacity-50"
+            :class="activeTab === 'loss' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-slate-800 hover:bg-black'">
+            {{ activeTab === 'loss' ? tx.confirmRemoval : tx.confirmAdjustment }}
           </button>
         </div>
       </div>
@@ -459,8 +488,10 @@ const adjForm = ref({
   Type: "Subtraction",
   Quantity: 0,
   Reason: "",
+  LossReason: "Damaged",
   UserId: localStorage.getItem("UserId"),
 });
+const isSubmittingAdjustment = ref(false);
 const availableUnits = ref([]);
 const transferForm = ref({
   FromBranchId: Number(localStorage.getItem("BranchId")),
@@ -488,6 +519,7 @@ const tx = computed(() => ({
   saleReturn: t('inventoryAdjustments.saleReturn'),
   purchaseReturn: t('inventoryAdjustments.purchaseReturn'),
   adjustment: t('inventoryAdjustments.adjustment'),
+  itemRemoval: t('inventoryAdjustments.itemRemoval'),
   stockTransfer: t('inventoryAdjustments.stockTransfer'),
   saleVoucherReturn: t('inventoryAdjustments.saleVoucherReturn'),
   enterVoucherId: t('inventoryAdjustments.enterVoucherId'),
@@ -518,6 +550,20 @@ const tx = computed(() => ({
   quantity: t('inventoryAdjustments.quantity'),
   reason: t('inventoryAdjustments.reason'),
   adjustmentTitle: t('inventoryAdjustments.adjustmentTitle'),
+  inventoryLossTitle: t('inventoryAdjustments.inventoryLossTitle'),
+  inventoryLossHelp: t('inventoryAdjustments.inventoryLossHelp'),
+  lossReason: t('inventoryAdjustments.lossReason'),
+  damaged: t('inventoryAdjustments.damaged'),
+  destroyed: t('inventoryAdjustments.destroyed'),
+  expiredLoss: t('inventoryAdjustments.expiredLoss'),
+  lost: t('inventoryAdjustments.lost'),
+  theft: t('inventoryAdjustments.theft'),
+  other: t('inventoryAdjustments.other'),
+  notes: t('inventoryAdjustments.notes'),
+  estimatedLoss: t('inventoryAdjustments.estimatedLoss'),
+  profitDeductionNotice: t('inventoryAdjustments.profitDeductionNotice'),
+  confirmRemoval: t('inventoryAdjustments.confirmRemoval'),
+  removalSuccess: t('inventoryAdjustments.removalSuccess'),
   transferTitle: t('inventoryAdjustments.transferTitle'),
   fromBranch: t('inventoryAdjustments.fromBranch'),
   toBranchTarget: t('inventoryAdjustments.toBranchTarget'),
@@ -554,6 +600,21 @@ const tx = computed(() => ({
 const formatQty = (value) => Number(value || 0).toLocaleString(undefined, {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2
+});
+const formatMoney = (value) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const selectedAdjProduct = computed(() => products.value.find(
+  (p) => Number(p.ProductId || p.productId) === Number(adjForm.value.ProductId)
+) || null);
+const selectedAdjUnitMultiplier = computed(() => {
+  const unit = currentProductUnits.value.find(
+    (u) => Number(u.UnitId || u.unitId) === Number(adjForm.value.UnitId)
+  );
+  return Number(unit?.Multiplier ?? unit?.multiplier ?? 1) || 1;
+});
+const estimatedLossAmount = computed(() => {
+  if (activeTab.value !== 'loss' || !selectedAdjProduct.value) return 0;
+  const cost = Number(selectedAdjProduct.value.CostPrice ?? selectedAdjProduct.value.costPrice ?? 0);
+  return Number(adjForm.value.Quantity || 0) * selectedAdjUnitMultiplier.value * cost;
 });
 
 const getApiErrorMessage = (err, fallback) => (
@@ -870,7 +931,7 @@ const searchPO = async () => {
   if (!searchPOId.value) return;
   try {
     const branchId = localStorage.getItem('BranchId');
-    const res = await api.get(`/Inventory/find-po/${searchPOId.value}?branchId=${branchId}`);
+    const res = await api.get(`/Inventory/find-po/${encodeURIComponent(searchPOId.value)}?branchId=${branchId}`);
     const mappedItems = await Promise.all(
       res.data.map(async (item) => {
         const hasProductId = item.ProductId !== null && item.ProductId !== undefined;
@@ -966,12 +1027,22 @@ const processPurchaseReturn = async (item) => {
 
 const submitAdjustment = async () => {
   if (adjForm.value.Quantity <= 0) return addToast(tx.value.qtyRequired, "warning");
+  if (!adjForm.value.ProductId || !adjForm.value.UnitId) return addToast(tx.value.requiredFields, "warning");
   try {
-    await api.post("/inventory/adjust", adjForm.value);
-    addToast(tx.value.adjustmentSuccess, "success");
+    isSubmittingAdjustment.value = true;
+    const isLoss = activeTab.value === 'loss';
+    const payload = {
+      ...adjForm.value,
+      Type: isLoss ? 'Subtraction' : adjForm.value.Type,
+      AdjustmentKind: isLoss ? 'InventoryLoss' : 'Correction',
+      LossReason: isLoss ? adjForm.value.LossReason : null,
+    };
+    await api.post("/inventory/adjust", payload);
+    addToast(isLoss ? tx.value.removalSuccess : tx.value.adjustmentSuccess, "success");
     adjForm.value.Quantity = 0;
     fetchProducts();
-  } catch (err) { addToast(tx.value.failed, "error"); }
+  } catch (err) { addToast(getApiErrorMessage(err, tx.value.failed), "error"); }
+  finally { isSubmittingAdjustment.value = false; }
 };
 
 const submitTransfer = async () => {
@@ -1038,12 +1109,13 @@ watch(activeTab, (tab) => {
     (tab === "sale" && canUseSaleReturns.value) ||
     (tab === "purchase" && canUsePurchaseReturns.value) ||
     (tab === "adjustment" && canUseStockAdjustments.value) ||
+    (tab === "loss" && canUseStockAdjustments.value) ||
     (tab === "transfer" && canUseStockTransfers.value);
   if (!allowed) {
     activeTab.value = firstAllowedTab.value;
     return;
   }
-  if (tab === "adjustment" || tab === "transfer") fetchProducts();
+  if (tab === "adjustment" || tab === "loss" || tab === "transfer") fetchProducts();
 });
 
 onUnmounted(() => {

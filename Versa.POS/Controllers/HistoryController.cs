@@ -431,6 +431,7 @@ SELECT
     p.ProductId AS productId,
     COALESCE(NULLIF(p.SKU, ''), CONCAT('P-', p.ProductId)) AS barcode,
     p.Name AS itemName,
+    COALESCE(c.CategoryName, 'Uncategorized') AS categoryName,
     u.UnitName AS unitName,
     COALESCE(lp.LatestPurchasePrice, p.CostPrice, 0) AS latestPurchasePrice,
     COALESCE(ls.LatestSalePrice, p.SalePrice, 0) AS latestSalePrice,
@@ -439,6 +440,7 @@ SELECT
     IFNULL(ret.TotalReturned, 0) AS totalReturned,
     IFNULL(stock.TotalStockRemains, 0) AS totalStockRemains
 FROM Products p
+LEFT JOIN Categories c ON p.CategoryId = c.CategoryId
 LEFT JOIN Units u ON p.UnitId = u.UnitId
 LEFT JOIN (
     SELECT poi.ProductId,

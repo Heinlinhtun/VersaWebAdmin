@@ -25,6 +25,11 @@ namespace Versa.Core.Models
             // အကြောင်းပြချက် (ဥပမာ - ပစ္စည်းပျက်စီးခြင်း၊ စာရင်းစစ်ဆေးတွေ့ရှိချက်)
             public string Reason { get; set; }
             public int? UserId { get; set; }
+
+            // "Correction" keeps ordinary stock counts separate from inventory
+            // losses, which are charged to profit at the current weighted cost.
+            public string AdjustmentKind { get; set; } = "Correction";
+            public string? LossReason { get; set; }
         }
     }
 }

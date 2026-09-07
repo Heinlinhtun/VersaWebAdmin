@@ -26,6 +26,10 @@
               <p class="text-sm font-normal text-rose-400 tabular-nums">-{{ formatNumber(profitData.TotalExpenses) }} Ks
               </p>
             </div>
+            <div class="bg-white/5 px-4 py-2.5 rounded-lg border border-white/10 backdrop-blur-sm">
+              <p class="text-[9px] font-normal uppercase text-slate-400 tracking-wider">{{ tx.inventoryLosses }}</p>
+              <p class="text-sm font-normal text-rose-400 tabular-nums">-{{ formatNumber(profitData.InventoryLossAmount) }} Ks</p>
+            </div>
             <div class="bg-blue-500/10 px-4 py-2.5 rounded-lg border border-blue-500/20 backdrop-blur-sm">
               <p class="text-[9px] font-normal uppercase text-blue-300 tracking-wider">{{ tx.netProfitMargin }}</p>
               <p class="text-sm font-normal text-blue-400 tabular-nums">{{ calculateMargin(profitData.FinalNetProfit,
@@ -99,7 +103,7 @@
               <div class="flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider text-slate-500">
                 <span>{{ tx.finalProfitFormula }}</span>
                 <span class="font-normal text-slate-700 tabular-nums">
-                  {{ formatNumber(profitData.GrossProfit) }} - {{ formatNumber(profitData.TotalDiscounts) }} - {{ formatNumber(profitData.TotalExpenses) }} = {{ formatNumber(profitData.FinalNetProfit) }}
+                  {{ formatNumber(profitData.GrossProfit) }} - {{ formatNumber(profitData.TotalDiscounts) }} - {{ formatNumber(profitData.TotalExpenses) }} - {{ formatNumber(profitData.InventoryLossAmount) }} = {{ formatNumber(profitData.FinalNetProfit) }}
                 </span>
               </div>
             </div>
@@ -373,6 +377,7 @@ const profitData = ref({
   GrossProfit: 0,
   FinalNetProfit: 0,
   TotalExpenses: 0,
+  InventoryLossAmount: 0,
   ConsignmentRevenue: 0,
   ConsignmentCost: 0,
   ConsignmentProfit: 0,
@@ -401,6 +406,7 @@ const tx = computed(() => ({
   totalCogs: t('reportViews.profit.totalCogs'),
   expenditures: t('reportViews.profit.expenditures'),
   voucherDiscounts: t('reportViews.profit.voucherDiscounts'),
+  inventoryLosses: t('reportViews.profit.inventoryLosses'),
   geographicBranchPerformance: t('reportViews.profit.geographicBranchPerformance'),
   rankedByNetMargin: t('reportViews.profit.rankedByNetMargin'),
   transactions: t('reportViews.profit.transactions'),
@@ -482,6 +488,7 @@ const fetchData = async () => {
       GrossProfit: pickAmount(payload, 'GrossProfit'),
       FinalNetProfit: pickAmount(payload, 'FinalNetProfit'),
       TotalExpenses: pickAmount(payload, 'TotalExpenses'),
+      InventoryLossAmount: pickAmount(payload, 'InventoryLossAmount'),
       ConsignmentRevenue: pickAmount(payload, 'ConsignmentRevenue'),
       ConsignmentCost: pickAmount(payload, 'ConsignmentCost'),
       ConsignmentProfit: pickAmount(payload, 'ConsignmentProfit'),

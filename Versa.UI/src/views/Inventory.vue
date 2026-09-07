@@ -10,7 +10,7 @@
               {{ tx.branch }}: {{ userRole === 'Admin' ? (selectedBranchName || tx.allBranches) : userBranchName }}
             </p>
             <button @click="handleExportCsv" class="text-[10px] font-normal text-blue-600 uppercase hover:underline mr-3">EXPORT CSV</button>
-            <button @click="showImportModal = true" class="text-[10px] font-normal text-emerald-600 uppercase hover:underline">IMPORT EXCEL</button>
+            <button v-if="canManageImports" @click="showImportModal = true" class="text-[10px] font-normal text-emerald-600 uppercase hover:underline">{{ t('inventory.importExcel') }}</button>
           </div>
         </div>
 
@@ -180,6 +180,7 @@ const currentPage = ref(1);
 const pageSize = ref(15);
 
 const userRole = ref(localStorage.getItem('Role') || 'Staff');
+const canManageImports = computed(() => ['admin', 'manager'].includes(userRole.value.toLowerCase()));
 const userBranchId = ref(parseInt(localStorage.getItem('BranchId')) || 0);
 const userBranchName = ref(localStorage.getItem('BranchName') || 'Main Shop');
 

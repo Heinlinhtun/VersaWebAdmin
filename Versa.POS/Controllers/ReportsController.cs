@@ -27,6 +27,29 @@ public class ReportsController : BaseShopController
         return int.TryParse(branchClaim, out var branchId) ? branchId : requestedBranchId;
     }
 
+    private static async Task EnsureStockAdjustmentLossColumnsAsync(MySqlConnection conn)
+    {
+        var existingColumns = (await conn.QueryAsync<string>(@"
+SELECT COLUMN_NAME
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'StockAdjustments'
+  AND COLUMN_NAME IN ('AdjustmentKind', 'LossReason', 'BaseQuantity', 'UnitCost', 'LossAmount')"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var additions = new List<string>();
+        if (!existingColumns.Contains("AdjustmentKind")) additions.Add("ADD COLUMN AdjustmentKind VARCHAR(30) NOT NULL DEFAULT 'Correction'");
+        if (!existingColumns.Contains("LossReason")) additions.Add("ADD COLUMN LossReason VARCHAR(30) NULL");
+        if (!existingColumns.Contains("BaseQuantity")) additions.Add("ADD COLUMN BaseQuantity DECIMAL(18,4) NULL");
+        if (!existingColumns.Contains("UnitCost")) additions.Add("ADD COLUMN UnitCost DECIMAL(18,4) NULL");
+        if (!existingColumns.Contains("LossAmount")) additions.Add("ADD COLUMN LossAmount DECIMAL(18,4) NULL");
+
+        if (additions.Count > 0)
+        {
+            await conn.ExecuteAsync($"ALTER TABLE StockAdjustments {string.Join(", ", additions)}");
+        }
+    }
+
     private static async Task EnsureSaleReturnsPaymentMethodColumnAsync(MySqlConnection conn)
     {
         var hasColumn = await conn.ExecuteScalarAsync<int>(@"
@@ -1007,6 +1030,7 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
         await EnsureBundleItemsSupportsServicesAsync(conn);
+        await EnsureStockAdjustmentLossColumnsAsync(conn);
         var start = fromDate.Date;
         var end = toDate.Date.AddDays(1).AddTicks(-1);
         var scopedBranchId = ResolveBranchScope(branchId);
@@ -1172,7 +1196,8 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
                 TotalDiscounts = 0m,
                 GrossProfit = 0m,
                 FinalNetProfit = 0m,
-                TotalExpenses = 0m
+                TotalExpenses = 0m,
+                InventoryLossAmount = 0m
             });
         }
 
@@ -1201,6 +1226,12 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
         decimal returnedItemRevenue = 0m;
         decimal returnedServiceRevenue = 0m;
         decimal returnedCostAmount = 0m;
+        var inventoryLossAmount = await conn.ExecuteScalarAsync<decimal>(@"
+SELECT IFNULL(SUM(IFNULL(LossAmount, 0)), 0)
+FROM StockAdjustments
+WHERE AdjustmentKind = 'InventoryLoss'
+  AND AdjustmentDate BETWEEN @start AND @end
+  AND (@branchId IS NULL OR BranchId = @branchId)", new { start, end, branchId = scopedBranchId });
 
         try
         {
@@ -1387,8 +1418,9 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
             ConsignmentPayoutDue = consignmentPayoutDue,
             TotalDiscounts = totalDiscounts,
             GrossProfit = netGrossProfit,
-            FinalNetProfit = netGrossProfit + totalDeliveryFees - totalDiscounts - totalExpenses,
-            TotalExpenses = totalExpenses
+            FinalNetProfit = netGrossProfit + totalDeliveryFees - totalDiscounts - totalExpenses - inventoryLossAmount,
+            TotalExpenses = totalExpenses,
+            InventoryLossAmount = inventoryLossAmount
         });
     }
     // ၄။ Inventory Reports: လက်ရှိ Stock တန်ဖိုး တွက်ချက်ခြင်း
@@ -1591,6 +1623,7 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
         await EnsureBundleItemsSupportsServicesAsync(conn);
+        await EnsureStockAdjustmentLossColumnsAsync(conn);
         var start = fromDate.Date;
         var end = toDate.Date.AddDays(1).AddTicks(-1);
         var scopedBranchId = ResolveBranchScope(branchId);
@@ -1643,6 +1676,7 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
                 + IFNULL(sf.DeliveryFees, 0)
                 - IFNULL(sf.VoucherDiscounts, 0)
                 - IFNULL(e.TotalExpenses, 0)
+                - IFNULL(il.InventoryLossAmount, 0)
             ) AS TotalNetProfit
         FROM Branches b
         LEFT JOIN Sales s
@@ -1721,9 +1755,16 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
             WHERE ExpenseDate BETWEEN @start AND @end
             GROUP BY BranchId
         ) e ON e.BranchId = b.BranchId
+        LEFT JOIN (
+            SELECT BranchId, IFNULL(SUM(IFNULL(LossAmount, 0)), 0) AS InventoryLossAmount
+            FROM StockAdjustments
+            WHERE AdjustmentKind = 'InventoryLoss'
+              AND AdjustmentDate BETWEEN @start AND @end
+            GROUP BY BranchId
+        ) il ON il.BranchId = b.BranchId
         WHERE b.IsActive = 1
           AND (@branchId IS NULL OR b.BranchId = @branchId)
-        GROUP BY b.BranchId, b.BranchName, sf.SalesFallbackTotal, r.ReturnedRevenue, r.ReturnedCost, sf.DeliveryFees, sf.VoucherDiscounts, e.TotalExpenses
+        GROUP BY b.BranchId, b.BranchName, sf.SalesFallbackTotal, r.ReturnedRevenue, r.ReturnedCost, sf.DeliveryFees, sf.VoucherDiscounts, e.TotalExpenses, il.InventoryLossAmount
         ORDER BY TotalRevenue DESC";
 
         var comparison = await conn.QueryAsync<dynamic>(sql, new { start, end, branchId = scopedBranchId });

@@ -970,7 +970,7 @@
           <span>No: SA{{ String(selectedSale.sale.SaleId).padStart(7, '0') }}</span>
           <span>{{ formatDateTime(selectedSale.sale.SaleDate) }}</span>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+        <div :style="{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', fontSize: receiptFont.small + 'px' }">
           <span style="flex: 1 1 auto; min-width: 0; white-space: normal; word-break: break-word; line-height: 1.35;">Cus: {{
             selectedSale.sale.CustomerName || 'Walk-in' }}</span>
           <span style="flex: 0 0 auto; text-align: right; white-space: nowrap;">Staff: {{ selectedSale.sale.CashierName || 'System' }}</span>
@@ -1328,7 +1328,6 @@ const getSaleNetAmount = (sale) => {
 const shopInfo = ref({});
 const receiptFontSizeMap = { Small: { body: 10, h1: 16, h2: 14, small: 8, tiny: 7, footer: 9, total: 10 }, Medium: { body: 13, h1: 20, h2: 18, small: 11, tiny: 9, footer: 11, total: 12 }, Large: { body: 16, h1: 26, h2: 22, small: 14, tiny: 11, footer: 14, total: 15 } };
 const receiptFont = computed(() => receiptFontSizeMap[shopInfo.value.ReceiptFontSize] || receiptFontSizeMap.Medium);
-const ANDROID_THERMAL_PRINT_SCALE = 0.82;
 const normalizeReceiptSize = (value) => ['80mm', 'A4', 'A5'].includes(value) ? value : '80mm';
 const preferredReceiptSize = () => normalizeReceiptSize(
   shopInfo.value.PreferredPaperSize ?? shopInfo.value.preferredPaperSize
@@ -1468,7 +1467,7 @@ const printAndroidDetailImageIfPossible = async () => {
   const el = document.getElementById(elementId);
   if (!el || typeof androidBridge.printImage !== 'function') return false;
 
-  const blob = await captureDetailInvoiceElement(el, { compactAndroidThermal: true });
+  const blob = await captureDetailInvoiceElement(el);
   if (!blob) return false;
 
   const dataUrl = await blobToDataUrl(blob);
@@ -1659,7 +1658,7 @@ const shareFromDetail = async () => {
   addToast(t('history.shareDownloaded') || 'Invoice image downloaded.', 'info');
 };
 
-const captureDetailInvoiceElement = async (el, { compactAndroidThermal = false } = {}) => {
+const captureDetailInvoiceElement = async (el) => {
   let iframe = null;
   try {
     const isThermal = receiptSize.value === '80mm';
@@ -1682,10 +1681,7 @@ const captureDetailInvoiceElement = async (el, { compactAndroidThermal = false }
     const logoHtml = hasLogo
       ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:0"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
       : '';
-    const shouldCompactAndroidThermal = compactAndroidThermal && androidBridge.isAndroid() && isThermal;
-    const captureContent = shouldCompactAndroidThermal
-      ? '<div class="android-thermal-print-scale">' + logoHtml + contentHtml + '</div>'
-      : logoHtml + contentHtml;
+    const captureContent = logoHtml + contentHtml;
 
     const docHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
       '@font-face{font-family:"Pyidaungsu";src:local("Pyidaungsu")}' +
@@ -1694,7 +1690,6 @@ const captureDetailInvoiceElement = async (el, { compactAndroidThermal = false }
       '#capture-root{width:' + captureWidth + ';min-height:' + bodyHeight + ';margin:0 auto;padding-bottom:' + capturePaddingBottom + ';background:white}' +
       '#capture-root > div{margin-left:auto!important;margin-right:auto!important}' +
       '*{box-sizing:border-box;word-break:normal;overflow-wrap:anywhere}' +
-      '.android-thermal-print-scale{width:calc(100% / ' + ANDROID_THERMAL_PRINT_SCALE + ');transform:scale(' + ANDROID_THERMAL_PRINT_SCALE + ');transform-origin:top left;background:white}' +
       'p{line-height:1.45!important}' +
       '#print-area{line-height:1.45!important;padding-bottom:12px!important}' +
       '#print-area>div{overflow:visible!important}' +
@@ -2418,6 +2413,7 @@ const buildCsvPayload = (tab, sourceData) => {
       t('common.no'),
       t('history.barcode'),
       t('history.itemName'),
+      t('history.category'),
       t('history.unit'),
       t('history.latestPurchasePrice'),
       t('history.latestSalePrice'),
@@ -2430,6 +2426,7 @@ const buildCsvPayload = (tab, sourceData) => {
       index + 1,
       csvValueOf(item, 'Barcode', 'barcode'),
       csvValueOf(item, 'ItemName', 'itemName'),
+      csvValueOf(item, 'CategoryName', 'categoryName', 'Uncategorized'),
       csvValueOf(item, 'UnitName', 'unitName'),
       csvValueOf(item, 'LatestPurchasePrice', 'latestPurchasePrice', 0),
       csvValueOf(item, 'LatestSalePrice', 'latestSalePrice', 0),

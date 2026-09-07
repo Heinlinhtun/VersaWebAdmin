@@ -89,6 +89,9 @@
         <div v-if="activeTab === 'adjustment'">
           <AdjustmentReport :key="reportRefreshKey" :filters="filters" />
         </div>
+        <div v-if="activeTab === 'loss'">
+          <InventoryLossReport :key="reportRefreshKey" :filters="filters" />
+        </div>
       </div>
     </div>
 
@@ -113,6 +116,7 @@ import ExpenseReport from './reports/ExpenseReport.vue';
 import ProfitReport from './reports/ProfitReport.vue';
 import ExpiredReport from './reports/ExpiredReport.vue';
 import AdjustmentReport from './reports/AdjustmentReport.vue';
+import InventoryLossReport from './reports/InventoryLossReport.vue';
 
 const activeTab = ref('sales');
 const { t } = useI18n();
@@ -134,7 +138,8 @@ const tx = computed(() => ({
   expenses: t('reports.expenses'),
   profits: t('reports.profits'),
   expired: t('reports.expired'),
-  adjustment: t('reports.adjustment')
+  adjustment: t('reports.adjustment'),
+  inventoryLoss: t('reports.inventoryLoss')
 }));
 
 const today = new Date().toISOString().substr(0, 10);
@@ -179,7 +184,8 @@ const reportTabs = computed(() => [
   { id: 'expense', name: tx.value.expenses, icon: 'EX' },
   { id: 'profit', name: tx.value.profits, icon: 'PF' },
   { id: 'expired', name: tx.value.expired, icon: 'EP' },
-  { id: 'adjustment', name: tx.value.adjustment, icon: 'AD' }
+  { id: 'adjustment', name: tx.value.adjustment, icon: 'AD' },
+  { id: 'loss', name: tx.value.inventoryLoss, icon: 'LS' }
 ]);
 
 const activeReportTab = computed(() => reportTabs.value.find(t => t.id === activeTab.value) || reportTabs.value[0]);

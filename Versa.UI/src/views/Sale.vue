@@ -689,7 +689,7 @@
             <span>No: {{ lastSaleNo }}</span>
             <span>{{ lastSaleDate }}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+          <div :style="{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', fontSize: receiptFont.small + 'px' }">
             <span :style="{ flex: '1 1 auto', minWidth: 0, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.25' }">
               Cus: {{ selectedCustomerName || 'Walk-in' }}
             </span>
@@ -3147,9 +3147,7 @@ const buildInvoiceHtml = (format = null) => {
     </div>`;
 };
 
-const ANDROID_THERMAL_PRINT_SCALE = 0.82;
-
-const capturePreviewElement = async ({ compactAndroidThermal = false } = {}) => {
+const capturePreviewElement = async () => {
   try {
     const html = capturedPrintHtml.value;
     if (!html) {
@@ -3177,10 +3175,7 @@ const capturePreviewElement = async ({ compactAndroidThermal = false } = {}) => 
     const logoHtml = hasLogo
       ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:0"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
       : '';
-    const shouldCompactAndroidThermal = compactAndroidThermal && androidBridge.isAndroid() && isThermal;
-    const captureContent = shouldCompactAndroidThermal
-      ? '<div class="android-thermal-print-scale">' + logoHtml + html + '</div>'
-      : logoHtml + html;
+    const captureContent = logoHtml + html;
 
     // Build complete document exactly like print
     const docHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
@@ -3190,7 +3185,6 @@ const capturePreviewElement = async ({ compactAndroidThermal = false } = {}) => 
       '#capture-root{width:' + captureWidth + ';min-height:' + bodyHeight + ';margin:0 auto;padding-bottom:' + capturePaddingBottom + ';background:white}' +
       '#capture-root > div{margin-left:auto!important;margin-right:auto!important}' +
       '*{box-sizing:border-box;word-break:normal;overflow-wrap:anywhere}' +
-      '.android-thermal-print-scale{width:calc(100% / ' + ANDROID_THERMAL_PRINT_SCALE + ');transform:scale(' + ANDROID_THERMAL_PRINT_SCALE + ');transform-origin:top left;background:white}' +
       'p{line-height:1.45!important}' +
       '#print-area{line-height:1.45!important;padding-bottom:12px!important}' +
       '#print-area>div{overflow:visible!important}' +
@@ -3327,7 +3321,7 @@ const printFromPreview = async () => {
 
   if (androidBridge.isAndroid()) {
     if (isThermal) {
-      const blob = await capturePreviewElement({ compactAndroidThermal: true });
+      const blob = await capturePreviewElement();
       if (blob) {
         const imageData = await blobToDataUrl(blob);
         const imagePrintResult = androidBridge.printImage(imageData);
