@@ -729,9 +729,10 @@ VALUES (@saleId, @ItemType, @ProductId, @BundleId, @ServiceId, @BranchId, @Quant
                     }, transaction);
                 }
 
+                // Reduce customer credit while the original due amount is still available.
+                await ApplySaleReturnToCustomerCreditAsync(conn, (MySqlTransaction)transaction, saleId, fullReturnAmount);
                 await conn.ExecuteAsync("DELETE FROM SaleItems WHERE SaleId = @saleId", new { saleId }, transaction);
                 await conn.ExecuteAsync("UPDATE Sales SET TotalAmount = 0, DiscountAmount = 0, DeliveryFee = 0, DueAmount = 0 WHERE SaleId = @saleId", new { saleId }, transaction);
-                await ApplySaleReturnToCustomerCreditAsync(conn, (MySqlTransaction)transaction, saleId, fullReturnAmount);
 
                 await transaction.CommitAsync();
                 return Ok(new { Message = "Voucher တစ်စောင်လုံး Return ပြန်ခြင်း အောင်မြင်ပါသည်။ ပစ္စည်းအားလုံး Stock ထဲ ပြန်ရောက်သွားပါပြီ။" });

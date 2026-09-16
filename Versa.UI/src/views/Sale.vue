@@ -48,6 +48,19 @@
 
         <!-- Footer Actions -->
         <div class="invoice-preview-actions p-4 border-t border-slate-200 bg-white shrink-0 space-y-3">
+          <div v-if="supportsEpsonAssistant && receiptSize === '80mm'" class="space-y-2">
+            <label class="block text-xs text-slate-600">
+              {{ t('sale.printMethod') }}
+              <select v-model="applePrintMethod" class="mt-1 w-full p-2 border border-slate-200 rounded-lg bg-white">
+                <option value="standard">{{ t('sale.standardPrint') }}</option>
+                <option value="epson">Epson TM Print Assistant</option>
+              </select>
+            </label>
+            <p v-if="applePrintMethod === 'epson'" class="text-xs text-slate-500">{{ t('sale.epsonSetup') }}</p>
+            <a v-if="epsonReceiptUrl && applePrintMethod === 'epson'" :href="epsonReceiptUrl" target="_blank" rel="noopener"
+              class="block rounded-lg bg-blue-600 p-3 text-center text-white text-xs">{{ t('sale.openEpson') }}</a>
+            <p v-if="epsonReceiptUrl && applePrintMethod === 'epson'" class="text-xs text-slate-500">{{ t('sale.epsonReturn') }}</p>
+          </div>
           <!-- Save as image checkbox -->
           <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
             <input
@@ -59,12 +72,12 @@
           </label>
 
           <div class="flex flex-col sm:flex-row gap-3">
-            <button @click="printFromPreview"
+            <button @click="printFromPreview" :disabled="preparingEpson"
               class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-normal uppercase text-[11px] tracking-wider hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-2">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
               </svg>
-              {{ t('sale.printInvoice') }}
+              {{ preparingEpson ? t('sale.processing') : t('sale.printInvoice') }}
             </button>
             <button @click="shareFromPreview"
               class="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-normal uppercase text-[11px] tracking-wider hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95 flex items-center justify-center gap-2">
@@ -78,10 +91,44 @@
       </div>
     </div>
 
+    <!-- Same customer-add workflow used on the Partners screen. -->
+    <div v-if="showNewCustomerModal"
+      role="dialog" aria-modal="true" aria-labelledby="new-customer-title"
+      @keydown.esc.stop.prevent="closeNewCustomerModal" @keydown.tab="trapCustomerFocus"
+      class="fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 overflow-y-auto">
+      <form @submit.prevent="saveNewCustomer" class="bg-white w-full max-w-md max-h-full overflow-y-auto rounded-xl shadow-2xl border border-slate-200">
+        <div class="bg-[#3f3f46] p-4 sm:p-6 text-white flex justify-between items-center gap-2">
+          <h3 id="new-customer-title" class="text-lg font-normal uppercase tracking-tight">{{ t('customers.modalTitleAdd') }}</h3>
+          <button type="button" @click="closeNewCustomerModal" :disabled="savingNewCustomer" :aria-label="t('common.close')" class="min-w-11 min-h-11 text-white/60 hover:text-white transition-colors text-2xl disabled:opacity-50">×</button>
+        </div>
+        <fieldset :disabled="savingNewCustomer" class="p-4 sm:p-8 space-y-5 min-w-0">
+          <div class="space-y-1.5">
+            <label for="new-customer-name" class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('customers.labelName') }}</label>
+            <input id="new-customer-name" v-model.trim="newCustomerForm.Name" ref="newCustomerNameInput" type="text" autocomplete="name" :placeholder="t('customers.placeholderName')"
+              class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm transition-all">
+          </div>
+          <div class="space-y-1.5">
+            <label for="new-customer-phone" class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('customers.labelPhone') }}</label>
+            <input id="new-customer-phone" v-model.trim="newCustomerForm.Phone" type="tel" autocomplete="tel" :placeholder="t('customers.placeholderPhone')"
+              class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm tracking-widest transition-all">
+          </div>
+          <div class="space-y-1.5">
+            <label for="new-customer-address" class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('customers.labelAddress') }}</label>
+            <textarea id="new-customer-address" v-model.trim="newCustomerForm.Address" autocomplete="street-address" rows="3" :placeholder="t('customers.placeholderAddress')"
+              class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm transition-all resize-none"></textarea>
+          </div>
+          <button type="submit" :disabled="savingNewCustomer"
+            class="w-full bg-blue-600 text-white py-4 rounded-lg font-normal text-xs shadow-lg shadow-blue-100 hover:bg-blue-700 transition active:scale-95 mt-4 uppercase tracking-widest disabled:opacity-50">
+            {{ savingNewCustomer ? t('sale.processing') : t('customers.btnSave') }}
+          </button>
+        </fieldset>
+      </form>
+    </div>
+
 
     <div class="bg-white p-4 shadow-sm flex flex-col gap-3 border-b shrink-0">
       <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-        <div class="flex-1 relative mt-1">
+        <div class="flex-1 min-w-0 relative">
           <input v-model="searchQuery" type="text" ref="searchInput" @input="handleSearch"
             @keydown.enter="handleBarcodeScan" :placeholder="t('sale.searchPlaceholder')"
             class="w-full pl-10 pr-4 py-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-normal border border-gray-200 transition-all">
@@ -89,24 +136,44 @@
               viewBox="0 0 24 24">
               <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2" />
             </svg></span>
-          <label class="mt-2 inline-flex items-center gap-2 text-[11px] font-normal text-gray-500 select-none">
-            <input
-              v-model="showOutOfStockItems"
-              type="checkbox"
-              class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              @change="currentPage = 1"
-            >
-            <span>{{ t('sale.showOutOfStockItems') }}</span>
-          </label>
         </div>
 
-        <div class="flex bg-gray-100 p-1 rounded-xl border border-gray-200 self-start md:self-center overflow-x-auto">
-          <button v-for="tab in catalogTabs" :key="tab.id" @click="currentTab = tab.id" :class="['px-5 py-2 rounded-lg font-normal text-[10px] uppercase transition-all',
+        <div class="flex bg-gray-100 p-1 rounded-xl border border-gray-200 self-start md:self-center max-w-full overflow-x-auto shrink-0">
+          <button v-for="tab in catalogTabs" :key="tab.id" @click="currentTab = tab.id" :class="['px-5 py-2 rounded-lg font-normal text-[10px] uppercase whitespace-nowrap transition-all',
             currentTab === tab.id ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600']">
             {{ tab.label }}
           </button>
         </div>
       </div>
+
+          <div class="flex w-full items-center justify-between gap-3">
+            <label class="inline-flex items-center gap-2 text-[11px] font-normal text-gray-500 select-none">
+              <input
+                v-model="showOutOfStockItems"
+                type="checkbox"
+                class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                @change="currentPage = 1"
+              >
+              <span>{{ t('sale.showOutOfStockItems') }}</span>
+            </label>
+
+            <div role="group" class="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200 shrink-0" :aria-label="t('sale.changeView')">
+              <button type="button" @click="catalogView = 'grid'" :title="t('sale.gridView')" :aria-label="t('sale.gridView')"
+                :class="catalogView === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'"
+                class="min-w-11 min-h-11 flex items-center justify-center rounded-md transition" :aria-pressed="catalogView === 'grid'">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z" />
+                </svg>
+              </button>
+              <button type="button" @click="catalogView = 'list'" :title="t('sale.listView')" :aria-label="t('sale.listView')"
+                :class="catalogView === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'"
+                class="min-w-11 min-h-11 flex items-center justify-center rounded-md transition" :aria-pressed="catalogView === 'list'">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />
+                </svg>
+              </button>
+            </div>
+          </div>
 
       <div v-if="currentTab === 'all' || currentTab === 'products'"
         class="flex flex-wrap gap-2 items-center pb-1">
@@ -130,20 +197,23 @@
     <div class="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
 
       <div class="w-full lg:flex-1 lg:min-w-0 p-3 sm:p-4 flex flex-col gap-4 bg-gray-50 lg:h-full overflow-hidden min-h-0">
-        <div
-          class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-4 content-start custom-scrollbar pr-1">
+        <div :class="catalogView === 'grid'
+          ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-4 content-start'
+          : 'flex flex-col gap-2'"
+          class="flex-1 overflow-y-auto custom-scrollbar pr-1">
 
           <div v-for="item in paginatedItems" :key="item.uniqueKey" @click="handleItemSelect(item)"
-            :class="['p-2.5 sm:p-3.5 rounded-xl shadow-sm hover:shadow-xl cursor-pointer transition border-2 group relative flex flex-col justify-between h-36 sm:h-40 overflow-hidden',
+            :class="['rounded-xl shadow-sm hover:shadow-lg cursor-pointer transition border-2 group relative overflow-hidden',
+              catalogView === 'grid' ? 'p-2 sm:p-3.5 flex flex-col justify-between min-h-36 sm:min-h-40' : 'p-3 flex flex-col sm:flex-row sm:items-center gap-3 min-h-[76px] shrink-0',
               item.itemType === 'QuickSale' ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:border-blue-500']">
 
             <div
               class="absolute top-0 right-0 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-bl-lg text-[7px] sm:text-[8px] font-normal uppercase text-white shadow-sm"
               :class="getTypeColor(item.itemType)">
-              {{ item.itemType }}
+              {{ t(item.itemType === 'Product' ? 'sale.products' : item.itemType === 'Service' ? 'sale.services' : item.itemType === 'Bundle' ? 'sale.bundles' : 'sale.quickSale') }}
             </div>
 
-            <div v-if="item.itemType === 'QuickSale'" class="flex flex-col items-center justify-center flex-1">
+            <div v-if="item.itemType === 'QuickSale'" :class="catalogView === 'grid' ? 'flex-col justify-center' : 'flex-row gap-3 justify-start'" class="flex items-center flex-1">
               <div class="p-2 sm:p-2.5 bg-blue-100 rounded-full text-blue-600 mb-1 sm:mb-2 group-hover:scale-110 transition-transform">
                 <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -153,7 +223,7 @@
                 t('sale.quickSale') || 'Quick Sale' }}</div>
             </div>
 
-            <div v-else>
+            <div v-else :class="catalogView === 'list' ? 'flex-1 min-w-0' : ''">
               <template v-if="item.itemType === 'Product'">
                 <span
                   :class="['text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-normal uppercase', item.EffectiveStock > 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600']">
@@ -174,14 +244,15 @@
                 {{ t('sale.available') }}
               </span>
 
-              <div class="font-normal text-gray-800 group-hover:text-blue-600 mt-1 sm:mt-2 leading-tight line-clamp-2 text-xs sm:text-[13px]">
+              <div :class="catalogView === 'grid' ? 'line-clamp-2 text-xs sm:text-[13px]' : 'text-sm sm:pr-8'" class="font-normal text-gray-800 group-hover:text-blue-600 mt-1 sm:mt-2 leading-normal break-words">
                 {{ item.Name }}
               </div>
             </div>
 
             <div v-if="item.itemType !== 'QuickSale'"
-              class="flex justify-between items-end mt-2 sm:mt-3 pt-1 sm:pt-2 border-t border-dashed border-gray-100">
-              <div class="text-blue-700 font-semibold text-sm sm:text-[15px]">{{ formatNumber(item.SalePrice) }} <small
+              :class="catalogView === 'grid' ? 'mt-1 sm:mt-3 pt-1 sm:pt-2 border-t border-dashed border-gray-100' : 'shrink-0 gap-4 sm:min-w-[135px]'"
+              class="flex flex-wrap gap-1 justify-between items-end break-words">
+              <div class="text-blue-700 font-semibold text-xs sm:text-[15px]">{{ formatNumber(item.SalePrice) }} <small
                   class="text-[9px] sm:text-[10px] font-normal">{{ currencySymbol }}</small></div>
               <div class="bg-gray-100 text-[8px] sm:text-[9px] px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-normal text-gray-400 uppercase">
                 {{ item.itemType === 'Product' ? item.UnitName : t('sale.fixedUnit') }}
@@ -464,7 +535,7 @@
         </div>
       </div>
     </div>
-    <div v-if="showPaymentModal"
+    <div v-if="showPaymentModal" :inert="showNewCustomerModal || undefined"
       class="payment-modal-overlay fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
       <div
         class="payment-modal-card bg-white rounded-3xl max-w-lg w-full shadow-2xl animate-in zoom-in duration-200 overflow-hidden border border-slate-200 flex flex-col">
@@ -489,8 +560,13 @@
           </div>
 
           <div class="space-y-1.5 relative">
-            <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{
-              t('sale.customerSelection') }}</label>
+            <div class="flex items-center justify-between gap-3 px-1">
+              <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest">{{ t('sale.customerSelection') }}</label>
+              <button ref="newCustomerTrigger" type="button" @click="openNewCustomerModal"
+                class="min-h-11 text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline underline-offset-2">
+                {{ t('sale.addNewCustomer') }}
+              </button>
+            </div>
             <div class="group relative">
               <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"><svg class="h-4 w-4" fill="none"
                   stroke="currentColor" viewBox="0 0 24 24">
@@ -719,7 +795,7 @@
                 <tr v-for="(item, idx) in cart" :key="item.CartLineId || `${item.ItemType || 'Item'}-${item.ProductId || item.ServiceId || item.BundleId || item.Name || 'line'}-${idx}`">
                 <td style="padding: 2px 0 4px 0; vertical-align: top; line-height: 1.18;">
                   <div style="font-weight: bold; line-height: 1.18;">{{ item.Name }}</div>
-                  <div :style="{ fontSize: receiptFont.tiny + 'px', color: '#444' }">({{ getUnitName(item.UnitId) }}) @ {{
+                  <div :style="{ fontSize: receiptFont.tiny + 'px', color: '#444' }">({{ receiptUnitName(item, getUnitName(item.UnitId)) }}) @ {{
                     formatNumber(item.SelectedPrice) }}</div>
                   <div v-if="item.DiscountAmount > 0 && !item.isFOC" :style="{ fontSize: receiptFont.tiny + 'px', color: '#dc2626', marginTop: '1px' }">
                     Discount: -{{ formatNumber(item.DiscountAmount) }}
@@ -866,7 +942,7 @@
                   </div>
                 </td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ item.Quantity }}</td>
-                <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ getUnitName(item.UnitId) }}
+                <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ receiptUnitName(item, getUnitName(item.UnitId)) }}
                 </td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ item.isFOC ? '0' :
                   formatNumber(item.SelectedPrice) }}</td>
@@ -1270,10 +1346,19 @@ import api from '../services/api';
 import { useToast } from '../composables/useToast';
 import { useI18n } from '../composables/useI18n';
 import { isMobileBrowser, openPrintWindow } from '../utils/print';
-import { normalizeReceiptPayments } from '../utils/receiptData';
+import { isAppleMobile, prepareEpsonReceipt } from '../utils/epsonPrint';
+import { normalizeReceiptPayments, receiptUnitName } from '../utils/receiptData';
 import androidBridge from '../services/androidBridge';
 const { addToast } = useToast();
 const { t, locale } = useI18n();
+const supportsEpsonAssistant = isAppleMobile() && !androidBridge.isAvailable();
+const applePrintMethod = ref(localStorage.getItem('AppleReceiptPrintMethod') === 'epson' ? 'epson' : 'standard');
+const preparingEpson = ref(false);
+const epsonReceiptUrl = ref('');
+watch(applePrintMethod, (method) => {
+  localStorage.setItem('AppleReceiptPrintMethod', method);
+  epsonReceiptUrl.value = '';
+});
 
 // --- State Variables ---
 const products = ref([]);
@@ -1288,12 +1373,18 @@ const supplierSearch = ref('');
 const showSupplierResults = ref(false);
 const customerSearch = ref('');
 const showCustomerResults = ref(false);
+const showNewCustomerModal = ref(false);
+const savingNewCustomer = ref(false);
+const newCustomerNameInput = ref(null);
+const newCustomerTrigger = ref(null);
+const newCustomerForm = ref({ Name: '', Phone: '', Address: '' });
 const categorySearch = ref('');
 const showCategoryResults = ref(false);
 const unitSearch = ref('');
 const showUnitResults = ref(false);
 const selectedCategory = ref(null);
 const showOutOfStockItems = ref(false);
+const catalogView = ref(localStorage.getItem('SaleCatalogView') === 'list' ? 'list' : 'grid');
 const showAllCategories = ref(false);
 const defaultVisibleCategoryCount = 5;
 const highlightedIndex = ref(-1);
@@ -1418,6 +1509,7 @@ const showInvoicePreview = ref(false);
 const saveInvoiceAsImage = ref(false);
 const invoicePreviewRef = ref(null);
 const capturedPrintHtml = ref('');
+watch([capturedPrintHtml, showInvoicePreview, receiptSize], () => { epsonReceiptUrl.value = ''; });
 const capturedReceiptText = ref('');
 const invoicePreviewData = ref({
   items: [],
@@ -1660,6 +1752,11 @@ const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSiz
 const paginatedItems = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   return filteredItems.value.slice(start, start + pageSize.value);
+});
+
+watch(catalogView, (view) => {
+  localStorage.setItem('SaleCatalogView', view);
+  currentPage.value = 1;
 });
 
 const getTypeColor = (type) => {
@@ -2303,6 +2400,76 @@ const selectCustomer = (c) => {
   showCustomerResults.value = false;
 };
 
+const openNewCustomerModal = async () => {
+  if (savingNewCustomer.value) return;
+  newCustomerForm.value = {
+    Name: (customerSearch.value || '').trim(),
+    Phone: '',
+    Address: ''
+  };
+  showCustomerResults.value = false;
+  showNewCustomerModal.value = true;
+  await nextTick();
+  newCustomerNameInput.value?.focus();
+};
+
+const closeNewCustomerModal = async () => {
+  if (savingNewCustomer.value) return;
+  showNewCustomerModal.value = false;
+  await nextTick();
+  newCustomerTrigger.value?.focus();
+};
+
+const trapCustomerFocus = (event) => {
+  const controls = [...event.currentTarget.querySelectorAll('button, input, textarea')]
+    .filter(element => !element.matches(':disabled'));
+  const first = controls[0];
+  const last = controls.at(-1);
+  if (!first) {
+    event.preventDefault();
+  } else if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+};
+
+const saveNewCustomer = async () => {
+  if (savingNewCustomer.value) return;
+  if (!newCustomerForm.value.Name.trim()) {
+    addToast(t('customers.identityRequired'), 'warning');
+    return;
+  }
+
+  savingNewCustomer.value = true;
+  try {
+    const res = await api.post('/customers', {
+      ...newCustomerForm.value,
+      CurrentBalance: 0,
+      CreatedAt: new Date().toISOString()
+    });
+    const created = normalizeCustomerVm(res.data || {});
+    if (!created.customerId) throw new Error(t('customers.toastError'));
+
+    const existingIndex = customers.value.findIndex(c => c.customerId === created.customerId);
+    if (existingIndex >= 0) customers.value.splice(existingIndex, 1, created);
+    else customers.value.push(created);
+
+    selectCustomer(created);
+    showNewCustomerModal.value = false;
+    await nextTick();
+    newCustomerTrigger.value?.focus();
+    addToast(t('customers.toastSuccess'), 'success');
+    saveCurrentCatalogForAndroid();
+  } catch (err) {
+    addToast(getApiErrorMessage(err, t('customers.toastError')), 'error');
+  } finally {
+    savingNewCustomer.value = false;
+  }
+};
+
 const resetCustomerSelection = () => {
   saleForm.value.CustomerId = null;
   saleForm.value.CustomerName = '';
@@ -2567,7 +2734,7 @@ const buildReceiptText = (saleNo, options = {}) => {
 
     lines.push(`${itemLines[0].padEnd(nameWidth, ' ')}${qtyText.padStart(qtyWidth, ' ')}${totalText.padStart(amountWidth, ' ')}`);
     itemLines.slice(1).forEach(extra => lines.push(extra));
-    lines.push(`  (${getUnitName(item.UnitId)}) @ ${formatNumber(price)}`);
+    lines.push(`  (${receiptUnitName(item, getUnitName(item.UnitId))}) @ ${formatNumber(price)}`);
     if (item.DiscountAmount > 0 && !item.isFOC) {
       lines.push(columns('  Discount', `-${formatNumber(item.DiscountAmount)}`));
     }
@@ -2748,6 +2915,8 @@ const normalizeCustomerVm = (raw) => ({
 });
 
 const ensureCustomerForOrder = async ({ requireCustomer }) => {
+  // An explicit selection is authoritative, even when customers share a name.
+  if (saleForm.value.CustomerId) return saleForm.value.CustomerId;
   const typed = (customerSearch.value || '').trim();
 
   if (!typed) {
@@ -3014,7 +3183,7 @@ const buildInvoiceHtml = (format = null) => {
   const itemsHtml = isThermal
     ? data.items.map(item => {
         const name = item.Name || item.ItemName || item.ProductName || '';
-        const unit = item.UnitName || item.BaseUnitName || '';
+        const unit = receiptUnitName(item, item.UnitName || item.BaseUnitName || '');
         const qty = item.Quantity || 0;
         const price = item.SelectedPrice || item.UnitPrice || 0;
         const itemDiscount = item.isFOC ? 0 : Number(item.DiscountAmount || 0);
@@ -3031,7 +3200,7 @@ const buildInvoiceHtml = (format = null) => {
       }).join('')
     : data.items.map(item => {
         const name = item.Name || item.ItemName || item.ProductName || '';
-        const unit = item.UnitName || item.BaseUnitName || '';
+        const unit = receiptUnitName(item, item.UnitName || item.BaseUnitName || '');
         const qty = item.Quantity || 0;
         const price = item.SelectedPrice || item.UnitPrice || 0;
         const itemDiscount = item.isFOC ? 0 : Number(item.DiscountAmount || 0);
@@ -3173,7 +3342,7 @@ const capturePreviewElement = async () => {
     };
     const logoSizePx = getLogoPx(shopInfo.value.LogoSize || 'Large');
     const logoHtml = hasLogo
-      ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:0"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
+      ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:${isThermal ? '0' : '10mm'}"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
       : '';
     const captureContent = logoHtml + html;
 
@@ -3287,6 +3456,25 @@ const saveBlobToFile = async (blob) => {
 };
 
 const printFromPreview = async () => {
+  if (supportsEpsonAssistant && receiptSize.value === '80mm' && applePrintMethod.value === 'epson') {
+    if (preparingEpson.value) return;
+    preparingEpson.value = true;
+    epsonReceiptUrl.value = '';
+    const receiptSnapshot = capturedPrintHtml.value;
+    try {
+      const blob = await capturePreviewElement();
+      if (!blob) throw new Error('Receipt capture failed');
+      const url = await prepareEpsonReceipt(blob);
+      if (!showInvoicePreview.value || capturedPrintHtml.value !== receiptSnapshot || applePrintMethod.value !== 'epson') return;
+      epsonReceiptUrl.value = url;
+      if (saveInvoiceAsImage.value) await saveBlobToFile(blob);
+    } catch (err) {
+      addToast(t(err.message === 'EPSON_RECEIPT_TOO_LARGE' ? 'sale.epsonTooLarge' : 'sale.epsonPrepareFailed'), 'error');
+    } finally {
+      preparingEpson.value = false;
+    }
+    return;
+  }
   if (saveInvoiceAsImage.value) {
     const blob = await capturePreviewElement();
     if (blob) {
@@ -3312,7 +3500,7 @@ const printFromPreview = async () => {
   };
   const logoSizePx = getLogoPx(shopInfo.value.LogoSize || 'Large');
   const logoHtml = hasLogo
-    ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:0"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
+    ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:${isThermal ? '0' : '10mm'}"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
     : '';
 
   // Use the captured print-area HTML (captured before cart was cleared)
@@ -3370,6 +3558,7 @@ const closeInvoicePreview = () => {
 };
 
 const onSaleKeydown = (e) => {
+  if (showNewCustomerModal.value) return;
   if (e.key === 'F12') {
     e.preventDefault();
     processCheckout();
@@ -3410,7 +3599,7 @@ const printReceipt = async (htmlContent = null, preOpenedWindow = null) => {
   const logoSizePx = getLogoPx(shopInfo.value.LogoSize || 'Large');
 
   const logoHtml = hasLogo
-    ? `<div style="text-align: center; margin-top: 2px; margin-bottom: 5px; padding-top: 0;">
+    ? `<div style="text-align: center; margin-top: 2px; margin-bottom: 5px; padding-top: ${isThermal ? '0' : '10mm'};">
          <img src="${shopInfo.value.LogoData}" 
               style="width: ${logoSizePx}; height: ${logoSizePx}; object-fit: contain; border: none;">
        </div>`
@@ -3464,6 +3653,22 @@ const printReceipt = async (htmlContent = null, preOpenedWindow = null) => {
   printWindow.document.close();
 };
 
+const refreshCheckoutCustomerBalance = async () => {
+  if (!saleForm.value.CustomerId) return 0;
+  if (!(androidBridge.isAvailable() && !androidBridge.isOnline())) {
+    // The customer list may predate a return or payment made on another device.
+    // Refresh before saving so this balance excludes the sale being submitted.
+    try {
+      const response = await api.get('/customers', { timeout: 7000 });
+      customers.value = (response.data || []).map(normalizeCustomerVm);
+    } catch (err) {
+      // Preserve Android's existing offline-sale fallback on a network failure.
+      if (!androidBridge.isAvailable() || !isNetworkSaleFailure(err)) throw err;
+    }
+  }
+  return toNonNegativeAmount(selectedCustomerObj.value?.currentBalance);
+};
+
 const confirmSale = async () => {
   if (cart.value.length === 0 || isProcessing.value) return;
 
@@ -3476,6 +3681,8 @@ const confirmSale = async () => {
       addToast(t('sale.customerSelection') || 'Please select or create a customer for credit sale.', 'warning');
       return;
     }
+
+    const previousCustomerCredit = await refreshCheckoutCustomerBalance();
 
     // ၁။ Items အားလုံး၏ Gross Total (ပစ္စည်းဖိုး သီးသန့်) ကို တွက်ချက်ခြင်း
     const itemsSubTotal = cart.value.reduce((sum, i) => {
@@ -3601,10 +3808,14 @@ const confirmSale = async () => {
       deliveryFee: saleForm.value.DeliveryFee || 0,
       voucherNote: saleForm.value.Note || '',
       customerName: saleForm.value.CustomerName || t('common.walkInCustomer'),
-      totalCredit: toNonNegativeAmount(selectedCustomerObj.value?.currentBalance ?? selectedCustomerObj.value?.CurrentBalance)
+      totalCredit: previousCustomerCredit
         + Math.max(0, totalAmount.value - totalPaid.value),
       branchName: receiptBranchName.value,
     };
+
+    if (selectedCustomerObj.value) {
+      selectedCustomerObj.value.currentBalance = invoicePreviewData.value.totalCredit;
+    }
 
     // ၄။ Capture print-area HTML BEFORE clearing cart
     await nextTick();

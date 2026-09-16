@@ -604,6 +604,19 @@
           </div>
 
           <div class="mt-6 sm:mt-8 space-y-3">
+            <div v-if="supportsEpsonAssistant && receiptSize === '80mm'" class="space-y-2">
+              <label class="block text-xs text-slate-600">
+                {{ t('sale.printMethod') }}
+                <select v-model="applePrintMethod" class="mt-1 w-full p-2 border border-slate-200 rounded-lg bg-white">
+                  <option value="standard">{{ t('sale.standardPrint') }}</option>
+                  <option value="epson">Epson TM Print Assistant</option>
+                </select>
+              </label>
+              <p v-if="applePrintMethod === 'epson'" class="text-xs text-slate-500">{{ t('sale.epsonSetup') }}</p>
+              <a v-if="epsonReceiptUrl && applePrintMethod === 'epson'" :href="epsonReceiptUrl" target="_blank" rel="noopener"
+                class="block rounded-lg bg-blue-600 p-3 text-center text-white text-xs">{{ t('sale.openEpson') }}</a>
+              <p v-if="epsonReceiptUrl && applePrintMethod === 'epson'" class="text-xs text-slate-500">{{ t('sale.epsonReturn') }}</p>
+            </div>
             <!-- Save as image checkbox -->
             <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
               <input
@@ -635,9 +648,9 @@
                 <button @click="showDetailModal = false"
                   class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-lg font-normal uppercase text-[10px] hover:bg-slate-200 transition-all">{{
                     t('common.cancel') }}</button>
-                <button @click="() => printFromDetail()"
+                <button @click="() => printFromDetail()" :disabled="preparingEpson"
                   class="flex-1 py-3 bg-blue-600 text-white rounded-lg font-normal uppercase text-[10px] shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">{{
-                    t('history.printReceipt') }}</button>
+                    preparingEpson ? t('sale.processing') : t('history.printReceipt') }}</button>
                 <button @click="shareFromDetail"
                   :title="t('history.shareReceiptDesc')"
                   class="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-normal uppercase text-[10px] shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all flex items-center justify-center gap-1.5">
@@ -1003,8 +1016,8 @@
               <td style="padding: 2px 0 4px 0; vertical-align: top; line-height: 1.18;">
                 <div style="font-weight: bold; line-height: 1.18;">{{ item.ItemName || item.ProductName }}</div>
                 <div :style="{ fontSize: receiptFont.tiny + 'px', color: '#444' }">
-                  ({{ item.UnitName || 'N/A' }})
-                  <span v-if="item.ItemType !== 'Product'">[{{ item.ItemType }}]</span>
+                  ({{ receiptUnitName(item, item.UnitName || 'N/A') }})
+                  <span v-if="item.ItemType && item.ItemType !== 'Product' && item.ItemType !== 'Bundle'">[{{ item.ItemType }}]</span>
                   @ {{ formatNumber(item.UnitPrice) }}
                 </div>
                 <div v-if="lineDiscount(item) > 0" :style="{ fontSize: receiptFont.tiny + 'px', color: '#dc2626', marginTop: '1px' }">
@@ -1153,7 +1166,7 @@
                 </div>
               </td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ item.Quantity }}</td>
-              <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ item.UnitName || 'N/A' }}</td>
+              <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ receiptUnitName(item, item.UnitName || 'N/A') }}</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(item.UnitPrice) }}
               </td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(lineSubtotal(item)) }}</td>
@@ -1228,13 +1241,22 @@ import { nextTick } from 'vue';
 import { useToast } from '../composables/useToast';
 import { useI18n } from '../composables/useI18n';
 import { useCsvExport } from '../composables/useCsvExport';
-import { normalizeReceiptPayments } from '../utils/receiptData';
+import { normalizeReceiptPayments, receiptUnitName } from '../utils/receiptData';
 import { isMobileBrowser, openPrintWindow } from '../utils/print';
+import { isAppleMobile, prepareEpsonReceipt } from '../utils/epsonPrint';
 import androidBridge from '../services/androidBridge';
 
 const { addToast } = useToast();
 const { t } = useI18n();
 const { exportToCsv } = useCsvExport();
+const supportsEpsonAssistant = isAppleMobile() && !androidBridge.isAvailable();
+const applePrintMethod = ref(localStorage.getItem('AppleReceiptPrintMethod') === 'epson' ? 'epson' : 'standard');
+const preparingEpson = ref(false);
+const epsonReceiptUrl = ref('');
+let epsonPreparationVersion = 0;
+watch(applePrintMethod, (method) => {
+  localStorage.setItem('AppleReceiptPrintMethod', method);
+});
 
 // selectedSale.value.items ထဲက အရေအတွက်အားလုံးကို ပေါင်းပေးမည့် computed
 // HistoryCenter.vue ရဲ့ script setup ထဲမှာ ရှာပြင်ပါ
@@ -1414,7 +1436,7 @@ const buildAndroidHistoryReceiptText = () => {
     const itemLines = wrap(`${item.ItemName || item.ProductName || item.productName || 'Item'}${item.IsFOC ? ' (FOC)' : ''}`, nameWidth);
     lines.push(`${itemLines[0].padEnd(nameWidth, ' ')}${String(qty).padStart(qtyWidth, ' ')}${formatNumber(amount).padStart(amountWidth, ' ')}`);
     itemLines.slice(1).forEach(extra => lines.push(extra));
-    lines.push(`  (${item.UnitName || item.unitName || 'N/A'}) @ ${formatNumber(item.UnitPrice || item.unitPrice || 0)}`);
+    lines.push(`  (${receiptUnitName(item, item.UnitName || item.unitName || 'N/A')}) @ ${formatNumber(item.UnitPrice || item.unitPrice || 0)}`);
     const discount = lineDiscount(item);
     if (discount > 0) lines.push(columns('  Discount', `-${formatNumber(discount)}`));
     if (item.Note || item.note) lines.push(`  * ${clip(item.Note || item.note, width - 4)}`);
@@ -1486,6 +1508,28 @@ const printFromDetail = async (preOpenedWindow = null) => {
   if (!saleId) return;
 
   const isThermal = receiptSize.value === '80mm';
+  if (supportsEpsonAssistant && isThermal && applePrintMethod.value === 'epson') {
+    if (preparingEpson.value) return;
+    preparingEpson.value = true;
+    epsonReceiptUrl.value = '';
+    const version = epsonPreparationVersion;
+    try {
+      await nextTick();
+      const element = document.getElementById('print-area');
+      if (!element) throw new Error('Receipt not found');
+      const blob = await captureDetailInvoiceElement(element);
+      if (!blob) throw new Error('Receipt capture failed');
+      const url = await prepareEpsonReceipt(blob);
+      if (version !== epsonPreparationVersion || !showDetailModal.value) return;
+      epsonReceiptUrl.value = url;
+      if (saveInvoiceAsImage.value) downloadBlob(blob, `invoice-${saleId}.png`);
+    } catch (err) {
+      addToast(t(err.message === 'EPSON_RECEIPT_TOO_LARGE' ? 'sale.epsonTooLarge' : 'sale.epsonPrepareFailed'), 'error');
+    } finally {
+      preparingEpson.value = false;
+    }
+    return;
+  }
   if (isThermal && await printAndroidDetailImageIfPossible()) return;
   if (isThermal && printWithAndroidIfPossible()) return;
 
@@ -1519,7 +1563,7 @@ const printFromDetail = async (preOpenedWindow = null) => {
 
   const logoSizePx = getLogoPx(shopInfo.value.LogoSize || 'Large');
   const logoHtml = hasLogo
-    ? `<div style="text-align: center; margin-top: 2px; margin-bottom: 5px; padding-top: 0;">
+    ? `<div style="text-align: center; margin-top: 2px; margin-bottom: 5px; padding-top: ${isThermal ? '0' : '10mm'};">
          <img src="${shopInfo.value.LogoData}" style="width: ${logoSizePx}; height: ${logoSizePx}; object-fit: contain; border: none;">
        </div>`
     : '';
@@ -1679,7 +1723,7 @@ const captureDetailInvoiceElement = async (el) => {
     };
     const logoSizePx = getLogoPx(shopInfo.value.LogoSize || 'Large');
     const logoHtml = hasLogo
-      ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:0"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
+      ? `<div style="text-align:center;margin-top:2px;margin-bottom:5px;padding-top:${isThermal ? '0' : '10mm'}"><img src="${shopInfo.value.LogoData}" style="width:${logoSizePx};height:${logoSizePx};object-fit:contain;border:none"></div>`
       : '';
     const captureContent = logoHtml + contentHtml;
 
@@ -1965,6 +2009,10 @@ const tableColspan = computed(() => {
 
 const showDetailModal = ref(false);
 const selectedSale = ref({ sale: {}, items: [], payments: [] });
+watch([selectedSale, showDetailModal, receiptSize, showPreviousCredit, applePrintMethod, shopInfo], () => {
+  epsonPreparationVersion++;
+  epsonReceiptUrl.value = '';
+});
 
 const selectedSalePayments = computed(() => normalizeReceiptPayments(selectedSale.value?.payments || [], {
   method: selectedSale.value?.sale?.PaymentMethod || selectedSale.value?.sale?.paymentMethod || 'Cash',
@@ -2167,8 +2215,9 @@ const reprint = async (saleId) => {
   receiptSize.value = preferredReceiptSize();
   showPreviousCredit.value = false;
   const useAndroidNativePrint = androidBridge.supportsNativePrint() && receiptSize.value === '80mm';
-  const preOpenedPrintWindow = useAndroidNativePrint ? null : window.open('', '_blank', 'width=900,height=800');
-  if (!useAndroidNativePrint && !preOpenedPrintWindow) {
+  const useAppleReceiptPreview = supportsEpsonAssistant && receiptSize.value === '80mm';
+  const preOpenedPrintWindow = useAndroidNativePrint || useAppleReceiptPreview ? null : window.open('', '_blank', 'width=900,height=800');
+  if (!useAndroidNativePrint && !useAppleReceiptPreview && !preOpenedPrintWindow) {
     addToast(t('history.popupBlocked') || 'Popup blocked. Please allow popups to print.', 'warning');
     return;
   }
@@ -2183,6 +2232,13 @@ const reprint = async (saleId) => {
     // ၂။ Data Assign လုပ်ခြင်း
     // Backend က { sale: ..., items: ... } ပုံစံပို့လျှင် ဤအတိုင်း အဆင်ပြေပါသည်
     selectedSale.value = { ...detailRes.data, payments };
+
+    if (useAppleReceiptPreview) {
+      showDetailModal.value = true;
+      await nextTick();
+      if (applePrintMethod.value === 'epson') await printFromDetail();
+      return;
+    }
 
     // ၃။ DOM ထဲမှာ v-if guard တွေပွင့်ပြီး id="print-area" တွေ ပေါ်လာအောင် သေချာစောင့်ခြင်း
     // တစ်ခါတလေ nextTick တစ်ခုတည်းနှင့် မလုံလောက်တတ်၍ setTimeout လေး အနည်းငယ် ခံပေးပါမည်

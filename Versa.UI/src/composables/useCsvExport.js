@@ -13,7 +13,12 @@ export function useCsvExport() {
       }
 
       const escapeCsvCell = (value) => {
-        const stringCell = String(value === null || value === undefined ? '' : value);
+        let stringCell = String(value === null || value === undefined ? '' : value);
+        // User-entered names/notes must stay text when opened in a spreadsheet.
+        // Keep actual numeric values (including negative balances) numeric.
+        if (typeof value === 'string' && /^[\s]*[=+@-]/.test(stringCell)) {
+          stringCell = "'" + stringCell;
+        }
         // RFC4180-ish: quote if the cell contains comma, quote, or line breaks.
         if (stringCell.includes(',') || stringCell.includes('"') || stringCell.includes('\n') || stringCell.includes('\r')) {
           return `"${stringCell.replace(/"/g, '""')}"`;

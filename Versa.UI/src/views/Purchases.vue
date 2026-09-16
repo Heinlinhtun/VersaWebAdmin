@@ -1,5 +1,5 @@
 <template>
-  <div class="px-3 sm:px-5 lg:px-8 pt-2 pb-6 sm:pb-8 bg-gray-50 min-h-screen font-sans">
+  <div :inert="showSupplierCreate" class="px-3 sm:px-5 lg:px-8 pt-2 pb-6 sm:pb-8 bg-gray-50 min-h-screen font-sans">
     <div class="mx-auto">
 
       <div class="grid grid-cols-12 gap-6">
@@ -19,10 +19,13 @@
             </span>
           </div>
 
-          <div class="mb-6 grid grid-cols-2 gap-6">
+          <div class="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div ref="supplierPickerRef" class="space-y-1.5 relative">
-              <label class="text-[11px] font-normal text-gray-500 uppercase ml-1 tracking-wide">{{ tx.supplierSource
-              }}</label>
+              <div class="flex items-center justify-between gap-3">
+                <label class="text-[11px] font-normal text-gray-500 uppercase ml-1 tracking-wide">{{ tx.supplierSource }}</label>
+                <button v-if="can('canEditSuppliers')" type="button" @click="closeSupplierResults(); showSupplierCreate = true"
+                  class="shrink-0 text-xs text-blue-600 hover:underline py-1 text-right">{{ t('suppliers.addNewSupplier') }}</button>
+              </div>
               <div class="relative group">
                 <input v-model="supplierSearch" @input="handleSupplierSearch" @focus="openSupplierResults"
                   @keydown.down.prevent="moveSupplierDown" @keydown.up.prevent="moveSupplierUp"
@@ -507,6 +510,8 @@
       </div>
     </div>
   </div>
+  <ProductLookupCreateModal v-if="showSupplierCreate" kind="suppliers"
+    @close="showSupplierCreate = false" @created="selectCreatedSupplier" />
 </template>
 
 <script setup>
@@ -516,6 +521,15 @@ import api from '../services/api';
 import { useToast } from '../composables/useToast';
 import { useI18n } from '../composables/useI18n';
 import { useCsvExport } from '../composables/useCsvExport';
+import { usePermissions } from '../composables/usePermissions';
+import ProductLookupCreateModal from '../components/ProductLookupCreateModal.vue';
+const { can } = usePermissions();
+const showSupplierCreate = ref(false);
+const selectCreatedSupplier = (record) => {
+  suppliers.value = [...suppliers.value.filter(supplier => (supplier.SupplierId ?? supplier.supplierId) !== record.SupplierId), record];
+  selectSupplier(record);
+  showSupplierCreate.value = false;
+};
 const { addToast } = useToast();
 const { t } = useI18n();
 const { exportToCsv } = useCsvExport();

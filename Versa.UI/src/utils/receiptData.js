@@ -1,3 +1,8 @@
+export const receiptUnitName = (item, fallback = 'N/A') =>
+  String(item.ItemType ?? item.itemType ?? '').toLowerCase() === 'bundle'
+    ? 'PCS'
+    : fallback;
+
 export const normalizeReceiptPayments = (payments = [], fallback = {}) => {
   const normalized = payments
     .map(payment => ({

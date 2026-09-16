@@ -429,7 +429,7 @@
       </div>
     </div>
 
-    <div v-if="showModal && currentTab === 'products'"
+    <div v-if="showModal && currentTab === 'products'" :inert="!!lookupCreateKind"
       class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
       <div
         class="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-200 my-auto">
@@ -461,7 +461,11 @@
             </div>
             <div class="space-y-5">
               <div class="space-y-1.5">
-                <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('products.productCategory') }}</label>
+                <div class="flex items-center justify-between gap-3">
+                  <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('products.productCategory') }}</label>
+                  <button v-if="can('canEditMasterData')" type="button" @click="lookupCreateKind = 'categories'"
+                    class="shrink-0 text-xs text-blue-600 hover:underline py-1 text-right">{{ t('products.addNewCategory') }}</button>
+                </div>
                 <select v-model="form.categoryId"
                   class="w-full p-3 font-normal text-slate-800 bg-gray-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm appearance-none cursor-pointer text-sm">
                   <option :value="null">{{ t('products.typeOrSelectCategory') }}</option>
@@ -469,7 +473,11 @@
                 </select>
               </div>
               <div class="space-y-1.5">
-                <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('products.primaryBaseUnit') }}</label>
+                <div class="flex items-center justify-between gap-3">
+                  <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('products.primaryBaseUnit') }}</label>
+                  <button v-if="can('canEditMasterData')" type="button" @click="lookupCreateKind = 'units'"
+                    class="shrink-0 text-xs text-blue-600 hover:underline py-1 text-right">{{ t('products.addNewUnit') }}</button>
+                </div>
                 <select v-model="form.unitId"
                   class="w-full p-3 font-normal text-slate-800 bg-gray-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm appearance-none cursor-pointer text-sm">
                   <option :value="null">{{ t('products.typeOrSelectUnit') }}</option>
@@ -595,19 +603,25 @@
             <div v-if="showQuickPurchase" class="p-5 border border-emerald-100 rounded-xl bg-emerald-50/30 space-y-5">
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div ref="supplierPickerRef" class="space-y-1.5 md:col-span-2 relative">
-                  <label class="text-[9px] font-normal text-emerald-700 uppercase tracking-wider ml-1">{{ t('products.supplier') || 'Supplier' }}</label>
+                  <div class="flex items-center justify-between gap-3">
+                    <label class="text-[9px] font-normal text-emerald-700 uppercase tracking-wider ml-1">{{ t('products.supplier') || 'Supplier' }}</label>
+                    <button v-if="can('canEditSuppliers')" type="button" @click="closeSupplierResults(); lookupCreateKind = 'suppliers'"
+                      class="shrink-0 text-xs text-blue-600 hover:underline py-1 text-right">{{ t('suppliers.addNewSupplier') }}</button>
+                  </div>
+                  <div class="relative">
                   <input v-model="supplierSearch" @input="handleSupplierSearch" @focus="openSupplierResults"
                     @keydown.down.prevent="moveSupplierDown" @keydown.up.prevent="moveSupplierUp"
                     @keydown.enter.prevent="selectHighlightedSupplier" type="text"
                     :placeholder="t('products.selectSupplier') || 'Select supplier'"
                     class="w-full pl-10 pr-8 p-3 bg-white border border-emerald-100 rounded-lg outline-none text-sm focus:ring-2 focus:ring-emerald-500/20">
-                  <span class="absolute left-4 top-9 opacity-30 text-xs">
+                  <span class="absolute left-4 top-1/2 -translate-y-1/2 opacity-30 text-xs">
                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2" />
                     </svg>
                   </span>
                   <button v-if="supplierSearch" @click="clearSupplierSearch" type="button"
-                    class="absolute right-3 top-9 text-slate-300 hover:text-slate-500 text-xs">x</button>
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 text-xs">x</button>
+                  </div>
                   <div v-if="showSupplierResults && filteredSuppliers.length > 0"
                     class="absolute z-[120] left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
                     <div v-for="(s, index) in filteredSuppliers" :key="s.supplierId || s.SupplierId"
@@ -834,6 +848,8 @@
       </button>
     </div>
   </div>
+  <ProductLookupCreateModal v-if="lookupCreateKind && showModal" :kind="lookupCreateKind"
+    @close="lookupCreateKind = null" @created="selectCreatedLookup" />
 </template>
 
 <script setup>
@@ -842,10 +858,27 @@ import api from '../services/api';
 import { useToast } from '../composables/useToast';
 import { useI18n } from '../composables/useI18n';
 import { usePermissions } from '../composables/usePermissions';
+import ProductLookupCreateModal from '../components/ProductLookupCreateModal.vue';
 
 const { addToast } = useToast();
 const { t } = useI18n();
 const { can } = usePermissions();
+const lookupCreateKind = ref(null);
+const selectCreatedLookup = (record) => {
+  if (lookupCreateKind.value === 'units') {
+    units.value = [...units.value.filter(unit => (unit.unitId ?? unit.UnitId) !== record.unitId), record];
+    form.value.unitId = record.unitId;
+    form.value.unitName = record.unitName;
+  } else if (lookupCreateKind.value === 'categories') {
+    categories.value = [...categories.value.filter(category => (category.categoryId ?? category.CategoryId) !== record.categoryId), record];
+    form.value.categoryId = record.categoryId;
+    form.value.categoryName = record.categoryName;
+  } else if (lookupCreateKind.value === 'suppliers') {
+    suppliers.value = [...suppliers.value.filter(supplier => (supplier.SupplierId ?? supplier.supplierId) !== record.SupplierId), record];
+    selectSupplier(record);
+  }
+  lookupCreateKind.value = null;
+};
 
 // 1. App State & Tabs
 const currentTab = ref('products');
@@ -909,6 +942,7 @@ const searchQuery = ref('');
 const currentPage = ref(1);
 const pageSize = ref(10);
 const showModal = ref(false);
+watch(showModal, value => { if (!value) lookupCreateKind.value = null; });
 const isEdit = ref(false);
 
 // 4. Form States

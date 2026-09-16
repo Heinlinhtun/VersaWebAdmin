@@ -14,6 +14,9 @@ const messages = {
   en: {
     common: {
       language: "Language",
+      noDataToExport: "No data available to export.",
+      exportSuccess: "CSV exported successfully.",
+      exportFailed: "Could not export CSV. Please try again.",
       cancel: "Cancel",
       refresh: "Refresh",
       all: "All",
@@ -171,6 +174,17 @@ const messages = {
       connectionRestored: "Connection restored. Online mode is available.",
       quickSale: "Quick Sale",
       showOutOfStockItems: "Show out of stock items",
+      changeView: "Change catalog view",
+      gridView: "Grid view",
+      listView: "List view",
+      addNewCustomer: "Add New Customer",
+      printMethod: "Print method",
+      standardPrint: "Standard Print / AirPrint",
+      epsonSetup: "Install Epson TM Print Assistant, select your 80mm printer there, and allow Local Network access. Tap Print to prepare the receipt.",
+      openEpson: "Open Epson to print receipt",
+      epsonReturn: "After printing, switch back to this Safari tab. If Epson does not open, install the app or select Standard Print. Tap again only if you need another copy.",
+      epsonTooLarge: "This receipt is too long for the Epson app handoff. Select Standard Print for this receipt.",
+      epsonPrepareFailed: "Could not prepare the Epson receipt. Retry or select Standard Print.",
       itemNotes: "Notes (Serial/Warranty)",
       normalPrice: "Normal Price",
       supplier: "Supplier",
@@ -359,6 +373,9 @@ const messages = {
   mm: {
     common: {
       language: "ဘာသာစကား",
+      noDataToExport: "ထုတ်ယူရန် အချက်အလက် မရှိပါ။",
+      exportSuccess: "CSV ဖိုင် ထုတ်ယူပြီးပါပြီ။",
+      exportFailed: "CSV ဖိုင် ထုတ်ယူ၍ မရပါ။ ပြန်ကြိုးစားပါ။",
       cancel: "မလုပ်တော့ပါ",
       refresh: "ပြန်လည်ပြုလုပ်",
       all: "အားလုံး",
@@ -517,6 +534,17 @@ const messages = {
       connectionRestored: "အင်တာနက် ပြန်လည်ချိတ်ဆက်ပြီးပါပြီ။ Online Mode အသုံးပြုနိုင်ပါသည်။",
       quickSale: "အမြန်ရောင်း",
       showOutOfStockItems: "လက်ကျန်မရှိသောပစ္စည်းများကို ပြမည်",
+      changeView: "ပစ္စည်းပြသမှုပုံစံ ပြောင်းရန်",
+      gridView: "ကွက်ပုံစံ",
+      listView: "စာရင်းပုံစံ",
+      addNewCustomer: "ဝယ်ယူသူအသစ်ထည့်ရန်",
+      printMethod: "ပရင့်ထုတ်နည်း",
+      standardPrint: "ပုံမှန်ပရင့် / AirPrint",
+      epsonSetup: "Epson TM Print Assistant ကိုသွင်းပြီး 80mm ပရင်တာရွေးပါ။ Local Network ခွင့်ပြုပြီး ဘောင်ချာပြင်ဆင်ရန် Print ကိုနှိပ်ပါ။",
+      openEpson: "ဘောင်ချာပရင့်ထုတ်ရန် Epson ဖွင့်မည်",
+      epsonReturn: "ပရင့်ထုတ်ပြီးလျှင် ဤ Safari tab သို့ပြန်လာပါ။ Epson မဖွင့်ပါက app သွင်းပါ သို့မဟုတ် ပုံမှန်ပရင့်ရွေးပါ။ နောက်တစ်စောင်လိုမှ ထပ်နှိပ်ပါ။",
+      epsonTooLarge: "ဤဘောင်ချာသည် Epson app သို့ပို့ရန် ရှည်လွန်းပါသည်။ ပုံမှန်ပရင့်ကိုရွေးပါ။",
+      epsonPrepareFailed: "Epson ဘောင်ချာပြင်ဆင်၍မရပါ။ ပြန်ကြိုးစားပါ သို့မဟုတ် ပုံမှန်ပရင့်ရွေးပါ။",
       itemNotes: "မှတ်ချက် (Serial/Warranty)",
       normalPrice: "ပုံမှန်စျေး",
       supplier: "တင်သွင်းသူ",
@@ -1153,6 +1181,9 @@ messages.en.purchases = {
 };
 
 messages.en.products = {
+  addNewUnit: "Add New Unit",
+  addNewCategory: "Add New Category",
+  lookupNameRequired: "Please enter a name.",
   ...messages.en.products,
   searchPlaceholder: "Search by item name or SKU...",
   no: "No.",
@@ -1450,6 +1481,9 @@ messages.mm.purchases = {
 
 messages.mm.products = {
   ...messages.en.products,
+  addNewUnit: "ယူနစ်အသစ်ထည့်ရန်",
+  addNewCategory: "အမျိုးအစားအသစ်ထည့်ရန်",
+  lookupNameRequired: "အမည်ထည့်ပါ။",
   searchPlaceholder: "အမည် သို့ SKU ဖြင့် ရှာရန်...",
   catalogManagement: "Catalog စီမံခန့်ခွဲမှု",
   masterInventory: "ကုန်ပစ္စည်း၊ ဝန်ဆောင်မှု နှင့် Bundle",
@@ -2056,6 +2090,7 @@ messages.mm.customers = {
 };
 
 messages.en.suppliers = {
+  addNewSupplier: "Add New Supplier",
   title: "Suppliers",
   supplierDetail: "Supplier Details",
   subtitle: "Register and manage vendor entities",
@@ -2088,6 +2123,14 @@ messages.en.suppliers = {
   paymentAmount: "Amount Paid",
   paymentNote: "Note/Remarks",
   historyTitle: "Payment History",
+  historyLoading: "Loading payment history…",
+  historyRetry: "Retry",
+  noPaymentHistory: "No payments recorded for this supplier.",
+  hType: "Type",
+  hRef: "Reference",
+  hChannel: "Payment method",
+  purchasePayment: "Purchase Payment",
+  debtPayment: "Debt Payment",
   hDate: "Date",
   hAmount: "Amount",
   hNote: "Note",
@@ -2105,6 +2148,7 @@ messages.en.suppliers = {
 };
 
 messages.mm.suppliers = {
+  addNewSupplier: "တင်သွင်းသူအသစ်ထည့်ရန်",
   title: "တင်သွင်းသူများ",
   supplierDetail: "တင်သွင်းသူအချက်အလက်များ",
   subtitle: "ကုန်ပစ္စည်းတင်သွင်းသူများနှင့် အချက်အလက်များကို စီမံခန့်ခွဲရန်",
@@ -2137,6 +2181,14 @@ messages.mm.suppliers = {
   paymentAmount: "ပေးချေငွေ",
   paymentNote: "မှတ်ချက်",
   historyTitle: "ပေးချေမှုမှတ်တမ်း",
+  historyLoading: "ငွေပေးချေမှုမှတ်တမ်း တင်နေသည်…",
+  historyRetry: "ပြန်ကြိုးစားမည်",
+  noPaymentHistory: "ဤတင်သွင်းသူအတွက် ငွေပေးချေမှုမှတ်တမ်း မရှိပါ။",
+  hType: "အမျိုးအစား",
+  hRef: "ရည်ညွှန်းနံပါတ်",
+  hChannel: "ငွေပေးချေမှုနည်းလမ်း",
+  purchasePayment: "ဝယ်ယူမှုအတွက် ပေးချေငွေ",
+  debtPayment: "အကြွေးပေးချေငွေ",
   hDate: "ရက်စွဲ",
   hAmount: "ပမာဏ",
   hNote: "မှတ်ချက်",
@@ -2377,7 +2429,7 @@ messages.mm.users = {
   searchPlaceholder: "အမည် သို့ Username ဖြင့် ရှာရန်...",
   tableNo: "စဉ်",
   tableName: "အမည်",
-  tableUser: "Username",
+  tableUser: "အသုံးပြုသူအမည်",
   tableRole: "ရာထူး",
   tableBranch: "ဆိုင်ခွဲ",
   tableStatus: "အခြေအနေ",
@@ -2456,11 +2508,13 @@ messages.mm.masterData = {
 };
 
 messages.en.partners = {
+  exportCsv: "Export CSV",
   title: "Partners",
   subtitle: "Manage customers, suppliers, and staff",
 };
 
 messages.mm.partners = {
+  exportCsv: "CSV ထုတ်မည်",
   title: "မိတ်ဖက်များ",
   subtitle: "ဝယ်ယူသူများ၊ တင်သွင်းသူများနှင့် ဝန်ထမ်းများ စီမံခန့်ခွဲရန်",
 };

@@ -69,6 +69,12 @@
                 </button>
             </div>
 
+            <div class="text-right mb-2">
+                <button type="button" @click="exportPartnersCsv('customers')"
+                    class="text-[10px] font-normal text-blue-600 uppercase hover:underline py-2">
+                    {{ t('partners.exportCsv') }}
+                </button>
+            </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 table-responsive">
                 <table class="w-full text-left border-collapse">
                     <thead class="bg-[#3f3f46] text-white">
@@ -549,6 +555,12 @@
                 </button>
             </div>
 
+            <div class="text-right mb-2">
+                <button type="button" @click="exportPartnersCsv('suppliers')"
+                    class="text-[10px] font-normal text-blue-600 uppercase hover:underline py-2">
+                    {{ t('partners.exportCsv') }}
+                </button>
+            </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 table-responsive">
                 <table class="w-full text-left border-collapse">
                     <thead class="bg-[#3f3f46] text-white">
@@ -597,6 +609,13 @@
                                         @click="supp.openPayment(item)"
                                         class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-normal uppercase tracking-wider transition-all shadow-sm active:scale-95">
                                         {{ t('suppliers.makePayment') }}
+                                    </button>
+                                    <button type="button" @click="supplierHistoryTarget = item"
+                                        :title="t('suppliers.historyTitle')" :aria-label="t('suppliers.historyTitle')"
+                                        class="min-w-11 min-h-11 p-2 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:text-orange-600 hover:bg-orange-50 transition-all shadow-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 11a9 9 0 119 10 9 9 0 01-7.5-4M3 4v7h7m2-4v5l3 2" />
+                                        </svg>
                                     </button>
                                     <button @click="supp.openDetail(item)"
                                         class="p-2 rounded-lg bg-slate-50 text-slate-400 hover:text-orange-600 hover:bg-orange-50 transition-all shadow-sm">
@@ -648,6 +667,9 @@
                     </div>
                 </div>
             </div>
+
+            <SupplierPaymentHistoryModal v-if="supplierHistoryTarget" :supplier="supplierHistoryTarget"
+                @close="supplierHistoryTarget = null" />
 
             <!-- Supplier Modal -->
             <div v-if="supp.showModal"
@@ -843,36 +865,6 @@
                             <h3 class="text-lg font-normal uppercase tracking-tight">{{ t('users.accessInfoTitle') }}</h3>
                             <p class="text-[10px] text-white/50 uppercase tracking-widest mt-1">{{ t('users.accessInfoSubtitle') }}</p>
                         </div>
-                        <div class="mt-6 border border-slate-100 rounded-xl overflow-hidden">
-                            <div class="bg-slate-50 px-4 py-3 border-b border-slate-100">
-                                <h4 class="text-[10px] font-normal uppercase tracking-widest text-slate-500">Payment History</h4>
-                            </div>
-                            <div class="max-h-56 overflow-y-auto">
-                                <table class="w-full text-left text-xs">
-                                    <thead class="bg-[#3f3f46] sticky top-0 text-[10px] uppercase text-white">
-                                        <tr>
-                                            <th class="py-2 px-4 font-normal">Date</th>
-                                            <th class="py-2 px-4 font-normal">Type</th>
-                                            <th class="py-2 px-4 font-normal">Reference</th>
-                                            <th class="py-2 px-4 font-normal">Method</th>
-                                            <th class="py-2 px-4 font-normal text-right">Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-slate-50">
-                                        <tr v-for="payment in supp.paymentHistory" :key="payment.PaymentId || payment.paymentId" class="hover:bg-slate-50/50">
-                                            <td class="py-2 px-4 text-slate-500">{{ formatDateOnly(payment.PaymentDate || payment.paymentDate) }}</td>
-                                            <td class="py-2 px-4 text-slate-500">{{ payment.PaymentType || payment.paymentType || 'Payment' }}</td>
-                                            <td class="py-2 px-4 text-blue-600 font-normal">{{ payment.ReferenceNo || payment.referenceNo || '-' }}</td>
-                                            <td class="py-2 px-4 text-slate-500">{{ payment.PaymentMethod || payment.paymentMethod || '-' }}</td>
-                                            <td class="py-2 px-4 text-right tabular-nums text-emerald-600 font-normal">{{ Number(payment.Amount || payment.amount || 0).toLocaleString() }}</td>
-                                        </tr>
-                                        <tr v-if="!supp.paymentHistory?.length">
-                                            <td colspan="5" class="py-4 text-center text-slate-400 text-[10px] uppercase">No Payment History</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
                         <button @click="showAccessModal = false"
                             class="text-white/60 hover:text-white transition-colors text-2xl leading-none">&times;</button>
                     </div>
@@ -930,6 +922,12 @@
                 </div>
             </div>
 
+            <div class="text-right mb-2">
+                <button type="button" @click="exportPartnersCsv('staff')"
+                    class="text-[10px] font-normal text-blue-600 uppercase hover:underline py-2">
+                    {{ t('partners.exportCsv') }}
+                </button>
+            </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 table-responsive">
                 <table class="w-full text-left border-collapse">
                     <thead class="bg-[#3f3f46] text-white">
@@ -1089,18 +1087,23 @@
 <script setup>
 import { ref, computed, onMounted, watch, reactive } from 'vue';
 import api from '../services/api';
+import SupplierPaymentHistoryModal from '../components/SupplierPaymentHistoryModal.vue';
 import { useToast } from '../composables/useToast';
+import { useCsvExport } from '../composables/useCsvExport';
 import { useI18n } from '../composables/useI18n';
 import { usePermissions } from '../composables/usePermissions';
 import { useRouter } from 'vue-router';
 
 const { addToast } = useToast();
 const { t } = useI18n();
+const { exportToCsv } = useCsvExport();
 const { can, PERMISSIONS } = usePermissions();
 const router = useRouter();
 const availablePaymentMethods = ['Cash', 'KPay', 'CB Pay', 'AYA Pay', 'Wave Money', 'Banking'];
 
 const activeTab = ref('customers');
+const supplierHistoryTarget = ref(null);
+watch(activeTab, () => { supplierHistoryTarget.value = null; });
 const branches = ref([]);
 const showAccessModal = ref(false);
 
@@ -1334,7 +1337,6 @@ const supp = reactive({
     list: [], showModal: false, showDetailModal: false, showPaymentModal: false, isEdit: false, searchQuery: '', currentPage: 1, pageSize: 10,
     form: { SupplierId: 0, SupplierName: '', ContactPerson: '', Phone: '', Address: '' },
     selectedSupplier: null,
-    paymentHistory: [],
     paymentForm: { SupplierId: 0, Amount: 0, PaymentMethod: 'Cash', ReferenceNo: '', Note: '', PaymentDate: new Date().toISOString().split('T')[0] },
     filtered: computed(() => {
         const q = supp.searchQuery.toLowerCase();
@@ -1342,15 +1344,8 @@ const supp = reactive({
     }),
     totalPages: computed(() => Math.max(1, Math.ceil(supp.filtered.length / supp.pageSize))),
     paginated: computed(() => { const s = (supp.currentPage - 1) * supp.pageSize; return supp.filtered.slice(s, s + supp.pageSize); }),
-    async openDetail(item) {
+    openDetail(item) {
         supp.selectedSupplier = item;
-        const supplierId = item.SupplierId || item.supplierId;
-        try {
-            const paymentsRes = await api.get(`/suppliers/${supplierId}/payments`);
-            supp.paymentHistory = paymentsRes.data || [];
-        } catch (e) {
-            supp.paymentHistory = [];
-        }
         supp.showDetailModal = true;
     },
     openModal(item = null) {
@@ -1413,7 +1408,7 @@ const staff = reactive({
     form: { UserId: 0, Username: '', Password: '', Role: 'Staff', BranchId: 1, IsActive: true },
     filtered: computed(() => {
         const q = staff.searchQuery.toLowerCase();
-        return q ? staff.list.filter(u => (u.Username || '').toLowerCase().includes(q) || (u.BranchName || '').toLowerCase().includes(q)) : staff.list;
+        return q ? staff.list.filter(u => (u.Username ?? u.username ?? '').toLowerCase().includes(q) || (u.BranchName ?? u.branchName ?? '').toLowerCase().includes(q)) : staff.list;
     }),
     totalPages: computed(() => Math.max(1, Math.ceil(staff.filtered.length / staff.pageSize))),
     paginated: computed(() => { const s = (staff.currentPage - 1) * staff.pageSize; return staff.filtered.slice(s, s + staff.pageSize); }),
@@ -1451,6 +1446,22 @@ const staff = reactive({
     },
 });
 watch(() => staff.searchQuery, () => { staff.currentPage = 1; });
+
+const exportPartnersCsv = (tab) => {
+    const value = (row, key) => row[key] ?? row[key.charAt(0).toLowerCase() + key.slice(1)] ?? '';
+    let headers, rows;
+    if (tab === 'customers') {
+        headers = ['tableNo', 'tableName', 'tablePhone', 'tableAddress', 'tableDebt'].map(key => t('customers.' + key));
+        rows = cust.filtered.map((row, index) => [index + 1, value(row, 'Name'), value(row, 'Phone'), value(row, 'Address'), value(row, 'CurrentBalance')]);
+    } else if (tab === 'suppliers') {
+        headers = ['tableNo', 'tableName', 'labelContact', 'tablePhone', 'tableAddress', 'tableDebt'].map(key => t('suppliers.' + key));
+        rows = supp.filtered.map((row, index) => [index + 1, value(row, 'SupplierName'), value(row, 'ContactPerson'), value(row, 'Phone'), value(row, 'Address'), value(row, 'CurrentDebt')]);
+    } else if (tab === 'staff') {
+        headers = ['tableNo', 'tableUser', 'tableBranch', 'tableRole', 'tableStatus'].map(key => t('users.' + key));
+        rows = staff.filtered.map((row, index) => [index + 1, value(row, 'Username'), value(row, 'BranchName') || t('users.unassigned'), value(row, 'Role'), t(value(row, 'IsActive') ? 'users.statusActive' : 'users.statusInactive')]);
+    } else return;
+    exportToCsv(`Partners_${tab}_${new Date().toISOString().split('T')[0]}`, headers, rows);
+};
 
 const fetchCustomers = async () => { try { const r = await api.get('/customers'); cust.list = r.data; } catch { } };
 const fetchSuppliers = async () => {
