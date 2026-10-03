@@ -344,15 +344,14 @@
                   <span class="text-[7px] sm:text-[8px] font-normal text-blue-400 uppercase tracking-widest">{{ item.ItemType
                   }}</span>
                   <span class="text-[9px] sm:text-[10px] text-slate-300 font-normal">|</span>
-                  <span class="text-[9px] sm:text-[10px] text-slate-500 font-normal">{{ item.Quantity }} {{ getUnitName(item.UnitId)
+                  <span class="text-[9px] sm:text-[10px] text-slate-500 font-normal">{{ formatQuantity(item.Quantity) }} {{ getUnitName(item.UnitId)
                   }}</span>
                 </div>
               </div>
 
               <div class="text-right">
                 <div :class="['font-normal text-xs sm:text-sm', item.isFOC ? 'text-green-600' : 'text-blue-700']">
-                  {{ item.isFOC ? '0' : formatNumber((item.Quantity * item.SelectedPrice) - (item.DiscountAmount || 0))
-                  }}
+                  {{ item.isFOC ? '0' : formatNumber((item.Quantity * item.SelectedPrice) - (item.DiscountAmount || 0)) }}
                 </div>
               </div>
 
@@ -804,7 +803,7 @@
                     * {{ item.Note }}
                   </div>
                 </td>
-                <td style="text-align: center; vertical-align: top; padding: 2px 0 4px 0; line-height: 1.18;">{{ item.Quantity }}</td>
+                <td style="text-align: center; vertical-align: top; padding: 2px 0 4px 0; line-height: 1.18;">{{ formatQuantity(item.Quantity) }}</td>
                 <td style="text-align: right; vertical-align: top; padding: 2px 0 4px 0; line-height: 1.18;">{{ item.isFOC ? '0' :
                   formatNumber((item.Quantity * item.SelectedPrice) - (item.DiscountAmount || 0)) }}</td>
               </tr>
@@ -816,15 +815,14 @@
               </tr>
               <tr>
                 <td></td>
-                <td style="text-align: center; padding: 0 0 8px 0; font-weight: bold; border-bottom: 1px solid black;">{{
-                  totalQty }}</td>
+                <td style="text-align: center; padding: 0 0 8px 0; font-weight: bold; border-bottom: 1px solid black;">{{ formatQuantity(totalQty) }}</td>
                 <td></td>
               </tr>
 
               <tr>
                 <td colspan="2" style="text-align: left; padding-top: 6px;">Sub-Total:</td>
-                <td style="text-align: right; padding-top: 6px;">{{formatNumber(cart.reduce((sum, i) => sum +
-                  (i.Quantity * i.SelectedPrice), 0))}}</td>
+                <td style="text-align: right; padding-top: 6px;">{{ formatNumber(cart.reduce((sum, i) => sum +
+                  (i.Quantity * i.SelectedPrice), 0)) }}</td>
               </tr>
 
               <tr v-if="saleForm.DiscountAmount > 0">
@@ -941,7 +939,7 @@
                     * {{ item.Note }}
                   </div>
                 </td>
-                <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ item.Quantity }}</td>
+                <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ formatQuantity(item.Quantity) }}</td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ receiptUnitName(item, getUnitName(item.UnitId)) }}
                 </td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ item.isFOC ? '0' :
@@ -1004,7 +1002,7 @@
             </tbody>
           </table>
 
-          <div :style="{ fontSize: receiptFont.small + 'px', fontWeight: 'bold', marginTop: '10px' }">Total Qty: {{ totalQty }}</div>
+          <div :style="{ fontSize: receiptFont.small + 'px', fontWeight: 'bold', marginTop: '10px' }">Total Qty: {{ formatQuantity(totalQty) }}</div>
           <div style="text-align: center; margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 10px;">
             <p v-for="(line, idx) in receiptFooterLines" :key="idx" :style="{ fontWeight: 'bold', fontSize: receiptFont.footer + 'px', margin: '2px 0' }">{{ line }}</p>
           </div>
@@ -1156,9 +1154,8 @@
                 </div>
               </div>
               <div class="space-y-1.5">
-                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">{{
-                  t('sale.initialQty') || 'Initial Qty' }}</label>
-                <input v-model.number="quickSaleForm.Quantity" type="number"
+                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">{{ t('sale.initialQty') || 'Initial Qty' }}</label>
+                <input v-quantity v-model.number="quickSaleForm.Quantity" type="number"
                   class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-center font-bold text-sm">
               </div>
             </div>
@@ -1343,6 +1340,7 @@ input::-webkit-inner-spin-button {
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import api from '../services/api';
+import { useQuantitySettings, applyQuantitySettings } from '../composables/useQuantitySettings';
 import { useToast } from '../composables/useToast';
 import { useI18n } from '../composables/useI18n';
 import { isMobileBrowser, openPrintWindow } from '../utils/print';
@@ -1479,15 +1477,15 @@ const applyShopSettings = (settings = {}) => {
   };
   localStorage.setItem('ShopLogo', shopInfo.value.LogoData || '');
   localStorage.setItem('ShopSettings', JSON.stringify(shopInfo.value));
+  applyQuantitySettings(shopInfo.value);
 };
 const shopInfo = ref(readCachedShopSettings());
 const receiptFontSizeMap = { Small: { body: 10, h1: 16, h2: 14, small: 8, tiny: 7, footer: 9, total: 10 }, Medium: { body: 13, h1: 20, h2: 18, small: 11, tiny: 9, footer: 11, total: 12 }, Large: { body: 16, h1: 26, h2: 22, small: 14, tiny: 11, footer: 14, total: 15 } };
 const receiptFont = computed(() => receiptFontSizeMap[shopInfo.value.ReceiptFontSize] || receiptFontSizeMap.Medium);
 const currencySymbol = computed(() => shopInfo.value.CurrencySymbol || 'Ks');
-const useDecimalQuantity = computed(() => toBooleanSetting(shopInfo.value.UseDecimalQuantity ?? shopInfo.value.useDecimalQuantity));
-const quantityInputStep = computed(() => useDecimalQuantity.value ? '0.01' : '1');
-const quantityInputMin = computed(() => useDecimalQuantity.value ? '0.01' : '1');
-const quantityButtonStep = computed(() => useDecimalQuantity.value ? 0.01 : 1);
+const { useDecimalQuantity, quantityDecimals, quantityStep: quantityButtonStep, floorQuantity, formatQuantity } = useQuantitySettings();
+const quantityInputStep = computed(() => String(quantityButtonStep.value));
+const quantityInputMin = quantityInputStep;
 const lastSaleNo = ref('');
 const lastSaleDate = ref('');
 const cashierName = ref('');
@@ -2315,16 +2313,16 @@ const getMaxSellableQty = (item) => {
   const remainingBase = stockQty - getOtherCartBaseQty(item);
   const multiplier = getItemUnitMultiplier(item);
   const maxQty = remainingBase / multiplier;
-  return useDecimalQuantity.value ? Math.max(0, Number(maxQty.toFixed(2))) : Math.max(0, Math.floor(maxQty));
+  return useDecimalQuantity.value ? Math.max(0, floorQuantity(maxQty)) : Math.max(0, Math.floor(maxQty));
 };
 
 const normalizeCartQty = (item) => {
   if (!item) return;
   const maxQty = getMaxSellableQty(item);
-  const minQty = useDecimalQuantity.value ? 0.01 : 1;
+  const minQty = quantityButtonStep.value;
   const rawQty = Number(item.Quantity || 0);
   const qty = useDecimalQuantity.value
-    ? Math.max(minQty, Number(rawQty.toFixed(2)))
+    ? Math.max(minQty, Number(rawQty.toFixed(quantityDecimals.value)))
     : Math.max(minQty, Math.floor(rawQty));
   if (qty > maxQty) {
     item.Quantity = maxQty > 0 ? maxQty : minQty;
@@ -2341,8 +2339,8 @@ const onCartQtyInput = (item, event) => {
     ? parseFloat(event?.target?.value)
     : parseInt(event?.target?.value, 10);
   if (Number.isNaN(raw)) return;
-  const minQty = useDecimalQuantity.value ? 0.01 : 1;
-  const qty = useDecimalQuantity.value ? Number(raw.toFixed(2)) : raw;
+  const minQty = quantityButtonStep.value;
+  const qty = useDecimalQuantity.value ? Number(raw.toFixed(quantityDecimals.value)) : raw;
   item.Quantity = Math.min(Math.max(minQty, qty), maxQty > 0 ? maxQty : minQty);
 };
 
@@ -2716,7 +2714,7 @@ const buildReceiptText = (saleNo, options = {}) => {
     lines.push(clip(`${selectedCustomerObj.value.phone || ''} ${selectedCustomerObj.value.address || ''}`.trim(), width));
   }
   lines.push(line);
-  const qtyWidth = 5;
+  const qtyWidth = 9;
   const amountWidth = Math.min(14, Math.max(10, width - 21));
   const nameWidth = Math.max(12, width - qtyWidth - amountWidth);
 
@@ -2729,7 +2727,7 @@ const buildReceiptText = (saleNo, options = {}) => {
     const total = item.isFOC ? 0 : (qty * price) - Number(item.DiscountAmount || 0);
     const itemName = `${item.Name || ''}${item.isFOC ? ' (FOC)' : ''}`;
     const itemLines = wrap(itemName, nameWidth);
-    const qtyText = `${qty}`;
+    const qtyText = formatQuantity(qty);
     const totalText = formatNumber(total);
 
     lines.push(`${itemLines[0].padEnd(nameWidth, ' ')}${qtyText.padStart(qtyWidth, ' ')}${totalText.padStart(amountWidth, ' ')}`);
@@ -2742,7 +2740,7 @@ const buildReceiptText = (saleNo, options = {}) => {
   });
 
   lines.push(line);
-  lines.push(columns('Total Qty', formatNumber(receiptTotalQty)));
+  lines.push(columns('Total Qty', formatQuantity(receiptTotalQty)));
   lines.push(columns('Sub-Total:', money(subTotal)));
   if (discountAmount > 0) {
     lines.push(columns(discountLabel, money(discountAmount)));
@@ -3005,9 +3003,9 @@ const updateQty = (item, change) => {
       return;
     }
   }
-  const minQty = useDecimalQuantity.value ? 0.01 : 1;
+  const minQty = quantityButtonStep.value;
   const nextQty = Number(item.Quantity || 0) + change;
-  item.Quantity = useDecimalQuantity.value ? Number(nextQty.toFixed(2)) : Math.floor(nextQty);
+  item.Quantity = useDecimalQuantity.value ? Number(nextQty.toFixed(quantityDecimals.value)) : Math.floor(nextQty);
   if (item.Quantity < minQty) item.Quantity = minQty;
 };
 
@@ -3021,7 +3019,7 @@ const validateCartStock = () => {
     .find(x => Number(x.item.Quantity || 0) > x.maxQty);
 
   if (stockIssues) {
-    const minQty = useDecimalQuantity.value ? 0.01 : 1;
+    const minQty = quantityButtonStep.value;
     stockIssues.item.Quantity = stockIssues.maxQty > 0 ? stockIssues.maxQty : minQty;
     addToast(`"${stockIssues.item.Name}" ${t('sale.outOfStock')}`, "error");
     return false;
@@ -3193,7 +3191,7 @@ const buildInvoiceHtml = (format = null) => {
           : '';
         return `<tr style="border-bottom:1px dotted #ccc">
           <td style="padding:2px;font-size:${font.small}px">${name}${unit ? ` <span style="font-size:${font.tiny}px;color:#666">(${unit})</span>` : ''}${discountHtml}</td>
-          <td style="text-align:center;padding:2px;font-size:${font.small}px">${qty}</td>
+          <td style="text-align:center;padding:2px;font-size:${font.small}px">${formatQuantity(qty)}</td>
           <td style="text-align:right;padding:2px;font-size:${font.small}px">${formatMoney(price)}</td>
           <td style="text-align:right;padding:2px;font-size:${font.small}px">${formatMoney(subtotal)}</td>
         </tr>`;
@@ -3210,7 +3208,7 @@ const buildInvoiceHtml = (format = null) => {
           : '';
         return `<tr style="border-bottom:1px solid #e5e7eb">
           <td style="padding:6px 4px;font-size:12px">${name}${unit ? ` <span style="font-size:10px;color:#666">(${unit})</span>` : ''}${discountHtml}</td>
-          <td style="text-align:center;padding:6px 4px;font-size:12px;width:60px">${qty}</td>
+          <td style="text-align:center;padding:6px 4px;font-size:12px;width:60px">${formatQuantity(qty)}</td>
           <td style="text-align:right;padding:6px 4px;font-size:12px;width:90px">${formatMoney(price)}</td>
           <td style="text-align:right;padding:6px 4px;font-size:12px;width:100px">${formatMoney(subtotal)}</td>
         </tr>`;
@@ -4039,6 +4037,7 @@ const fetchSettings = async () => {
       // ✅ ရလာတဲ့ LogoData (Base64) ကို LocalStorage မှာပါ Update လုပ်ပေးခြင်း
       localStorage.setItem('ShopLogo', res.data.LogoData || '');
       localStorage.setItem('ShopSettings', JSON.stringify(shopInfo.value));
+  applyQuantitySettings(shopInfo.value);
       saveCurrentCatalogForAndroid();
     }
   }

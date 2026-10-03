@@ -11,6 +11,7 @@ namespace Versa.Core.Models
         public string Title { get; set; }
         public string Category { get; set; } // e.g., Staff Salary, Rent
         public decimal Amount { get; set; }
+        public bool IsPaid { get; set; } = true;
         public DateTime ExpenseDate { get; set; }
         public string PaymentMethod { get; set; }
         public string Note { get; set; }

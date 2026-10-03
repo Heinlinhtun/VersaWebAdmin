@@ -153,7 +153,7 @@
                   <div class="text-[9px] text-slate-400 uppercase tracking-wider">{{ item.Sku || item.sku || '-' }}</div>
                 </td>
                 <td class="p-4 text-slate-700 italic">{{ item.CustomerName || item.customerName || tx.walkInClient }}</td>
-                <td class="p-4 text-center tabular-nums">{{ formatNumber(toNumber(item.Quantity ?? item.quantity)) }}</td>
+                <td class="p-4 text-center tabular-nums">{{ formatQuantity(toNumber(item.Quantity ?? item.quantity)) }}</td>
                 <td class="p-4 text-slate-500">{{ item.UnitName || item.unitName || '-' }}</td>
                 <td class="p-4 text-right tabular-nums">{{ formatNumber(item.UnitPrice ?? item.unitPrice) }}</td>
                 <td class="p-4 text-right text-amber-600 tabular-nums">-{{ formatNumber(item.DiscountAmount ?? item.discountAmount) }}</td>
@@ -238,7 +238,7 @@
                 <div :class="selectedItemKey === item.key ? 'text-blue-700' : 'text-slate-700'"
                   class="text-[11px] font-normal truncate">{{ item.name }} <span class="text-[9px] text-slate-400 font-normal">({{ item.unit }})</span></div>
                 <div class="text-[9px] font-normal text-slate-400 uppercase tracking-wider">
-                  {{ formatNumber(item.quantity) }} {{ item.unit }} · {{ formatNumber(item.amount) }} Ks
+                  {{ formatQuantity(item.quantity) }} {{ item.unit }} · {{ formatNumber(item.amount) }} Ks
                 </div>
               </div>
               <div class="text-[10px] font-normal text-blue-600 tabular-nums shrink-0">
@@ -281,6 +281,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, onMounted, watch, reactive, computed } from 'vue';
 import { Pie } from 'vue-chartjs';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';

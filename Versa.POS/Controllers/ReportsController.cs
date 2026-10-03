@@ -40,7 +40,7 @@ WHERE TABLE_SCHEMA = DATABASE()
         var additions = new List<string>();
         if (!existingColumns.Contains("AdjustmentKind")) additions.Add("ADD COLUMN AdjustmentKind VARCHAR(30) NOT NULL DEFAULT 'Correction'");
         if (!existingColumns.Contains("LossReason")) additions.Add("ADD COLUMN LossReason VARCHAR(30) NULL");
-        if (!existingColumns.Contains("BaseQuantity")) additions.Add("ADD COLUMN BaseQuantity DECIMAL(18,4) NULL");
+        if (!existingColumns.Contains("BaseQuantity")) additions.Add("ADD COLUMN BaseQuantity DECIMAL(18,5) NULL");
         if (!existingColumns.Contains("UnitCost")) additions.Add("ADD COLUMN UnitCost DECIMAL(18,4) NULL");
         if (!existingColumns.Contains("LossAmount")) additions.Add("ADD COLUMN LossAmount DECIMAL(18,4) NULL");
 

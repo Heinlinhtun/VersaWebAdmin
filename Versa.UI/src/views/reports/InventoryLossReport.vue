@@ -68,6 +68,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { computed, onMounted, ref, watch } from 'vue';
 import api from '../../services/api';
 import { useCsvExport } from '../../composables/useCsvExport';
@@ -83,7 +85,7 @@ const tx = computed(() => t('reportViews.inventoryLoss'));
 const valueOf = (row, pascal, camel, fallback = '') => row?.[pascal] ?? row?.[camel] ?? fallback;
 const asNumber = (value) => Number(value || 0);
 const formatMoney = (value) => asNumber(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
-const formatQty = (value) => asNumber(value).toLocaleString(undefined, { maximumFractionDigits: 4 });
+const formatQty = formatQuantity;
 const formatDate = (value) => value ? new Date(value).toLocaleString() : '-';
 const totalLoss = computed(() => items.value.reduce((sum, item) => sum + asNumber(valueOf(item, 'LossAmount', 'lossAmount', 0)), 0));
 const totalPages = computed(() => Math.max(1, Math.ceil(items.value.length / itemsPerPage)));

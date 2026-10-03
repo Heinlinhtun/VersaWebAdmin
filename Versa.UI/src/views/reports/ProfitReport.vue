@@ -348,6 +348,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, onMounted, watch, computed } from 'vue';
 import api from '../../services/api';
 import { useI18n } from '../../composables/useI18n';
@@ -441,7 +443,7 @@ const formatDate = (value) => {
   return date.toLocaleDateString();
 };
 
-const formatQty = (value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(asNumber(value));
+const formatQty = formatQuantity;
 
 const shouldShowBaseQty = (row) => {
   const qty = getAmount(row, 'Quantity');

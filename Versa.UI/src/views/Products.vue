@@ -108,7 +108,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                       d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
-                  {{ item.AlertQuantity }}
+                  {{ formatQuantity(item.AlertQuantity) }}
                 </div>
                 <span v-else class="text-slate-200">-</span>
               </td>
@@ -127,6 +127,7 @@
 
             <template v-else-if="currentTab === 'bundles'">
               <td class="p-5 font-normal text-slate-800 text-sm tracking-tight">{{ item.BundleName || item.bundleName }}
+                <span v-if="isProductionBundle(item)" class="ml-2 rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">{{ t('products.production.badge') }}</span>
               </td>
               <td class="p-5 text-center">
                 <span
@@ -170,7 +171,7 @@
                       <tbody class="divide-y divide-slate-50 text-sm">
                         <tr v-for="comp in selectedBundleDetail.items" :key="comp.BundleItemId">
                           <td class="p-4 font-normal text-slate-800">{{ comp.ProductName }}</td>
-                          <td class="p-4 text-center font-normal text-blue-600 tabular-nums">{{ comp.Quantity }}</td>
+                          <td class="p-4 text-center font-normal text-blue-600 tabular-nums">{{ formatQuantity(comp.Quantity) }}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -184,6 +185,8 @@
 
             <td class="p-5 text-right px-8">
               <div class="flex justify-end gap-2">
+                <button v-if="currentTab === 'bundles' && isProductionBundle(item)" @click="openProduction(item.ProductionProductId ?? item.productionProductId, true)" :disabled="productionOpening"
+                  class="px-3 py-2 rounded-lg bg-amber-100 text-amber-900 text-sm disabled:opacity-50">{{ t('products.production.produce') }}</button>
                 <button @click="editItem(item)"
                   class="p-2 rounded-lg bg-slate-50 text-slate-400 hover:text-blue-600 transition-all shadow-sm">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -198,7 +201,7 @@
                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </button>
-                <button v-if="currentTab === 'bundles'" @click="showBundleDetail(item)"
+                <button v-if="currentTab === 'bundles' && !isProductionBundle(item)" @click="showBundleDetail(item)"
                   class="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all shadow-sm"
                   title="View Detail">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -447,39 +450,43 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
             <div class="space-y-5">
               <div class="space-y-1.5">
-                <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('products.productNameStar') }}</label>
+                <div class="flex h-8 items-center">
+                  <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('products.productNameStar') }}</label>
+                </div>
                 <input v-model="form.name" type="text"
-                  class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm transition-all"
+                  class="w-full h-12 p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm transition-all"
                   :placeholder="t('products.enterFullName')">
               </div>
               <div class="space-y-1.5">
-                <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('products.skuBarcodeIdentifier') }}</label>
+                <div class="flex h-8 items-center">
+                  <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('products.skuBarcodeIdentifier') }}</label>
+                </div>
                 <input v-model="form.sku" type="text"
-                  class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm transition-all"
+                  class="w-full h-12 p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm transition-all"
                   placeholder="UPC-12345">
               </div>
             </div>
             <div class="space-y-5">
               <div class="space-y-1.5">
-                <div class="flex items-center justify-between gap-3">
+                <div class="flex h-8 items-center justify-between gap-3">
                   <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('products.productCategory') }}</label>
                   <button v-if="can('canEditMasterData')" type="button" @click="lookupCreateKind = 'categories'"
-                    class="shrink-0 text-xs text-blue-600 hover:underline py-1 text-right">{{ t('products.addNewCategory') }}</button>
+                    class="shrink-0 text-xs text-blue-600 hover:underline text-right">{{ t('products.addNewCategory') }}</button>
                 </div>
                 <select v-model="form.categoryId"
-                  class="w-full p-3 font-normal text-slate-800 bg-gray-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm appearance-none cursor-pointer text-sm">
+                  class="w-full h-12 p-3 font-normal text-slate-800 bg-gray-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm appearance-none cursor-pointer text-sm">
                   <option :value="null">{{ t('products.typeOrSelectCategory') }}</option>
                   <option v-for="c in categories" :key="c.categoryId" :value="c.categoryId">{{ c.categoryName }}</option>
                 </select>
               </div>
               <div class="space-y-1.5">
-                <div class="flex items-center justify-between gap-3">
+                <div class="flex h-8 items-center justify-between gap-3">
                   <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('products.primaryBaseUnit') }}</label>
                   <button v-if="can('canEditMasterData')" type="button" @click="lookupCreateKind = 'units'"
-                    class="shrink-0 text-xs text-blue-600 hover:underline py-1 text-right">{{ t('products.addNewUnit') }}</button>
+                    class="shrink-0 text-xs text-blue-600 hover:underline text-right">{{ t('products.addNewUnit') }}</button>
                 </div>
                 <select v-model="form.unitId"
-                  class="w-full p-3 font-normal text-slate-800 bg-gray-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm appearance-none cursor-pointer text-sm">
+                  class="w-full h-12 p-3 font-normal text-slate-800 bg-gray-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm appearance-none cursor-pointer text-sm">
                   <option :value="null">{{ t('products.typeOrSelectUnit') }}</option>
                   <option v-for="u in units" :key="u.unitId" :value="u.unitId">{{ u.unitName }}</option>
                 </select>
@@ -500,7 +507,7 @@
             </div>
             <div class="space-y-1.5">
               <label class="text-[10px] font-normal text-amber-600 uppercase tracking-wider ml-1 leading-none">{{ t('products.minStockAlertLevel') }}</label>
-              <input v-model.number="form.alertQuantity" type="number"
+              <input v-quantity v-model.number="form.alertQuantity" type="number"
                 class="w-full p-3 bg-amber-50 border border-amber-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-500/20 font-normal text-sm text-amber-900 tabular-nums">
             </div>
           </div>
@@ -526,7 +533,7 @@
               </div>
               <div class="space-y-1">
                 <label class="text-[9px] font-normal text-slate-400 uppercase tracking-wider ml-1">{{ t('products.quantityMultiplier') }}</label>
-                <input v-model.number="conv.multiplier" type="number"
+                <input v-quantity v-model.number="conv.multiplier" type="number"
                   class="w-full p-2 border border-slate-200 rounded-lg text-[11px] font-normal outline-none tabular-nums">
               </div>
               <div class="space-y-1">
@@ -577,7 +584,7 @@
               </div>
               <div class="space-y-1">
                 <label class="text-[9px] font-normal text-blue-400 uppercase tracking-wider ml-1">{{ t('products.minQty') }}</label>
-                <input v-model.number="price.minQuantity" type="number"
+                <input v-quantity v-model.number="price.minQuantity" type="number"
                   class="w-full p-2 border border-blue-100 rounded-lg text-[11px] font-normal outline-none tabular-nums">
               </div>
               <div class="flex items-end justify-center pb-1">
@@ -648,7 +655,7 @@
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div class="space-y-1.5">
                   <label class="text-[9px] font-normal text-emerald-700 uppercase tracking-wider ml-1">{{ t('products.qty') || 'Qty' }}</label>
-                  <input v-model.number="quickPurchase.quantity" type="number" min="0" step="0.01"
+                  <input v-quantity v-model.number="quickPurchase.quantity" type="number" min="0"
                     class="w-full p-3 bg-white border border-emerald-100 rounded-lg outline-none text-sm tabular-nums">
                 </div>
                 <div class="space-y-1.5">
@@ -732,10 +739,10 @@
     <div v-if="showModal && currentTab === 'bundles'"
       class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
       <div
-        class="bg-white overflow-hidden w-full max-w-2xl rounded-2xl shadow-2xl animate-in zoom-in duration-200 border border-slate-200">
-        <div class="bg-[#3f3f46] p-6 text-white flex justify-between items-center">
+        class="bg-white overflow-hidden w-full max-w-2xl max-h-[calc(100dvh-2rem)] flex flex-col rounded-2xl shadow-2xl animate-in zoom-in duration-200 border border-slate-200">
+        <div class="bg-[#3f3f46] p-6 text-white flex shrink-0 justify-between items-center">
           <h3 class="text-lg font-normal uppercase tracking-tight">
-            {{ isEdit ? t('products.modifyBundle') : t('products.createPromotionBundle') }}
+            {{ bundleForm.productionProductId ? t('products.production.produceMore') : isEdit ? t('products.modifyBundle') : t('products.createPromotionBundle') }}
           </h3>
           <button @click="showModal = false" class="text-white/60 hover:text-white transition-colors">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -743,21 +750,24 @@
             </svg>
           </button>
         </div>
-        <div class="p-8 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar text-left">
+        <div class="p-8 space-y-6 min-h-0 overflow-y-auto custom-scrollbar text-left">
+          <p v-if="bundleForm.productionOnly" class="font-medium text-slate-800">{{ bundleForm.bundleName }}</p>
+          <template v-if="!bundleForm.productionOnly">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="space-y-1.5">
               <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest">{{ t('products.bundleLabel') }}</label>
-              <input v-model="bundleForm.bundleName" type="text"
+              <input v-model="bundleForm.bundleName" :readonly="!!bundleForm.productionProductId" type="text"
                 class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none font-normal text-sm"
                 :placeholder="t('products.egComboSetA')">
             </div>
             <div class="space-y-1.5">
               <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest">{{ t('products.bundlePricePackage') }}</label>
-              <input :value="formatMoneyInput(bundleForm.bundlePrice)" @input="updateMoneyField(bundleForm, 'bundlePrice', $event)" type="text" inputmode="decimal"
+              <input :readonly="!!bundleForm.productionProductId" :value="formatMoneyInput(bundleForm.bundlePrice)" @input="updateMoneyField(bundleForm, 'bundlePrice', $event)" type="text" inputmode="decimal"
                 class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none font-normal text-xl text-emerald-600">
             </div>
           </div>
 
+          <p v-if="bundleForm.productionProductId" class="text-sm text-amber-800">{{ t(bundleForm.recipeRecovered ? 'products.production.recoveredRecipe' : bundleForm.bundleItems.length ? 'products.production.recipeHint' : 'products.production.setupRecipe') }}</p>
           <div class="bg-slate-50 p-5 rounded-xl border border-slate-200">
             <label class="text-[10px] font-normal text-slate-500 uppercase tracking-widest block mb-4">{{ t('products.addProductsToPackage') }}</label>
             <div class="flex gap-2 flex-wrap">
@@ -784,7 +794,7 @@
                   {{ u.UnitName || u.unitName }}
                 </option>
               </select>
-              <input v-model.number="tempBundleItem.quantity" type="number"
+              <input v-quantity.preserve v-model.number="tempBundleItem.quantity" type="number"
                 class="w-24 p-3 bg-white border border-slate-200 rounded-lg text-sm font-normal text-center"
                 :placeholder="t('products.qtyHeader')">
               <button @click="addItemToBundle"
@@ -809,7 +819,7 @@
                     {{ (bi.itemType || 'Product') === 'Service' ? getServiceName(bi.serviceId) : getProductName(bi.productId) }}
                     <span class="text-[9px] ml-2 px-2 py-0.5 rounded bg-slate-100 text-slate-500 uppercase tracking-wider">{{ bi.itemType || 'Product' }}</span>
                   </div>
-                  <div class="text-[10px] text-slate-400 font-normal">{{ t('products.qtyHeader') }}: {{ bi.quantity }} {{ (bi.itemType || 'Product') === 'Service' ? t('products.unitsLabel') : (bi.unitName || getUnitName(bi.unitId)) }}</div>
+                  <div class="text-[10px] text-slate-400 font-normal">{{ t('products.qtyHeader') }}: {{ formatQuantity(bi.quantity) }} {{ (bi.itemType || 'Product') === 'Service' ? t('products.unitsLabel') : (bi.unitName || getUnitName(bi.unitId)) }}</div>
                 </div>
               </div>
               <button @click="bundleForm.bundleItems.splice(idx, 1)"
@@ -821,8 +831,36 @@
             </div>
           </div>
 
-          <button @click="saveBundle"
-            class="w-full bg-blue-600 text-white py-4 rounded-xl font-normal uppercase text-[10px] tracking-widest shadow-lg shadow-blue-100 mt-4 hover:bg-blue-700 transition active:scale-95">{{ t('products.saveBundleAccount') }}</button>
+          </template>
+          <div v-if="!isEdit" class="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+            <label v-if="!bundleForm.productionOnly" class="flex items-center gap-3 text-sm text-slate-800">
+              <input v-model="bundleForm.addAsProduct" type="checkbox" :disabled="bundleSaving || !!bundleForm.productionProductId" class="h-4 w-4" />
+              {{ t(bundleForm.productionProductId ? 'products.production.produceMore' : 'products.production.label') }}
+            </label>
+            <p class="text-xs text-amber-800">{{ t('products.production.warning') }}</p>
+            <div v-if="bundleForm.addAsProduct" class="space-y-3">
+              <p class="text-xs text-slate-600">{{ t('products.production.branchNote') }}</p>
+              <label v-if="!bundleForm.productionOnly" class="block text-xs text-slate-700">{{ t('products.production.unit') }}
+                <select v-model="bundleForm.productionUnitId" :disabled="!!bundleForm.productionProductId" class="mt-1 w-full rounded-lg border p-2 bg-white">
+                  <option :value="null">{{ t('products.production.selectUnit') }}</option>
+                  <option v-for="unit in units" :key="unit.UnitId ?? unit.unitId" :value="unit.UnitId ?? unit.unitId">{{ unit.UnitName ?? unit.unitName }}</option>
+                </select>
+              </label>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block text-xs text-slate-700">{{ t('products.production.maximum') }}
+                  <input :value="productionLoading ? t('products.production.calculating') : productionMaximum ?? t('products.production.unavailable')" readonly class="mt-1 w-full rounded-lg border p-2 bg-slate-100" />
+                </label>
+                <label class="block text-xs text-slate-700">{{ t('products.production.quantity') }}
+                  <input v-model.number="bundleForm.productionQuantity" type="number" min="1" :max="productionMaximum ?? 0" step="1" class="mt-1 w-full rounded-lg border p-2 bg-white" />
+                </label>
+              </div>
+              <p v-if="productionError" role="alert" class="text-xs text-red-700">{{ t(productionError) }}</p>
+              <button type="button" @click="refreshProductionAvailability" :disabled="productionLoading || bundleSaving" class="text-xs text-blue-700 underline">{{ t('products.production.refresh') }}</button>
+            </div>
+          </div>
+
+          <button @click="saveBundle" :disabled="bundleSaving || (bundleForm.addAsProduct && !productionReady)"
+            class="w-full bg-blue-600 text-white py-4 rounded-xl font-normal uppercase text-[10px] tracking-widest shadow-lg shadow-blue-100 mt-4 hover:bg-blue-700 transition active:scale-95">{{ t(bundleForm.productionProductId ? 'products.production.produce' : 'products.saveBundleAccount') }}</button>
         </div>
       </div>
     </div>
@@ -853,6 +891,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../composables/useQuantitySettings';
+const { formatQuantity, roundQuantity, quantityStep } = useQuantitySettings();
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import api from '../services/api';
 import { useToast } from '../composables/useToast';
@@ -991,7 +1031,50 @@ const quickPurchase = ref({
   paidAmount: 0
 });
 const serviceForm = ref({ serviceId: 0, serviceName: '', price: 0, description: '' });
-const bundleForm = ref({ bundleId: 0, bundleName: '', bundlePrice: 0, bundleItems: [] });
+const newBundleForm = () => ({ bundleId: 0, bundleName: '', bundlePrice: 0, bundleItems: [], addAsProduct: false, productionQuantity: 1, productionUnitId: null, productionProductId: null, recipeRecovered: false, productionOnly: false });
+const productionErrorCodes = new Set([
+  'branchRequired', 'componentsRequired', 'branchMissing', 'componentQuantity', 'serviceUnavailable',
+  'invalidComponent', 'productUnavailable', 'invalidConversion', 'componentPrecision', 'namePriceRequired',
+  'unitChanged', 'selfComponent', 'unitRequired', 'stockChanged', 'physicalProductRequired', 'quantityInvalid', 'insufficientStock', 'creationOnly'
+]);
+const productionErrorKey = (err, fallback) => {
+  const code = err.response?.data?.code ?? err.response?.data?.Code;
+  return `products.production.${productionErrorCodes.has(code) ? code : fallback}`;
+};
+const bundleForm = ref(newBundleForm());
+const bundleSaving = ref(false);
+const productionMaximum = ref(null);
+const productionLoading = ref(false);
+const productionError = ref('');
+let productionRequest = 0;
+const productionReady = computed(() => !productionLoading.value && !productionError.value &&
+  productionMaximum.value !== null && !!bundleForm.value.productionUnitId &&
+  Number.isInteger(bundleForm.value.productionQuantity) && bundleForm.value.productionQuantity > 0 &&
+  bundleForm.value.productionQuantity <= productionMaximum.value);
+const refreshProductionAvailability = async () => {
+  const request = ++productionRequest;
+  productionMaximum.value = null;
+  productionError.value = '';
+  productionLoading.value = false;
+  if (!bundleForm.value.addAsProduct || isEdit.value || !showModal.value) return;
+  if (!bundleForm.value.bundleItems.length) {
+    productionError.value = 'products.production.componentsRequired';
+    return;
+  }
+  productionLoading.value = true;
+  try {
+    const { data } = await api.post('/bundles/production-availability', {
+      ...bundleForm.value, branchId: Number(localStorage.getItem('BranchId')) || null
+    });
+    if (request !== productionRequest) return;
+    productionMaximum.value = Number(data.maximumAvailability ?? data.MaximumAvailability);
+  } catch (err) {
+    if (request === productionRequest) productionError.value = productionErrorKey(err, 'availabilityFailed');
+  } finally {
+    if (request === productionRequest) productionLoading.value = false;
+  }
+};
+watch(() => [bundleForm.value.addAsProduct, bundleForm.value.bundleItems, showModal.value], refreshProductionAvailability, { deep: true, flush: 'sync' });
 const tempBundleItem = ref({ itemType: 'Product', productId: null, serviceId: null, unitId: null, quantity: 1 });
 const tempBundleUnits = ref([]);
 
@@ -1164,7 +1247,7 @@ const fetchAll = async () => {
     const [pRes, sRes, bRes, cRes, uRes, supplierRes] = await Promise.all([
       api.get('/products').catch(err => { console.error("Products API Missing"); return { data: [] }; }),
       api.get('/services').catch(err => { console.error("Services API Missing"); return { data: [] }; }),
-      api.get('/bundles').catch(err => { console.error("Bundles API Missing"); return { data: [] }; }),
+      api.get('/bundles?includeProduction=true').catch(err => { console.error("Bundles API Missing"); return { data: [] }; }),
       api.get('/categories').catch(err => { console.error("Categories API Missing"); return { data: [] }; }),
       api.get('/units').catch(err => { console.error("Units API Missing"); return { data: [] }; }),
       api.get('/suppliers').catch(err => { console.error("Suppliers API Missing"); return { data: [] }; })
@@ -1222,7 +1305,41 @@ const openAddModal = () => {
   showModal.value = true;
 };
 
+const productionOpening = ref(false);
+const isProductionBundle = item => !!(item.ProductionProductId ?? item.productionProductId);
+const openProduction = async (productId, productionOnly = false) => {
+  if (productionOpening.value) return;
+  productionOpening.value = true;
+  try {
+    const { data } = await api.get(`/bundles/production/${productId}`);
+    showModal.value = false;
+    isEdit.value = false;
+    bundleForm.value = {
+      ...newBundleForm(), productionProductId: productId, addAsProduct: true, productionOnly,
+      bundleName: data.bundleName ?? data.BundleName,
+      bundlePrice: data.bundlePrice ?? data.BundlePrice,
+      productionUnitId: data.productionUnitId ?? data.ProductionUnitId,
+      recipeRecovered: data.recipeRecovered ?? data.RecipeRecovered,
+      bundleItems: (data.bundleItems ?? data.BundleItems ?? []).map(item => ({
+        itemType: item.itemType ?? item.ItemType ?? 'Product',
+        productId: item.productId ?? item.ProductId, serviceId: item.serviceId ?? item.ServiceId,
+        unitId: item.unitId ?? item.UnitId, quantity: Number(item.quantity ?? item.Quantity)
+      }))
+    };
+    tempBundleItem.value = { itemType: 'Product', productId: null, serviceId: null, unitId: null, quantity: 1 };
+    tempBundleUnits.value = [];
+    currentTab.value = 'bundles';
+    showModal.value = true;
+  } catch (err) {
+    addToast(t('products.production.recipeLoadFailed'), 'error');
+  } finally { productionOpening.value = false; }
+};
+
 const editItem = async (item) => {
+  if (currentTab.value === 'bundles' && isProductionBundle(item)) {
+    await openProduction(item.ProductionProductId ?? item.productionProductId);
+    return;
+  }
   isEdit.value = true;
   showQuickPurchase.value = false;
   if (currentTab.value === 'products') {
@@ -1582,9 +1699,13 @@ const saveService = async () => {
 };
 
 const saveBundle = async () => {
+  if (bundleSaving.value) return;
+  if (bundleForm.value.addAsProduct && !productionReady.value) return;
+  bundleSaving.value = true;
   try {
     const payload = {
       ...bundleForm.value,
+      branchId: Number(localStorage.getItem('BranchId')) || null,
       bundleItems: (bundleForm.value.bundleItems || []).map(i => ({
         itemType: i.itemType || 'Product',
         productId: i.itemType === 'Service' ? null : i.productId,
@@ -1593,26 +1714,38 @@ const saveBundle = async () => {
         quantity: Number(i.quantity || 0)
       }))
     };
-    if (isEdit.value) await api.put(`/bundles/${bundleForm.value.bundleId}`, payload);
+    if (payload.productionProductId) await api.post(`/bundles/production/${payload.productionProductId}`, payload);
+    else if (isEdit.value) await api.put(`/bundles/${bundleForm.value.bundleId}`, payload);
     else await api.post('/bundles', payload);
-    addToast(tx.value.packageBundleSaved, "success");
+    addToast(payload.addAsProduct ? t('products.production.success') : tx.value.packageBundleSaved, "success");
     showModal.value = false;
+    if (payload.addAsProduct) currentTab.value = payload.productionOnly ? 'bundles' : 'products';
     fetchAll();
-  } catch (err) { addToast(tx.value.bundleSaveFailed, "error"); }
+  } catch (err) {
+    addToast(bundleForm.value.addAsProduct ? t(productionErrorKey(err, 'saveFailed')) : err.response?.data?.message ?? err.response?.data?.Message ?? tx.value.bundleSaveFailed, "error");
+    if (bundleForm.value.addAsProduct) await refreshProductionAvailability();
+  } finally { bundleSaving.value = false; }
 };
 
 // ================= HELPER ACTIONS =================
 
 const addItemToBundle = () => {
-  if (tempBundleItem.value.quantity <= 0) return;
+  const quantity = Number(tempBundleItem.value.quantity);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return addToast(t('products.bundleQuantityRequired'), 'warning');
+  }
+  const rounded = roundQuantity(quantity);
+  if (rounded <= 0 || Math.abs(quantity - rounded) > Number.EPSILON * Math.max(1, quantity)) {
+    return addToast(`${t('products.bundleQuantityPrecision')} ${quantityStep.value}. ${t('products.bundlePrecisionSettings')}`, 'warning');
+  }
 
   if (tempBundleItem.value.itemType === 'Service') {
-    if (!tempBundleItem.value.serviceId) return;
+    if (!tempBundleItem.value.serviceId) return addToast(t('products.selectService'), 'warning');
   } else {
-    if (!tempBundleItem.value.productId) return;
-    if (!tempBundleItem.value.unitId) return;
+    if (!tempBundleItem.value.productId) return addToast(t('products.selectProduct'), 'warning');
+    if (!tempBundleItem.value.unitId) return addToast(t('products.selectUnitWarning'), 'warning');
   }
-  bundleForm.value.bundleItems.push({ ...tempBundleItem.value });
+  bundleForm.value.bundleItems.push({ ...tempBundleItem.value, quantity: rounded });
   tempBundleItem.value = { itemType: 'Product', productId: null, serviceId: null, unitId: null, quantity: 1 };
   tempBundleUnits.value = [];
 };
@@ -1634,8 +1767,8 @@ const deleteItem = async (item) => {
       endpoint = "services";
       id = item.ServiceId || item.serviceId || item.Id;
     } else if (currentTab.value === 'bundles') {
-      endpoint = "bundles";
-      id = item.BundleId || item.bundleId;
+      endpoint = isProductionBundle(item) ? "products" : "bundles";
+      id = item.ProductionProductId ?? item.productionProductId ?? item.BundleId ?? item.bundleId;
     }
 
     if (!id) {
@@ -1693,7 +1826,7 @@ const resetForms = () => {
   showSupplierResults.value = false;
   supplierHighlightedIndex.value = -1;
   serviceForm.value = { serviceId: 0, serviceName: '', price: 0, description: '' };
-  bundleForm.value = { bundleId: 0, bundleName: '', bundlePrice: 0, bundleItems: [] };
+  bundleForm.value = newBundleForm();
   tempBundleUnits.value = [];
   tempBundleItem.value = { itemType: 'Product', productId: null, serviceId: null, unitId: null, quantity: 1 };
 };

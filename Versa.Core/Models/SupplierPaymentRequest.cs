@@ -2,6 +2,7 @@
 {
     public class SupplierPaymentRequest
     {
+        public string? RequestId { get; set; }
         public int SupplierId { get; set; }
         public decimal Amount { get; set; }
         public string PaymentMethod { get; set; } = "Cash";

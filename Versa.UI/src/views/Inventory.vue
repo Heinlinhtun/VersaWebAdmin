@@ -94,23 +94,23 @@
                 </div>
                 <div class="text-[10px] font-normal text-gray-400 mt-1 flex flex-wrap items-center gap-2">
                   <span class="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded tracking-wide uppercase border border-blue-100 font-mono text-[9px]">{{ s.SKU || tx.noSku }}</span>
-                  <span class="bg-gray-100 px-1.5 py-0.5 rounded tracking-wide uppercase">{{ tx.minAlert }}: {{ s.AlertQuantity || 0 }}</span>
+                  <span class="bg-gray-100 px-1.5 py-0.5 rounded tracking-wide uppercase">{{ tx.minAlert }}: {{ formatStockQuantity(s.AlertQuantity ?? s.alertQuantity ?? 0) }}</span>
                 </div>
               </td>
               <td class="p-5 text-center">
                 <div :class="Number(s.BaseQuantity) <= Number(s.AlertQuantity) ? 'text-rose-600' : 'text-blue-600'"
                   class="text-lg font-normal tabular-nums tracking-tighter">
-                  {{ formatNumber(s.BaseQuantity) }}
+                  {{ formatStockQuantity(s.BaseQuantity ?? s.baseQuantity) }}
                 </div>
                 <div class="text-[9px] text-gray-400 font-normal uppercase tracking-widest mt-0.5">
                   {{ s.BaseUnitName || tx.pcs }}
                 </div>
               </td>
               <td class="p-5 text-center font-normal text-slate-700 tabular-nums text-sm">
-                {{ formatNumber(s.OwnedQuantity ?? s.ownedQuantity ?? 0) }}
+                {{ formatStockQuantity(s.OwnedQuantity ?? s.ownedQuantity ?? 0) }}
               </td>
               <td class="p-5 text-center font-normal text-indigo-600 tabular-nums text-sm">
-                {{ formatNumber(s.ConsignmentQuantity ?? s.consignmentQuantity ?? 0) }}
+                {{ formatStockQuantity(s.ConsignmentQuantity ?? s.consignmentQuantity ?? 0) }}
               </td>
               <td class="p-5 text-right font-normal text-slate-700 tabular-nums text-sm">{{ formatNumber(s.CostPrice) }}
               </td>
@@ -159,6 +159,9 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
+const formatStockQuantity = value => formatQuantity(value, { fixed: true });
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import api from '../services/api';
 import { useToast } from '../composables/useToast';
@@ -341,9 +344,9 @@ const handleExportCsv = () => {
   const rows = filteredStocks.value.map((s, index) => [
     index + 1,
     s.ProductName,
-    `${s.BaseQuantity} ${s.BaseUnitName || tx.value.pcs}`,
-    s.OwnedQuantity ?? s.ownedQuantity ?? 0,
-    s.ConsignmentQuantity ?? s.consignmentQuantity ?? 0,
+    `${formatStockQuantity(s.BaseQuantity ?? s.baseQuantity)} ${s.BaseUnitName || tx.value.pcs}`,
+    formatStockQuantity(s.OwnedQuantity ?? s.ownedQuantity ?? 0),
+    formatStockQuantity(s.ConsignmentQuantity ?? s.consignmentQuantity ?? 0),
     s.CostPrice,
     s.LastPurchasePrice,
     s.SalePrice,

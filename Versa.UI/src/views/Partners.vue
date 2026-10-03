@@ -112,6 +112,10 @@
                                     {{ (item.CurrentBalance || item.currentBalance || 0).toLocaleString() }} <small
                                         class="text-[10px] font-normal opacity-60">KS</small>
                                 </span>
+                                <div v-if="openingRemainingOf(item) > 0"
+                                    class="text-[10px] text-slate-400 mt-0.5">
+                                    {{ t('customers.openingRemaining') }}: {{ openingRemainingOf(item).toLocaleString() }}
+                                </div>
                             </td>
                             <td class="p-5 text-right px-8">
                                 <div class="flex justify-end gap-2">
@@ -214,6 +218,30 @@
                             <textarea v-model="cust.form.Address" rows="3"
                                 :placeholder="t('customers.placeholderAddress')"
                                 class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm transition-all resize-none"></textarea>
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{
+                                t('customers.labelOpeningBalance') }} (Ks)</label>
+                            <input v-model.number="cust.form.OpeningBalance" type="number"
+                                :min="cust.form.OpeningBalancePaid || 0"
+                                :placeholder="t('customers.placeholderOpeningBalance')"
+                                class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-rose-500/20 font-normal text-sm text-rose-600 transition-all tabular-nums">
+                            <p class="text-[10px] text-slate-400 ml-1">
+                                {{ t('customers.openingBalanceHint') }}
+                            </p>
+                            <p v-if="cust.form.CustomerId && Number(cust.form.OpeningBalancePaid) > 0"
+                                class="text-[10px] text-amber-600 ml-1">
+                                {{ t('customers.openingBalancePaidHint') }}: {{
+                                    Number(cust.form.OpeningBalancePaid).toLocaleString() }} Ks
+                            </p>
+                        </div>
+                        <div v-if="cust.form.CustomerId && openingBalanceChanged" class="space-y-1.5">
+                            <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{
+                                t('customers.openingBalanceAdjustmentReason') }}</label>
+                            <textarea v-model.trim="cust.form.OpeningBalanceAdjustmentReason" rows="2"
+                                :placeholder="t('customers.openingBalanceAdjustmentReasonPlaceholder')"
+                                class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-500/20 font-normal text-sm transition-all resize-none"></textarea>
+                            <p class="text-[10px] text-amber-600 ml-1">{{ t('customers.openingBalanceAdjustmentReasonHint') }}</p>
                         </div>
                         <button @click="cust.save()"
                             class="w-full bg-blue-600 text-white py-4 rounded-lg font-normal text-xs shadow-lg shadow-blue-100 hover:bg-blue-700 transition active:scale-95 mt-4 uppercase tracking-widest">{{
@@ -470,6 +498,20 @@
                             <p class="font-normal text-slate-800">{{ cust.selectedCustomer?.Address || cust.selectedCustomer?.address || '-' }}</p>
                         </div>
                         <div class="bg-blue-50/50 p-5 rounded-2xl space-y-3 border border-blue-100">
+                            <template v-if="numberOf(cust.selectedCustomer, 'OpeningBalance') > 0">
+                                <div class="flex justify-between items-center text-xs">
+                                    <span class="text-[10px] font-normal uppercase text-slate-500">{{ t('customers.labelOpeningBalance') }}:</span>
+                                    <span class="tabular-nums text-slate-700">
+                                        {{ openingRemainingOf(cust.selectedCustomer).toLocaleString() }}
+                                        <span class="text-slate-400">/ {{ numberOf(cust.selectedCustomer, 'OpeningBalance').toLocaleString() }}</span> Ks
+                                    </span>
+                                </div>
+                                <div class="flex justify-between items-center text-xs">
+                                    <span class="text-[10px] font-normal uppercase text-slate-500">{{ t('customers.salesCredit') }}:</span>
+                                    <span class="tabular-nums text-slate-700">{{ numberOf(cust.selectedCustomer, 'SalesBalance').toLocaleString() }} Ks</span>
+                                </div>
+                                <div class="border-t border-blue-100"></div>
+                            </template>
                             <div class="flex justify-between items-center">
                                 <span class="text-[10px] font-normal uppercase text-slate-500">{{ t('customers.tableDebt') }}:</span>
                                 <span :class="(cust.selectedCustomer?.CurrentBalance || cust.selectedCustomer?.currentBalance) > 0 ? 'text-rose-600' : 'text-emerald-600'" class="text-2xl font-normal tabular-nums">
@@ -669,7 +711,7 @@
             </div>
 
             <SupplierPaymentHistoryModal v-if="supplierHistoryTarget" :supplier="supplierHistoryTarget"
-                @close="supplierHistoryTarget = null" />
+                @close="supplierHistoryTarget = null" @changed="fetchSuppliers" />
 
             <!-- Supplier Modal -->
             <div v-if="supp.showModal"
@@ -761,7 +803,7 @@
                                 <option value="Bank Transfer">Direct Bank Transfer</option>
                             </select>
                         </div>
-                        <button @click="supp.submitPayment()"
+                        <button @click="supp.submitPayment()" :disabled="supp.isPaying" :aria-busy="supp.isPaying"
                             class="w-full bg-blue-600 text-white py-4 rounded-xl font-normal uppercase text-xs tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-700 transition active:scale-95 mt-4">{{
                                 t('suppliers.paymentTitle') }}</button>
                     </div>
@@ -1088,6 +1130,7 @@
 import { ref, computed, onMounted, watch, reactive } from 'vue';
 import api from '../services/api';
 import SupplierPaymentHistoryModal from '../components/SupplierPaymentHistoryModal.vue';
+import { pendingSupplierPayment, submitSupplierPayment } from '../services/supplierPayments';
 import { useToast } from '../composables/useToast';
 import { useCsvExport } from '../composables/useCsvExport';
 import { useI18n } from '../composables/useI18n';
@@ -1178,9 +1221,19 @@ const getSaleNo = (item) => {
 };
 
 // ── CUSTOMERS ──────────────────────────────────────────
+// Reads a numeric field from API rows that may be PascalCase or camelCase.
+const numberOf = (item, key) => {
+    if (!item) return 0;
+    const camel = key.charAt(0).toLowerCase() + key.slice(1);
+    const value = Number(item[key] ?? item[camel] ?? 0);
+    return Number.isFinite(value) ? value : 0;
+};
+// Previous Credit (before the system) still unpaid.
+const openingRemainingOf = item => Math.max(0, numberOf(item, 'OpeningBalance') - numberOf(item, 'OpeningBalancePaid'));
+
 const cust = reactive({
     list: [], showModal: false, showDetailModal: false, showPaymentModal: false, showOrdersModal: false, searchQuery: '', currentPage: 1, pageSize: 10,
-    form: { CustomerId: null, Name: '', Phone: '', Address: '' },
+    form: { CustomerId: null, Name: '', Phone: '', Address: '', OpeningBalance: 0, OriginalOpeningBalance: 0, OpeningBalancePaid: 0, OpeningBalanceAdjustmentReason: '' },
     selectedCustomer: null,
     ordersCustomer: null,
     orders: [],
@@ -1275,8 +1328,8 @@ const cust = reactive({
                 tab: 'sale',
                 search: String(saleId),
                 detailSaleId: String(saleId)
-            }
-        });
+    }
+});
     },
     async submitOrderPayment() {
         const saleId = cust.selectedOrder?.SaleId || cust.selectedOrder?.saleId;
@@ -1293,19 +1346,30 @@ const cust = reactive({
         }
     },
     openModal(item = null) {
-        if (item) { cust.form = { CustomerId: item.CustomerId || item.customerId, Name: item.Name || item.name, Phone: item.Phone || item.phone, Address: item.Address || item.address }; }
-        else { cust.form = { CustomerId: null, Name: '', Phone: '', Address: '' }; }
+        if (item) {
+            cust.form = {
+                CustomerId: item.CustomerId || item.customerId, Name: item.Name || item.name, Phone: item.Phone || item.phone, Address: item.Address || item.address,
+                OpeningBalance: numberOf(item, 'OpeningBalance'), OriginalOpeningBalance: numberOf(item, 'OpeningBalance'), OpeningBalancePaid: numberOf(item, 'OpeningBalancePaid'), OpeningBalanceAdjustmentReason: '',
+            };
+        }
+        else { cust.form = { CustomerId: null, Name: '', Phone: '', Address: '', OpeningBalance: 0, OriginalOpeningBalance: 0, OpeningBalancePaid: 0, OpeningBalanceAdjustmentReason: '' }; }
         cust.showModal = true;
     },
     async save() {
         if (!cust.form.Name) return addToast(t('customers.identityRequired'), 'warning');
+        const opening = cust.form.OpeningBalance === '' || cust.form.OpeningBalance == null ? 0 : Number(cust.form.OpeningBalance);
+        if (!Number.isFinite(opening) || opening < 0) return addToast(t('customers.openingBalanceInvalid'), 'warning');
+        if (opening < Number(cust.form.OpeningBalancePaid || 0)) return addToast(t('customers.openingBalanceBelowPaid'), 'warning');
+        if (cust.form.CustomerId && openingBalanceChanged.value && !cust.form.OpeningBalanceAdjustmentReason?.trim()) return addToast(t('customers.openingBalanceAdjustmentReasonRequired'), 'warning');
+        const { OpeningBalancePaid, OriginalOpeningBalance, ...rest } = cust.form;
+        const payload = { ...rest, OpeningBalance: opening };
         try {
-            if (cust.form.CustomerId) await api.put(`/customers/${cust.form.CustomerId}`, cust.form);
-            else await api.post('/customers', cust.form);
+            if (payload.CustomerId) await api.put(`/customers/${payload.CustomerId}`, payload);
+            else await api.post('/customers', payload);
             cust.showModal = false;
             addToast(t('customers.toastSuccess'), 'success');
             await fetchCustomers();
-        } catch { addToast(t('customers.toastError'), 'error'); }
+        } catch (err) { addToast(err?.response?.data?.message || err?.response?.data?.Message || t('customers.toastError'), 'error'); }
     },
     async deleteItem(id) {
         if (!confirm(t('customers.deleteConfirm'))) return;
@@ -1330,10 +1394,12 @@ const cust = reactive({
         catch (err) { addToast(err.response?.data?.Message || err.response?.data?.message || t('customers.errorOccurred'), 'error'); }
     },
 });
+const openingBalanceChanged = computed(() => Number(cust.form.OpeningBalance || 0) !== Number(cust.form.OriginalOpeningBalance || 0));
 watch(() => cust.searchQuery, () => { cust.currentPage = 1; });
 
 // ── SUPPLIERS ──────────────────────────────────────────
 const supp = reactive({
+    isPaying: false,
     list: [], showModal: false, showDetailModal: false, showPaymentModal: false, isEdit: false, searchQuery: '', currentPage: 1, pageSize: 10,
     form: { SupplierId: 0, SupplierName: '', ContactPerson: '', Phone: '', Address: '' },
     selectedSupplier: null,
@@ -1369,20 +1435,28 @@ const supp = reactive({
     openPayment(supplier) {
         supp.selectedSupplier = supplier;
         supp.paymentForm = { SupplierId: supplier.SupplierId || supplier.supplierId, Amount: supplier.CurrentDebt || supplier.currentDebt || 0, PaymentMethod: 'Cash', ReferenceNo: '', Note: '', PaymentDate: new Date().toISOString().split('T')[0] };
-        supp.showPaymentModal = true;
+        try {
+            const pending = pendingSupplierPayment(supp.paymentForm.SupplierId);
+            if (pending) {
+                supp.paymentForm = pending;
+                addToast('Retry the unresolved payment with its original details. No second payment will be recorded.', 'warning');
+            }
+            supp.showPaymentModal = true;
+        } catch (err) { addToast(err.message, 'error'); }
     },
     async submitPayment() {
+        if (supp.isPaying) return;
         if (supp.paymentForm.Amount <= 0) return addToast(t('suppliers.invalidAmount'), 'warning');
+        supp.isPaying = true;
         try {
-            const supplierId = supp.paymentForm.SupplierId;
-            await api.post('/suppliers/pay-debt', supp.paymentForm);
-            await fetchSuppliers();
-            const refreshed = supp.list.find(s => (s.SupplierId || s.supplierId) === supplierId);
-            if (refreshed) supp.selectedSupplier = refreshed;
-            addToast(t('suppliers.toastSuccess'), 'success');
+            const result = await submitSupplierPayment(api, supp.paymentForm);
             supp.showPaymentModal = false;
+            const reversed = result.data?.reversalPaymentId ?? result.data?.ReversalPaymentId;
+            addToast(reversed ? 'This payment was already reversed. No new payment was recorded.' : t('suppliers.toastSuccess'), reversed ? 'warning' : 'success');
+            await fetchSuppliers();
         }
-        catch (err) { addToast(err.response?.data?.message || t('suppliers.toastError'), 'error'); }
+        catch (err) { addToast(err.response?.data?.message || err.message || t('suppliers.toastError'), 'error'); }
+        finally { supp.isPaying = false; }
     },
 });
 watch(() => supp.searchQuery, () => { supp.currentPage = 1; });

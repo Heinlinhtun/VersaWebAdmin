@@ -56,7 +56,7 @@
       </div>
       <div class="bg-white border border-slate-200 rounded-xl p-5">
         <p class="text-[10px] uppercase tracking-widest text-slate-400">{{ tx.unsettledQty }}</p>
-        <p class="text-2xl font-normal text-indigo-600 tabular-nums">{{ formatNumber(summary.unsettledQty) }}</p>
+        <p class="text-2xl font-normal text-indigo-600 tabular-nums">{{ formatQuantity(summary.unsettledQty) }}</p>
       </div>
       <div class="bg-white border border-slate-200 rounded-xl p-5">
         <p class="text-[10px] uppercase tracking-widest text-slate-400">{{ tx.payoutDue }}</p>
@@ -87,11 +87,11 @@
               <div class="text-[10px] text-slate-400 uppercase">{{ item.Sku || item.sku || tx.noSku }}</div>
             </td>
             <td class="p-4 text-slate-600">{{ item.SupplierName || item.supplierName }}</td>
-            <td class="p-4 text-center tabular-nums">{{ formatNumber(item.Quantity || item.quantity) }}</td>
-            <td class="p-4 text-center text-blue-600 tabular-nums">{{ formatNumber(item.AvailableQuantity || item.availableQuantity) }}</td>
-            <td class="p-4 text-center text-emerald-600 tabular-nums">{{ formatNumber(item.SoldQuantity || item.soldQuantity) }}</td>
-            <td class="p-4 text-center text-slate-500 tabular-nums">{{ formatNumber(item.ReturnedQuantity || item.returnedQuantity) }}</td>
-            <td class="p-4 text-center text-indigo-600 tabular-nums">{{ formatNumber(item.UnsettledQuantity || item.unsettledQuantity) }}</td>
+            <td class="p-4 text-center tabular-nums">{{ formatQuantity(item.Quantity || item.quantity) }}</td>
+            <td class="p-4 text-center text-blue-600 tabular-nums">{{ formatQuantity(item.AvailableQuantity || item.availableQuantity) }}</td>
+            <td class="p-4 text-center text-emerald-600 tabular-nums">{{ formatQuantity(item.SoldQuantity || item.soldQuantity) }}</td>
+            <td class="p-4 text-center text-slate-500 tabular-nums">{{ formatQuantity(item.ReturnedQuantity || item.returnedQuantity) }}</td>
+            <td class="p-4 text-center text-indigo-600 tabular-nums">{{ formatQuantity(item.UnsettledQuantity || item.unsettledQuantity) }}</td>
             <td class="p-4 text-right tabular-nums">{{ formatNumber(item.UnitPrice || item.unitPrice) }}</td>
             <td class="p-4 text-right text-rose-600 tabular-nums">{{ formatNumber(item.UnsettledAmount || item.unsettledAmount) }}</td>
             <td class="p-4 text-center">
@@ -136,12 +136,12 @@
           <div>
             <p class="text-sm font-normal text-slate-800">{{ returnItem?.ProductName || returnItem?.productName }}</p>
             <p class="text-[10px] uppercase tracking-widest text-slate-400">
-              {{ tx.available }}: {{ formatNumber(returnAvailableQty) }}
+              {{ tx.available }}: {{ formatQuantity(returnAvailableQty) }}
             </p>
           </div>
           <div class="space-y-1.5">
             <label class="text-[10px] uppercase tracking-widest text-slate-400">{{ tx.returnQty }}</label>
-            <input v-model.number="returnForm.quantity" type="number" min="0" :max="returnAvailableQty"
+            <input v-quantity v-model.number="returnForm.quantity" type="number" min="0" :max="returnAvailableQty"
               class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-rose-500/20 text-sm" />
           </div>
           <div class="space-y-1.5">
@@ -166,6 +166,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import api from '../services/api';
 import { useToast } from '../composables/useToast';

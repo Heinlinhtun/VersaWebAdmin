@@ -10,6 +10,7 @@ namespace Versa.Core.Models
         public string Title { get; set; }
         public string Category { get; set; }
         public decimal Amount { get; set; }
+        public bool IsPaid { get; set; } = true;
         public string PaymentMethod { get; set; }
         public DateTime? ExpenseDate { get; set; }
     }

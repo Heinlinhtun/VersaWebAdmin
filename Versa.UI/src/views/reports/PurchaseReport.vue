@@ -124,9 +124,9 @@
                 <div class="text-[9px] text-slate-400 uppercase tracking-wider">{{ item.Sku || item.sku || '-' }}</div>
               </td>
               <td class="p-4 text-slate-700 italic">{{ item.SupplierName || item.supplierName || tx.generalVendor }}</td>
-              <td class="p-4 text-center tabular-nums">{{ formatNumber(item.Quantity ?? item.quantity) }}</td>
-              <td class="p-4 text-center tabular-nums text-emerald-600">{{ formatNumber(item.FOCQuantity ?? item.focQuantity) }}</td>
-              <td class="p-4 text-center tabular-nums text-rose-600">{{ formatNumber(item.ReturnedQuantity ?? item.returnedQuantity) }}</td>
+              <td class="p-4 text-center tabular-nums">{{ formatQuantity(item.Quantity ?? item.quantity) }}</td>
+              <td class="p-4 text-center tabular-nums text-emerald-600">{{ formatQuantity(item.FOCQuantity ?? item.focQuantity) }}</td>
+              <td class="p-4 text-center tabular-nums text-rose-600">{{ formatQuantity(item.ReturnedQuantity ?? item.returnedQuantity) }}</td>
               <td class="p-4 text-slate-500">{{ item.UnitName || item.unitName || '-' }}</td>
               <td class="p-4 text-right tabular-nums">{{ formatNumber(item.CostPrice ?? item.costPrice) }}</td>
               <td class="p-4 text-right font-normal text-slate-900 tabular-nums">
@@ -167,6 +167,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../services/api';
 import { useI18n } from '../../composables/useI18n';

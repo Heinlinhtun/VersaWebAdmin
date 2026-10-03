@@ -7,6 +7,7 @@ using Versa.Core.Services;
 using System.IO;
 using System.Linq;
 using System.Security.Claims;
+using System.Security.Cryptography;
 
 namespace Versa.POS.Controllers
 {
@@ -67,9 +68,9 @@ CREATE TABLE IF NOT EXISTS ExcelImportBatchStocks (
     BranchId INT NOT NULL,
     ProductId INT NOT NULL,
     HadStockRow TINYINT(1) NOT NULL,
-    PreviousQuantity DECIMAL(18,4) NOT NULL,
-    ImportedQuantity DECIMAL(18,4) NOT NULL,
-    PostImportQuantity DECIMAL(18,4) NULL,
+    PreviousQuantity DECIMAL(18,5) NOT NULL,
+    ImportedQuantity DECIMAL(18,5) NOT NULL,
+    PostImportQuantity DECIMAL(18,5) NULL,
     PRIMARY KEY (BatchId, BranchId, ProductId)
 );
 CREATE TABLE IF NOT EXISTS ExcelImportBatchEntities (
@@ -93,7 +94,7 @@ WHERE TABLE_SCHEMA = DATABASE()
             if (hasColumn == 0)
             {
                 await conn.ExecuteAsync(
-                    "ALTER TABLE PurchaseOrderItems ADD COLUMN RemainingQuantity DECIMAL(18,4) NULL",
+                    "ALTER TABLE PurchaseOrderItems ADD COLUMN RemainingQuantity DECIMAL(18,5) NULL",
                     transaction: transaction);
             }
 
@@ -215,12 +216,6 @@ SELECT LAST_INSERT_ID();",
                             DateTime? expiryDate = ParseDate(GetRawValue(dRow, "Expiry Date"));
                             int warningDays = (int)ParseDecimal(GetRawValue(dRow, "Warning Day count"));
 
-                            // Auto-generate SKU if not provided (same algorithm as ProductsController.Create)
-                            if (string.IsNullOrWhiteSpace(sku))
-                            {
-                                sku = "SKU" + DateTime.Now.ToString("yyyyMMdd") + (DateTime.Now.Ticks % 1000000).ToString("D6");
-                            }
-
                             int? catId = await GetOrCreateId(conn, "Categories", "CategoryName", "CategoryId", categoryName, transaction, batchId, "Category");
                             int? unitId = await GetOrCreateId(conn, "Units", "ShortName", "UnitId", unitName, transaction, batchId, "Unit");
 
@@ -265,10 +260,10 @@ WHERE ProductId = @productId",
                                 }
 
                                 string updateSql = @"UPDATE Products SET 
-                                    Name=@itemName, Sku=@sku, CategoryId=@catId, UnitId=@unitId, 
+                                    Name=@itemName, Sku=CASE WHEN @hasProvidedSku THEN @sku ELSE Sku END, CategoryId=@catId, UnitId=@unitId,
                                     CostPrice=@calculatedNewCost, SalePrice=@sellingPrice, IsActive=1
                                     WHERE ProductId=@productId";
-                                await conn.ExecuteAsync(updateSql, new { itemName, sku, catId, unitId, calculatedNewCost, sellingPrice, productId }, transaction);
+                                await conn.ExecuteAsync(updateSql, new { itemName, sku, hasProvidedSku, catId, unitId, calculatedNewCost, sellingPrice, productId }, transaction);
                                 updatedProductCount++;
                             }
                             else
@@ -277,7 +272,25 @@ WHERE ProductId = @productId",
                                 string insertSql = @"INSERT INTO Products (Name, Sku, CategoryId, UnitId, CostPrice, SalePrice, IsActive) 
                                     VALUES (@itemName, @sku, @catId, @unitId, @purchasePrice, @sellingPrice, 1);
                                     SELECT LAST_INSERT_ID();";
-                                productId = await conn.ExecuteScalarAsync<int>(insertSql, new { itemName, sku, catId, unitId, purchasePrice, sellingPrice }, transaction);
+                                // The unique index is authoritative, including concurrent imports.
+                                // Retry only generated SKUs; never alter a supplied barcode.
+                                for (int attempt = 0; ; attempt++)
+                                {
+                                    if (!hasProvidedSku)
+                                        sku = "SKU" + DateTime.Now.ToString("yyyyMMdd")
+                                            + RandomNumberGenerator.GetInt32(1000000).ToString("D6");
+                                    try
+                                    {
+                                        productId = await conn.ExecuteScalarAsync<int>(insertSql, new { itemName, sku, catId, unitId, purchasePrice, sellingPrice }, transaction);
+                                        break;
+                                    }
+                                    catch (MySqlException ex) when (!hasProvidedSku && attempt < 19
+                                        && ex.Number == 1062 && ex.Message.Contains("Sku", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        // A failed duplicate-key INSERT has not created a product.
+                                        // Retry here before writing any stock or purchase lines.
+                                    }
+                                }
                                 await conn.ExecuteAsync(@"
 INSERT INTO ExcelImportBatchProducts (BatchId, ProductId, WasCreated)
 VALUES (@batchId, @productId, 1)", new { batchId, productId }, transaction);

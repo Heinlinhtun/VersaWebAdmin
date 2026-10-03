@@ -82,7 +82,7 @@
                       <div v-for="item in d.DiscountedItems" :key="item.Id"
                         class="flex justify-between items-center text-[10px] py-1 border-b border-slate-50 last:border-0">
                         <span class="text-slate-700 font-normal truncate pr-2">{{ item.ProductName }} <small
-                            class="text-slate-400">(x{{ item.Quantity }})</small></span>
+                            class="text-slate-400">(x{{ formatQuantity(item.Quantity) }})</small></span>
                         <span class="text-orange-600 font-normal tabular-nums">
                           -{{ formatNumber(item.DiscountAmount) }}
                           <span v-if="item.IsFOC"
@@ -121,6 +121,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../services/api';
 import { useI18n } from '../../composables/useI18n';

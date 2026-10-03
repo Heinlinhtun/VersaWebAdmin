@@ -166,7 +166,7 @@
             <tbody>
               <tr v-for="(item, i) in activeDetailList" :key="i" class="border-b border-slate-50 hover:bg-slate-50/50">
                 <td class="px-3 sm:px-4 py-2 sm:py-3 font-normal text-slate-800">{{ item.name }}</td>
-                <td class="px-3 sm:px-4 py-2 sm:py-3">{{ item.totalQuantity }}</td>
+                <td class="px-3 sm:px-4 py-2 sm:py-3">{{ formatQuantity(item.totalQuantity) }}</td>
                 <td class="px-3 sm:px-4 py-2 sm:py-3 text-right font-normal text-blue-600">{{
                   item.totalAmount?.toLocaleString()
                   }} MMK</td>
@@ -229,8 +229,7 @@
                 <td class="px-3 sm:px-4 py-2 sm:py-3 font-normal text-slate-800">{{ item.name }}</td>
                 <td class="px-3 sm:px-4 py-2 sm:py-3 text-center text-slate-500">{{ item.UnitName || item.unitName || item.unit || '-' }}</td>
                 <td class="px-3 sm:px-4 py-2 sm:py-3"><span
-                    class="px-1.5 py-0.5 sm:px-2 sm:py-1 bg-emerald-100 text-emerald-700 rounded-md text-[10px] sm:text-xs font-normal">{{
-                      item.totalQuantity }}</span></td>
+                    class="px-1.5 py-0.5 sm:px-2 sm:py-1 bg-emerald-100 text-emerald-700 rounded-md text-[10px] sm:text-xs font-normal">{{ formatQuantity(item.totalQuantity) }}</span></td>
                 <td class="px-3 sm:px-4 py-2 sm:py-3 text-right font-normal text-emerald-600">{{
                   item.totalAmount?.toLocaleString() }} MMK</td>
               </tr>
@@ -289,8 +288,7 @@
                   Date(item.expiryDate).toLocaleDateString()
                   }}</td>
                 <td class="px-3 sm:px-4 py-3 text-center"><span
-                    class="px-2 py-1 bg-rose-50 text-rose-600 rounded-md text-[10px] font-normal">{{ item.batchQuantity
-                    }}</span></td>
+                    class="px-2 py-1 bg-rose-50 text-rose-600 rounded-md text-[10px] font-normal">{{ formatQuantity(item.batchQuantity) }}</span></td>
                 <td class="px-3 sm:px-4 py-3 text-center"><span
                     class="px-2 py-1 bg-slate-100 text-slate-600 rounded-md text-[10px] font-normal">{{ item.totalStock
                     }}</span></td>
@@ -349,6 +347,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from '../composables/useI18n';

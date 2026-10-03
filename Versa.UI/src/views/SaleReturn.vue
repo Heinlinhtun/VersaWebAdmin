@@ -34,9 +34,9 @@
                 <span class="text-[10px] text-slate-400 ml-1">({{ item.ItemType }})</span>
                 <span v-if="isFocItem(item)" class="ml-2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded uppercase">FOC</span>
               </td>
-              <td class="p-5 text-center font-normal text-blue-600">{{ item.Quantity }} {{ item.UnitName || '-' }}</td>
+              <td class="p-5 text-center font-normal text-blue-600">{{ formatQuantity(item.Quantity) }} {{ item.UnitName || '-' }}</td>
               <td class="p-5 text-center">
-                <input v-model.number="item.returnQty" type="number"
+                <input v-quantity v-model.number="item.returnQty" type="number"
                   class="w-20 p-2 border rounded-lg text-center font-normal" :max="item.Quantity">
               </td>
               <td class="p-5 text-right font-normal">{{ Number(isFocItem(item) ? 0 : item.UnitPrice || 0).toLocaleString() }}</td>
@@ -76,6 +76,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, computed } from 'vue';
 import api from '../services/api';
 import { useToast } from '../composables/useToast';

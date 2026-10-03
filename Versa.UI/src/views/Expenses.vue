@@ -22,7 +22,7 @@
       </div>
     </div>
 
-    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row md:items-center gap-4">
+    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row md:items-center flex-wrap gap-4">
       <div class="relative flex-1 max-w-md ml-1">
         <input v-model="searchQuery" type="text" @input="currentPage = 1"
           class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-xs transition-all"
@@ -42,6 +42,12 @@
           </option>
         </select>
       </div>
+      <select v-model="paymentStatus" @change="currentPage = 1" :aria-label="t('expenses.paymentStatus')"
+        class="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-lg text-xs">
+        <option value="">{{ t('expenses.allPaymentStatuses') }}</option>
+        <option value="paid">{{ t('expenses.paid') }}</option>
+        <option value="pending">{{ t('expenses.pending') }}</option>
+      </select>
       <div class="grid w-full md:w-auto grid-cols-1 sm:grid-cols-2 gap-3">
         <input v-model="fromDate" type="date" @change="currentPage = 1"
           class="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-xs transition-all text-slate-700"
@@ -74,7 +80,8 @@
             <th class="p-5">{{ t('expenses.tableCategory') }}</th>
             <th class="p-5 text-center">{{ t('expenses.tableDate') }}</th>
             <th class="p-5 text-right">{{ t('expenses.tableAmount') }}</th>
-            <th class="p-5 text-center">Payment</th>
+            <th class="p-5 text-center">{{ t('expenses.paymentStatus') }}</th>
+            <th class="p-5 text-center">{{ t('expenses.paymentMethod') }}</th>
             <th class="p-5 text-right px-8">{{ t('expenses.tableActions') }}</th>
           </tr>
         </thead>
@@ -109,6 +116,9 @@
             </td>
             <td class="p-5 text-right font-normal text-slate-900 tabular-nums">
               {{ formatNumber(valueOf(e, 'Amount', 'amount', 0)) }}
+            </td>
+            <td class="p-5 text-center">
+              <span class="text-xs rounded px-2 py-1" :class="isPaid(e) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ t(isPaid(e) ? 'expenses.paid' : 'expenses.pending') }}</span>
             </td>
             <td class="p-5 text-center">
               <span class="text-[10px] text-slate-500 font-normal uppercase tracking-wide border px-2 py-1 bg-slate-50 rounded">{{ valueOf(e, 'PaymentMethod', 'paymentMethod', 'Cash') }}</span>
@@ -167,7 +177,7 @@
 
     <div v-if="showModal"
       class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div class="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden border border-slate-200">
+      <div class="bg-white w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-xl shadow-2xl border border-slate-200">
         <div class="bg-[#3f3f46] p-6 text-white flex justify-between items-center">
           <h3 class="text-lg font-normal uppercase tracking-tight">{{ editMode ? t('expenses.modalTitleEdit') :
             t('expenses.modalTitleAdd') }}
@@ -206,8 +216,13 @@
             <input v-model="form.ExpenseDate" type="date"
               class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm">
           </div>
+          <label class="flex items-center gap-3 text-sm text-slate-700">
+            <input v-model="form.IsPaid" type="checkbox" class="w-5 h-5 rounded">
+            {{ t('expenses.paid') }}
+            <span v-if="!form.IsPaid" class="text-amber-700">({{ t('expenses.pending') }})</span>
+          </label>
           <div class="space-y-1.5">
-            <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">Payment Method</label>
+            <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('expenses.paymentMethod') }}</label>
             <select v-model="form.PaymentMethod"
               class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm">
               <option value="Cash">Cash</option>
@@ -223,7 +238,7 @@
               <option v-for="b in branches" :key="branchIdOf(b)" :value="branchIdOf(b)">{{ branchNameOf(b) }}</option>
             </select>
           </div>
-          <button @click="saveExpense"
+          <button @click="saveExpense" :disabled="saving"
             class="w-full bg-blue-600 text-white py-4 rounded-lg font-normal text-xs shadow-lg shadow-blue-100 hover:bg-blue-700 transition active:scale-95 mt-4 uppercase tracking-widest">
             {{ t('expenses.btnSave') }}
           </button>
@@ -248,8 +263,11 @@ const expenses = ref([]);
 const branches = ref([]);
 const showModal = ref(false);
 const editMode = ref(false);
+const saving = ref(false);
 const searchQuery = ref('');
 const selectedCategory = ref('');
+const paymentStatus = ref('');
+const isPaid = expense => ![false, 0, '0', 'false', 'False'].includes(expense.IsPaid ?? expense.isPaid ?? true);
 const fromDate = ref('');
 const toDate = ref('');
 
@@ -277,7 +295,7 @@ const toDateInput = (value = new Date()) => {
   return offsetDate.toISOString().slice(0, 10);
 };
 const todayInput = () => toDateInput();
-const form = ref({ ExpenseId: 0, BranchId: currentUser.value.branchId || 1, Title: '', Category: '', Amount: 0, PaymentMethod: 'Cash', ExpenseDate: todayInput() });
+const form = ref({ ExpenseId: 0, BranchId: currentUser.value.branchId || 1, Title: '', Category: '', Amount: 0, IsPaid: true, PaymentMethod: 'Cash', ExpenseDate: todayInput() });
 const defaultExpenseCategories = ['General', 'Electricity', 'Salary', 'Rent', 'Supplies'];
 
 const expenseCategoryOptions = computed(() => {
@@ -312,7 +330,8 @@ const handleExportCsv = () => {
     t('expenses.tableCategory'),
     t('expenses.tableDate'),
     t('expenses.tableAmount'),
-    'Payment',
+    t('expenses.paymentStatus'),
+    t('expenses.paymentMethod'),
     t('expenses.tableBranch')
   ];
 
@@ -322,6 +341,7 @@ const handleExportCsv = () => {
     valueOf(e, 'Category', 'category'),
     valueOf(e, 'ExpenseDate', 'expenseDate') ? new Date(valueOf(e, 'ExpenseDate', 'expenseDate')).toLocaleDateString('en-GB') : '-',
     valueOf(e, 'Amount', 'amount', 0),
+    t(isPaid(e) ? 'expenses.paid' : 'expenses.pending'),
     valueOf(e, 'PaymentMethod', 'paymentMethod', 'Cash'),
     branchNameFor(valueOf(e, 'BranchId', 'branchId'))
   ]);
@@ -344,7 +364,8 @@ const filteredExpenses = computed(() => {
     const matchesFromDate = !fromDate.value || (expenseDate && expenseDate >= fromDate.value);
     const matchesToDate = !toDate.value || (expenseDate && expenseDate <= toDate.value);
 
-    return matchesQuery && matchesCategory && matchesFromDate && matchesToDate;
+    const matchesPayment = !paymentStatus.value || isPaid(e) === (paymentStatus.value === 'paid');
+    return matchesQuery && matchesCategory && matchesFromDate && matchesToDate && matchesPayment;
   });
 });
 
@@ -364,7 +385,7 @@ const totalExpenseAmount = computed(() => {
 
 const openCreateModal = () => {
   editMode.value = false;
-  form.value = { ExpenseId: 0, BranchId: currentUser.value.branchId || 1, Title: '', Category: '', Amount: 0, PaymentMethod: 'Cash', ExpenseDate: todayInput() };
+  form.value = { ExpenseId: 0, BranchId: currentUser.value.branchId || 1, Title: '', Category: '', Amount: 0, IsPaid: true, PaymentMethod: 'Cash', ExpenseDate: todayInput() };
   showModal.value = true;
 };
 
@@ -377,6 +398,7 @@ const openEditModal = (expense) => {
     Title: valueOf(expense, 'Title', 'title'),
     Category: valueOf(expense, 'Category', 'category'),
     Amount: valueOf(expense, 'Amount', 'amount', 0),
+    IsPaid: isPaid(expense),
     PaymentMethod: valueOf(expense, 'PaymentMethod', 'paymentMethod', 'Cash'),
     ExpenseDate: normalizeDate(valueOf(expense, 'ExpenseDate', 'expenseDate')) || todayInput()
   };
@@ -384,26 +406,30 @@ const openEditModal = (expense) => {
 };
 
 const saveExpense = async () => {
+  if (saving.value) return;
+  saving.value = true;
   try {
     form.value.Category = (form.value.Category || '').trim() || 'General';
     if (!isAdmin.value) {
       form.value.BranchId = currentUser.value.branchId || 1;
     }
+    const payload = { ...form.value };
     if (!editMode.value) {
       // For new expenses, include current time in the date
       const datePart = form.value.ExpenseDate || todayInput();
-      form.value.ExpenseDate = datePart
+      payload.ExpenseDate = datePart
         ? new Date(datePart + 'T' + new Date().toTimeString().split(' ')[0]).toISOString()
         : new Date().toISOString();
     } else {
       form.value.ExpenseDate = form.value.ExpenseDate || todayInput();
     }
-    if (editMode.value) await api.put(`/Expenses/${form.value.ExpenseId}`, form.value);
-    else await api.post('/Expenses', form.value);
+    if (editMode.value) await api.put(`/Expenses/${form.value.ExpenseId}`, payload);
+    else await api.post('/Expenses', payload);
     showModal.value = false;
     fetchExpenses();
     addToast(t('expenses.toastSuccess'), "success");
   } catch (err) { addToast(t('expenses.toastError'), "error"); }
+  finally { saving.value = false; }
 };
 
 const confirmDelete = async (id) => {

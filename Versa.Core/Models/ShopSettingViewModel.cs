@@ -15,5 +15,6 @@ namespace Versa.Core.Models
         public decimal TaxRate { get; set; }
         public string ReceiptFooter { get; set; }
         public bool UseDecimalQuantity { get; set; }
+        public int QuantityDecimalPlaces { get; set; } = 2;
     }
 }

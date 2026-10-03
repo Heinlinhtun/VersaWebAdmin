@@ -48,7 +48,7 @@
               </td>
               <td class="p-4 text-center">
                 <span class="px-3 py-1 rounded-lg bg-rose-50 text-rose-600 border border-rose-100 font-normal tabular-nums">
-                  {{ formatNumber(valueOf(i, 'Quantity', 'quantity', 0)) }} {{ valueOf(i, 'UnitName', 'unitName') }}
+                  {{ formatQuantity(valueOf(i, 'Quantity', 'quantity', 0)) }} {{ valueOf(i, 'UnitName', 'unitName') }}
                 </span>
               </td>
               <td class="p-4 text-center tabular-nums text-slate-500">
@@ -88,6 +88,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, computed, onMounted } from 'vue';
 import api from '../../services/api';
 import { useI18n } from '../../composables/useI18n';

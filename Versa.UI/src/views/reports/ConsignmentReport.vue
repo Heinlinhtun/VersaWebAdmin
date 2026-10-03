@@ -22,15 +22,15 @@
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
       <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
         <p class="text-[10px] uppercase tracking-widest text-slate-400">{{ tx.soldQty }}</p>
-        <p class="text-lg font-normal text-slate-800 tabular-nums">{{ formatNumber(summary.SoldQuantity) }}</p>
+        <p class="text-lg font-normal text-slate-800 tabular-nums">{{ formatQuantity(summary.SoldQuantity) }}</p>
       </div>
       <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
         <p class="text-[10px] uppercase tracking-widest text-slate-400">{{ tx.availableQty }}</p>
-        <p class="text-lg font-normal text-slate-800 tabular-nums">{{ formatNumber(summary.AvailableQuantity) }}</p>
+        <p class="text-lg font-normal text-slate-800 tabular-nums">{{ formatQuantity(summary.AvailableQuantity) }}</p>
       </div>
       <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
         <p class="text-[10px] uppercase tracking-widest text-slate-400">{{ tx.unsettledQty }}</p>
-        <p class="text-lg font-normal text-slate-800 tabular-nums">{{ formatNumber(summary.CurrentUnsettledQuantity) }}</p>
+        <p class="text-lg font-normal text-slate-800 tabular-nums">{{ formatQuantity(summary.CurrentUnsettledQuantity) }}</p>
       </div>
       <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
         <p class="text-[10px] uppercase tracking-widest text-slate-400">{{ tx.payoutPaid }}</p>
@@ -72,7 +72,7 @@
               <td class="p-4 text-right tabular-nums">
                 <div>{{ formatQty(amount(row, 'Quantity')) }}</div>
               </td>
-              <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'AvailableQuantity')) }}</td>
+              <td class="p-4 text-right tabular-nums">{{ formatQuantity(amount(row, 'AvailableQuantity')) }}</td>
               <td class="p-4 text-right tabular-nums">{{ formatNumber(amount(row, 'UnitCost')) }}</td>
               <td class="p-4 text-right text-emerald-600 tabular-nums">{{ formatNumber(amount(row, 'AvailableValue')) }}</td>
             </tr>
@@ -164,6 +164,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { computed, onMounted, ref, watch } from 'vue';
 import api from '../../services/api';
 import { useCsvExport } from '../../composables/useCsvExport';
@@ -260,7 +262,7 @@ const handleExportCsv = () => {
 };
 
 const formatNumber = (value) => new Intl.NumberFormat().format(Number(value || 0));
-const formatQty = (value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(Number(value || 0));
+const formatQty = formatQuantity;
 const formatDate = (value) => value ? new Date(value).toLocaleDateString('en-GB') : '-';
 const shouldShowBaseQty = (row) => {
   const qty = amount(row, 'Quantity');

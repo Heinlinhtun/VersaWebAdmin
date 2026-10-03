@@ -1,4 +1,4 @@
-﻿using Dapper;
+using Dapper;
 using Microsoft.AspNetCore.Mvc;
 using MySqlConnector;
 using SixLabors.ImageSharp;
@@ -37,6 +37,9 @@ namespace Versa.POS.Controllers
             {
                 using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
                 await EnsureSettingsSchemaAsync(conn);
+                if (model.QuantityDecimalPlaces < 1 || model.QuantityDecimalPlaces > 5)
+                    return BadRequest(new { Message = "Quantity decimal places must be between 1 and 5." });
+                if (model.UseDecimalQuantity) await EnsureQuantityPrecisionAsync(conn);
                 model.PreferredPaperSize = model.PreferredPaperSize is "A4" or "A5" or "80mm"
                     ? model.PreferredPaperSize
                     : "80mm";
@@ -74,15 +77,15 @@ namespace Versa.POS.Controllers
                         LogoSize = @LogoSize,
                         ReceiptFontSize = @ReceiptFontSize,
                         PreferredPaperSize = @PreferredPaperSize,
-                        UseDecimalQuantity = @UseDecimalQuantity
+                        UseDecimalQuantity = @UseDecimalQuantity, QuantityDecimalPlaces = @QuantityDecimalPlaces
                        WHERE SettingId = @SettingId OR SettingId > 0 LIMIT 1";
 
                 var rowsAffected = await conn.ExecuteAsync(sql, model);
 
-                if (rowsAffected == 0)
+                if (rowsAffected == 0 && await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Settings") == 0)
                 {
-                    string insertSql = @"INSERT INTO Settings (ShopName, Address, Phone, ReceiptFooter, TaxRate, CurrencySymbol, LogoData, LogoSize, ReceiptFontSize, PreferredPaperSize, UseDecimalQuantity)
-                                 VALUES (@ShopName, @Address, @Phone, @ReceiptFooter, @TaxRate, @CurrencySymbol, @LogoData, @LogoSize, @ReceiptFontSize, @PreferredPaperSize, @UseDecimalQuantity)";
+                    string insertSql = @"INSERT INTO Settings (ShopName, Address, Phone, ReceiptFooter, TaxRate, CurrencySymbol, LogoData, LogoSize, ReceiptFontSize, PreferredPaperSize, UseDecimalQuantity, QuantityDecimalPlaces)
+                                 VALUES (@ShopName, @Address, @Phone, @ReceiptFooter, @TaxRate, @CurrencySymbol, @LogoData, @LogoSize, @ReceiptFontSize, @PreferredPaperSize, @UseDecimalQuantity, @QuantityDecimalPlaces)";
                     await conn.ExecuteAsync(insertSql, model);
                 }
 
@@ -94,8 +97,50 @@ namespace Versa.POS.Controllers
             }
         }
 
+        // Widen quantity storage before enabling fine precision. Never narrow existing
+        // scale or integer capacity, and leave money columns untouched.
+        private static async Task EnsureQuantityPrecisionAsync(MySqlConnection conn)
+        {
+            var columns = await conn.QueryAsync(@"
+                SELECT TABLE_NAME AS TableName, COLUMN_NAME AS ColumnName,
+                       NUMERIC_PRECISION AS NumPrecision, NUMERIC_SCALE AS NumScale,
+                       IS_NULLABLE AS IsNullable, COLUMN_DEFAULT AS DefaultValue,
+                       COLUMN_TYPE AS ColumnType
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND DATA_TYPE IN ('decimal', 'int', 'bigint', 'smallint', 'mediumint', 'tinyint')
+                  AND COALESCE(NUMERIC_SCALE, 0) < 5
+                  AND EXTRA NOT LIKE '%GENERATED%'
+                  AND COLUMN_NAME IN ('Quantity', 'BaseQuantity', 'FOCQuantity', 'RemainingQuantity',
+                      'OriginalBaseQuantity', 'Multiplier', 'UnitMultiplier', 'MinQuantity',
+                      'AlertQuantity', 'SoldQuantity', 'SettledQuantity', 'ReturnedQuantity', 'TotalBaseQuantity',
+                      'PreviousQuantity', 'ImportedQuantity', 'PostImportQuantity')");
+            foreach (var column in columns)
+            {
+                string table = ((string)column.TableName).Replace("`", "``");
+                string name = ((string)column.ColumnName).Replace("`", "``");
+                int integerDigits = Convert.ToInt32(column.NumPrecision) - Convert.ToInt32(column.NumScale ?? 0);
+                int precision = Math.Max(18, integerDigits + 5);
+                string nullable = (string)column.IsNullable == "YES" ? "NULL" : "NOT NULL";
+                string unsigned = ((string)column.ColumnType).Contains("unsigned") ? " UNSIGNED" : "";
+                string? defaultValue = column.DefaultValue?.ToString();
+                string defaultSql = defaultValue == null || defaultValue.Equals("NULL", StringComparison.OrdinalIgnoreCase) ? "" : " DEFAULT " +
+                    Convert.ToDecimal(defaultValue.Trim('\''), System.Globalization.CultureInfo.InvariantCulture)
+                        .ToString(System.Globalization.CultureInfo.InvariantCulture);
+                await conn.ExecuteAsync($"ALTER TABLE `{table}` MODIFY COLUMN `{name}` DECIMAL({precision},5){unsigned} {nullable}{defaultSql}");
+            }
+        }
+
         private static async Task EnsureSettingsSchemaAsync(MySqlConnection conn)
         {
+            var precisionExists = await conn.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Settings' AND COLUMN_NAME = 'QuantityDecimalPlaces'");
+            if (precisionExists == 0)
+            {
+                try { await conn.ExecuteAsync("ALTER TABLE Settings ADD COLUMN QuantityDecimalPlaces INT NOT NULL DEFAULT 2"); }
+                catch (MySqlException ex) when (ex.Number == 1060) { }
+            }
             var useDecimalExists = await conn.ExecuteScalarAsync<int>(@"
                 SELECT COUNT(*)
                 FROM INFORMATION_SCHEMA.COLUMNS

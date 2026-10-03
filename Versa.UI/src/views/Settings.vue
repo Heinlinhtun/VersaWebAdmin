@@ -142,7 +142,7 @@
                             </div>
                         </div>
 
-                        <div class="p-5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-4">
+                        <div class="p-5 bg-white rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
                             <div>
                                 <label class="text-[10px] font-normal text-slate-500 uppercase tracking-widest">{{
                                     t('settings.decimalQuantity') }}</label>
@@ -150,11 +150,20 @@
                                     {{ t('settings.decimalQuantityDesc') }}
                                 </p>
                             </div>
+                            <div class="flex items-center gap-3 shrink-0">
+                              <label class="text-xs text-slate-500">
+                                {{ t('settings.quantityDecimalPlaces') }}
+                                <select v-model.number="form.QuantityDecimalPlaces" :disabled="!form.UseDecimalQuantity"
+                                  class="block mt-1 p-2 border border-slate-200 rounded-lg bg-white disabled:opacity-40">
+                                  <option v-for="places in 5" :key="places" :value="places">{{ places }} ({{ (10 ** -places).toFixed(places) }})</option>
+                                </select>
+                              </label>
                             <label class="relative inline-flex items-center cursor-pointer shrink-0">
                                 <input v-model="form.UseDecimalQuantity" type="checkbox" class="sr-only peer">
                                 <span
                                     class="w-12 h-6 bg-slate-200 rounded-full peer peer-checked:bg-blue-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:bg-white after:rounded-full after:shadow-sm after:transition-transform peer-checked:after:translate-x-6"></span>
                             </label>
+                            </div>
                         </div>
 
                         <div class="space-y-1.5">
@@ -190,6 +199,7 @@
 import { ref, onMounted } from 'vue';
 import api from '../services/api';
 import { useToast } from '../composables/useToast';
+import { applyQuantitySettings, normalizeQuantityDecimals } from '../composables/useQuantitySettings';
 import { useI18n } from '../composables/useI18n';
 
 const { addToast } = useToast();
@@ -211,6 +221,7 @@ const form = ref({
     LogoSize: 'Large', // Default size
     ReceiptFontSize: 'Medium', // Default receipt font size
     PreferredPaperSize: '80mm',
+    QuantityDecimalPlaces: 2,
     UseDecimalQuantity: false
 });
 
@@ -237,6 +248,7 @@ const saveSettings = async () => {
             LogoPath: res.data.LogoPath
         };
         localStorage.setItem('ShopSettings', JSON.stringify(updatedSettings));
+        applyQuantitySettings(updatedSettings);
 
         addToast(t('settings.saved'), "success");
         await fetchSettings();
@@ -256,12 +268,14 @@ const fetchSettings = async () => {
                 PreferredPaperSize: ['80mm', 'A4', 'A5'].includes(res.data.PreferredPaperSize ?? res.data.preferredPaperSize)
                     ? (res.data.PreferredPaperSize ?? res.data.preferredPaperSize)
                     : '80mm',
+                QuantityDecimalPlaces: normalizeQuantityDecimals(res.data.QuantityDecimalPlaces ?? res.data.quantityDecimalPlaces),
                 UseDecimalQuantity: toBooleanSetting(res.data.UseDecimalQuantity ?? res.data.useDecimalQuantity)
             };
             if (res.data.LogoData) {
                 logoPreview.value = res.data.LogoData;
             }
             localStorage.setItem('ShopSettings', JSON.stringify(form.value));
+            applyQuantitySettings(form.value);
         }
     } catch (err) {
         addToast(t('settings.loadError'), "error");

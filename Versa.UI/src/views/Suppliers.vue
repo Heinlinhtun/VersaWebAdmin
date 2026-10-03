@@ -256,7 +256,7 @@
             </select>
           </div>
 
-          <button @click="submitPayment"
+          <button @click="submitPayment" :disabled="isPaying" :aria-busy="isPaying"
             class="w-full bg-blue-600 text-white py-4 rounded-xl font-normal uppercase text-xs tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-700 transition active:scale-95 mt-4">
             {{ t('suppliers.paymentTitle') }}
           </button>
@@ -264,65 +264,9 @@
       </div>
     </div>
 
-    <div v-if="showHistoryModal"
-      class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div
-        class="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-200 flex flex-col max-h-[85vh]">
-        <div class="bg-[#3f3f46] p-6 text-white flex justify-between items-center">
-          <div>
-            <h3 class="text-lg font-normal uppercase tracking-tight">{{ t('suppliers.historyTitle') }}</h3>
-            <p class="text-blue-300 text-[10px] font-normal uppercase mt-0.5 tracking-widest italic">{{
-              selectedSupplier?.SupplierName }}</p>
-          </div>
-          <button @click="showHistoryModal = false"
-            class="text-white/60 hover:text-white transition-colors text-2xl">�</button>
-        </div>
-
-        <div class="overflow-y-auto flex-1 custom-scrollbar">
-          <table class="w-full text-left border-collapse">
-            <thead class="bg-slate-50 border-b border-slate-100 sticky top-0">
-              <tr class="text-[10px] font-normal uppercase text-slate-400 tracking-widest">
-                <th class="px-6 py-4">{{ t('suppliers.hDate') }}</th>
-                <th class="px-6 py-4">{{ t('suppliers.hChannel') }}</th>
-                <th class="px-6 py-4">{{ t('suppliers.hRef') }}</th>
-                <th class="px-6 py-4 text-right">{{ t('suppliers.hAmount') }}</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-50 text-sm">
-              <tr v-for="p in paymentHistory" :key="p.PaymentId" class="hover:bg-slate-50/50 transition-colors">
-                <td class="px-6 py-4 font-normal text-slate-500 tabular-nums">{{ new
-                  Date(p.PaymentDate).toLocaleDateString('en-GB') }}</td>
-                <td class="px-6 py-4">
-                  <span
-                    class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[9px] font-normal uppercase border border-slate-200/50">{{
-                      p.PaymentMethod }}</span>
-                </td>
-                <td class="px-6 py-4">
-                  <button v-if="p.ReferenceNo && p.ReferenceNo.startsWith('PU')"
-                    @click="viewPurchaseDetail(p.ReferenceNo)"
-                    class="text-blue-600 hover:text-blue-800 font-normal text-xs underline underline-offset-4 decoration-blue-200">
-                    {{ p.ReferenceNo }}
-                  </button>
-                  <span v-else class="text-slate-400 font-normal text-[11px]">{{ p.ReferenceNo || '-' }}</span>
-                </td>
-                <td class="px-6 py-4 text-right font-normal text-slate-900 tabular-nums">{{ p.Amount.toLocaleString() }}
-                  Ks</td>
-              </tr>
-              <tr v-if="paymentHistory.length === 0">
-                <td colspan="4"
-                  class="px-6 py-16 text-center text-slate-300 font-normal uppercase tracking-[0.2em] text-xs">{{
-                    t('suppliers.noRecords') }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="p-5 border-t border-slate-100 flex justify-end bg-slate-50/50">
-          <button @click="showHistoryModal = false"
-            class="px-6 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg font-normal uppercase text-[10px] tracking-widest hover:bg-slate-100 transition-all">{{
-              t('common.close') }}</button>
-        </div>
-      </div>
-    </div>
+    <SupplierPaymentHistoryModal v-if="showHistoryModal && selectedSupplier" :supplier="selectedSupplier"
+      allow-purchase-details @purchase="showHistoryModal = false; viewPurchaseDetail($event)"
+      @close="showHistoryModal = false" @changed="fetchSuppliers" />
 
     <div v-if="showDetailModal"
       class="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
@@ -338,11 +282,10 @@
             class="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-200/50">
             <div>
               <p class="text-sm font-normal text-slate-800">{{ item.ProductName }}</p>
-              <p class="text-[10px] font-normal text-slate-400 uppercase mt-0.5">{{ item.Quantity }} {{ item.UnitName }} @
+              <p class="text-[10px] font-normal text-slate-400 uppercase mt-0.5">{{ formatQuantity(item.Quantity) }} {{ item.UnitName }} @
                 {{ item.CostPrice.toLocaleString() }} Ks</p>
             </div>
-            <p class="text-sm font-normal text-blue-600 tabular-nums">{{ (item.Quantity * item.CostPrice).toLocaleString()
-            }} Ks</p>
+            <p class="text-sm font-normal text-blue-600 tabular-nums">{{ (item.Quantity * item.CostPrice).toLocaleString() }} Ks</p>
           </div>
         </div>
         <div class="p-4 border-t border-slate-100 bg-white">
@@ -372,8 +315,12 @@
 </style>
 
 <script setup>
+import { useQuantitySettings } from '../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, onMounted, watch, computed } from 'vue';
 import api from '../services/api';
+import SupplierPaymentHistoryModal from '../components/SupplierPaymentHistoryModal.vue';
+import { pendingSupplierPayment, submitSupplierPayment } from '../services/supplierPayments';
 import { useToast } from '../composables/useToast';
 import { useI18n } from '../composables/useI18n';
 
@@ -403,20 +350,11 @@ const viewPurchaseDetail = async (invoiceNo) => {
 };
 
 const showHistoryModal = ref(false);
-const paymentHistory = ref([]);
-
-const viewHistory = async (supplier) => {
+const viewHistory = (supplier) => {
   selectedSupplier.value = supplier;
-  const sId = supplier.SupplierId || supplier.supplierId;
-
-  try {
-    const res = await api.get(`/suppliers/${sId}/payments`);
-    paymentHistory.value = res.data;
-    showHistoryModal.value = true;
-  } catch (err) {
-    addToast(t('suppliers.loadHistoryError'), "error");
-  }
+  showHistoryModal.value = true;
 };
+const isPaying = ref(false);
 
 const showPaymentModal = ref(false);
 const selectedSupplier = ref(null);
@@ -500,28 +438,29 @@ const openPaymentModal = (supplier) => {
     Note: '',
     PaymentDate: new Date().toISOString().split('T')[0]
   };
-  showPaymentModal.value = true;
+  try {
+    const pending = pendingSupplierPayment(sId);
+    if (pending) {
+      paymentForm.value = pending;
+      addToast('Retry the unresolved payment with its original details. No second payment will be recorded.', 'warning');
+    }
+    showPaymentModal.value = true;
+  } catch (err) { addToast(err.message, 'error'); }
 };
 
 const submitPayment = async () => {
-  const currentDebt = selectedSupplier.value?.CurrentDebt || selectedSupplier.value?.currentDebt || 0;
-
-  if (paymentForm.value.Amount <= 0) {
-    return addToast(t('suppliers.invalidAmount'), "warning");
-  }
-
-  if (paymentForm.value.Amount > currentDebt) {
-    return addToast(`${t('suppliers.overDebt')} (${currentDebt.toLocaleString()} Ks).`, "error");
-  }
-
+  if (isPaying.value) return;
+  if (paymentForm.value.Amount <= 0) return addToast(t('suppliers.invalidAmount'), 'warning');
+  isPaying.value = true;
   try {
-    await api.post('/suppliers/pay-debt', paymentForm.value);
-    addToast(t('suppliers.toastSuccess'), "success");
+    const result = await submitSupplierPayment(api, paymentForm.value);
     showPaymentModal.value = false;
-    fetchSuppliers();
+    const reversed = result.data?.reversalPaymentId ?? result.data?.ReversalPaymentId;
+    addToast(reversed ? 'This payment was already reversed. No new payment was recorded.' : t('suppliers.toastSuccess'), reversed ? 'warning' : 'success');
+    await fetchSuppliers();
   } catch (err) {
-    addToast(err.response?.data?.message || t('suppliers.toastError'), "error");
-  }
+    addToast(err.response?.data?.message || err.message || t('suppliers.toastError'), 'error');
+  } finally { isPaying.value = false; }
 };
 
 const saveSupplier = async () => {

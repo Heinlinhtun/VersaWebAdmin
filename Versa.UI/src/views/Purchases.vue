@@ -146,14 +146,14 @@
                   <td class="p-4 font-normal text-slate-800 text-sm tracking-tight">{{ item.Name }}</td>
                   <td class="p-4 text-center">
                     <div class="flex items-center justify-center gap-2">
-                      <input v-model.number="item.Quantity" type="number"
+                      <input v-quantity v-model.number="item.Quantity" type="number"
                         class="w-14 p-1.5 bg-gray-50 border border-gray-200 rounded text-center font-normal text-sm" />
                       <span class="text-[9px] font-normal text-slate-400 uppercase tracking-tighter">{{ item.UnitName
                       }}</span>
                     </div>
                   </td>
                   <td class="p-4 text-center">
-                    <input v-model.number="item.FOCQuantity" type="number"
+                    <input v-quantity v-model.number="item.FOCQuantity" type="number"
                       class="w-14 p-1.5 border border-emerald-200 rounded text-center font-normal text-emerald-600 text-sm outline-none" />
                   </td>
                   <td class="p-4 text-right">
@@ -438,10 +438,10 @@
                     </span>
                   </td>
                   <td class="p-4 text-center tabular-nums">
-                    <span class="font-normal text-slate-700">{{ item.Quantity || item.quantity }}</span>
+                    <span class="font-normal text-slate-700">{{ formatQuantity(item.Quantity || item.quantity) }}</span>
                     <span v-if="(item.FOCQuantity || item.focQuantity) > 0"
                       class="block text-[10px] font-normal text-emerald-500 uppercase tracking-tighter">
-                      +{{ item.FOCQuantity || item.focQuantity }} {{ tx.focSuffix }}
+                      +{{ formatQuantity(item.FOCQuantity || item.focQuantity) }} {{ tx.focSuffix }}
                     </span>
                   </td>
                   <td class="p-4 text-right text-slate-500 tabular-nums">
@@ -515,6 +515,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../services/api';

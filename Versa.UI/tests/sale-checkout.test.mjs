@@ -12,6 +12,7 @@ globalThis.localStorage = {
   setItem: (key, value) => storage.set(key, value),
 };
 const { useI18n } = await import('../src/composables/useI18n.js');
+const { useQuantitySettings, applyQuantitySettings } = await import('../src/composables/useQuantitySettings.js');
 const { descriptor } = parse(readFileSync(new URL('../src/views/Sale.vue', import.meta.url), 'utf8'));
 // Execute the real setup with external effects stubbed; keep Vue reactivity and i18n.
 const setup = descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
@@ -21,7 +22,7 @@ function mountSetup(t, post, { get, online = true } = {}) {
   const notices = [];
   let cached;
   const dependencies = {
-    ref, computed, nextTick, watch, normalizeReceiptPayments, receiptUnitName, useI18n,
+    ref, computed, nextTick, watch, useQuantitySettings, applyQuantitySettings, normalizeReceiptPayments, receiptUnitName, useI18n,
     onMounted() {}, onUnmounted() {},
     api: { post, get },
     useToast: () => ({ addToast: (...args) => notices.push(args) }),
@@ -37,7 +38,7 @@ function mountSetup(t, post, { get, online = true } = {}) {
   const instance = scope.run(() => new Function(...Object.keys(dependencies), `${setup}\nreturn {
     newCustomerForm, saveNewCustomer, customers, saleForm, customerSearch,
     showNewCustomerModal, savingNewCustomer, ensureCustomerForOrder,
-    selectedCustomerObj, catalogView, currentPage, refreshCheckoutCustomerBalance
+    selectedCustomerObj, catalogView, currentPage, refreshCheckoutCustomerBalance, normalizeCartQty, updateQty, quantityButtonStep
   };`)(...Object.values(dependencies)));
   return { ...instance, notices, get cached() { return cached; } };
 }
@@ -131,4 +132,23 @@ test('customer and view controls resolve in English and Myanmar', () => {
     assert.match(t(key), /[\u1000-\u109f]/);
   }
   locale.value = 'en';
+});
+
+
+test('checkout uses configured quantity precision for entry and increment buttons', t => {
+  applyQuantitySettings({ UseDecimalQuantity: true, QuantityDecimalPlaces: 5 });
+  const vm = mountSetup(t);
+  const item = { ItemType: 'Service', Quantity: 0.00001 };
+  vm.normalizeCartQty(item);
+  assert.equal(item.Quantity, 0.00001);
+  vm.updateQty(item, vm.quantityButtonStep.value);
+  assert.equal(item.Quantity, 0.00002);
+  applyQuantitySettings({ UseDecimalQuantity: true, QuantityDecimalPlaces: 2 });
+  item.Quantity = 1.23456;
+  vm.normalizeCartQty(item);
+  assert.equal(item.Quantity, 1.23);
+  applyQuantitySettings({ UseDecimalQuantity: false, QuantityDecimalPlaces: 5 });
+  item.Quantity = 1.7;
+  vm.normalizeCartQty(item);
+  assert.equal(item.Quantity, 1);
 });

@@ -27,7 +27,7 @@ WHERE TABLE_SCHEMA = DATABASE()
 
         if (hasColumn == 0)
         {
-            await conn.ExecuteAsync("ALTER TABLE PurchaseOrderItems ADD COLUMN RemainingQuantity DECIMAL(18,4) NULL");
+            await conn.ExecuteAsync("ALTER TABLE PurchaseOrderItems ADD COLUMN RemainingQuantity DECIMAL(18,5) NULL");
         }
 
         await conn.ExecuteAsync(@"

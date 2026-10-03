@@ -1,4 +1,4 @@
-﻿using Dapper;
+using Dapper;
 using Microsoft.AspNetCore.Mvc;
 using MySqlConnector;
 using Versa.Core.Models;
@@ -15,6 +15,19 @@ namespace Versa.POS.Controllers
         public ExpensesController(DatabaseService dbService)
         {
             _dbService = dbService;
+        }
+
+        private static async Task EnsureExpenseSchemaAsync(MySqlConnection conn)
+        {
+            var exists = await conn.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Expenses' AND COLUMN_NAME = 'IsPaid'");
+            if (exists == 0)
+            {
+                // Existing expenses were recorded as paid before this feature.
+                try { await conn.ExecuteAsync("ALTER TABLE Expenses ADD COLUMN IsPaid TINYINT(1) NOT NULL DEFAULT 1"); }
+                catch (MySqlException ex) when (ex.Number == 1060) { }
+            }
         }
 
         private int? ResolveBranchScope(int? requestedBranchId)
@@ -46,9 +59,10 @@ namespace Versa.POS.Controllers
         public async Task<IActionResult> AddExpense([FromBody] ExpenseEntryModel model)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+            await EnsureExpenseSchemaAsync(conn);
             var branchId = ResolveExpenseBranch(model.BranchId);
-            string sql = @"INSERT INTO Expenses (BranchId, Title, Category, Amount, PaymentMethod, ExpenseDate) 
-                           VALUES (@BranchId, @Title, @Category, @Amount, @PaymentMethod, @ExpenseDate)";
+            string sql = @"INSERT INTO Expenses (BranchId, Title, Category, Amount, PaymentMethod, ExpenseDate, IsPaid)
+                           VALUES (@BranchId, @Title, @Category, @Amount, @PaymentMethod, @ExpenseDate, @IsPaid)";
 
             await conn.ExecuteAsync(sql, new
             {
@@ -56,6 +70,7 @@ namespace Versa.POS.Controllers
                 model.Title,
                 model.Category,
                 model.Amount,
+                model.IsPaid,
                 PaymentMethod = string.IsNullOrWhiteSpace(model.PaymentMethod) ? "Cash" : model.PaymentMethod,
                 ExpenseDate = model.ExpenseDate?.Date ?? DateTime.Now
             });
@@ -67,6 +82,7 @@ namespace Versa.POS.Controllers
         public async Task<IActionResult> GetExpenses(int branchId)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+            await EnsureExpenseSchemaAsync(conn);
             var scopedBranchId = ResolveBranchScope(branchId);
             string sql = "SELECT * FROM Expenses WHERE (@branchId IS NULL OR BranchId = @branchId) ORDER BY ExpenseDate DESC";
             var expenses = await conn.QueryAsync(sql, new { branchId = scopedBranchId });
@@ -77,13 +93,15 @@ namespace Versa.POS.Controllers
         public async Task<IActionResult> UpdateExpense(int id, [FromBody] ExpenseEntryModel model)
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+            await EnsureExpenseSchemaAsync(conn);
             var branchId = ResolveExpenseBranch(model.BranchId);
 
             // Database ထဲမှာ အချက်အလက်များကို Update လုပ်ခြင်း
             string sql = @"UPDATE Expenses 
                    SET Title = @Title, 
                        Category = @Category, 
-                       Amount = @Amount, 
+                       Amount = @Amount,
+                       IsPaid = @IsPaid,
                        PaymentMethod = @PaymentMethod,
                        ExpenseDate = @ExpenseDate,
                        BranchId = @BranchId 
@@ -95,6 +113,7 @@ namespace Versa.POS.Controllers
                 model.Title,
                 model.Category,
                 model.Amount,
+                model.IsPaid,
                 PaymentMethod = string.IsNullOrWhiteSpace(model.PaymentMethod) ? "Cash" : model.PaymentMethod,
                 ExpenseDate = model.ExpenseDate?.Date ?? DateTime.Now,
                 BranchId = branchId,

@@ -48,7 +48,7 @@
 
           <div>
             <label class="text-[10px] font-normal text-gray-400 uppercase ml-1">{{ tx.quantity }}</label>
-            <input v-model="form.Quantity" type="number" class="w-full p-4 bg-gray-50 border rounded-2xl font-normal text-xl outline-none focus:ring-2 focus:ring-indigo-500">
+            <input v-quantity v-model="form.Quantity" type="number" class="w-full p-4 bg-gray-50 border rounded-2xl font-normal text-xl outline-none focus:ring-2 focus:ring-indigo-500">
           </div>
         </div>
 

@@ -42,7 +42,7 @@
               </td>
               <td class="p-5 text-center">
                 <span class="px-3 py-1 bg-gray-100 rounded-full font-normal text-gray-600">
-                  {{ item.Quantity }}
+                  {{ formatQuantity(item.Quantity) }}
                 </span>
               </td>
               <td class="p-5 text-center">
@@ -51,7 +51,7 @@
                 </span>
               </td>
               <td class="p-5 text-center">
-                <input v-model.number="item.returnQty" type="number"
+                <input v-quantity v-model.number="item.returnQty" type="number"
                   class="w-full p-2 border rounded-xl text-center font-normal focus:ring-2 focus:ring-orange-500 outline-none"
                   :max="item.ReturnableQty ?? item.returnableQty ?? item.Quantity" min="1">
               </td>
@@ -77,6 +77,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, computed } from 'vue';
 import api from '../services/api';
 import { useToast } from '../composables/useToast';
@@ -141,10 +143,7 @@ const searchPO = async () => {
   }
 };
 
-const formatQty = (value) => Number(value || 0).toLocaleString(undefined, {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2
-});
+const formatQty = formatQuantity;
 
 const getApiErrorMessage = (err, fallback) => (
   err.response?.data?.Message

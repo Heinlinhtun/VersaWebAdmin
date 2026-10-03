@@ -314,7 +314,7 @@
                 {{ item.productName }}
                 <span class="text-[10px] text-slate-400 ml-1 font-normal italic">({{ item.unitName }})</span>
               </td>
-              <td class="p-5 text-center font-normal text-slate-900 tabular-nums text-sm">{{ item.quantity }}</td>
+              <td class="p-5 text-center font-normal text-slate-900 tabular-nums text-sm">{{ formatQuantity(item.quantity) }}</td>
               <td class="p-5 text-right font-normal text-rose-600 tabular-nums text-sm">{{ (item.refundAmount ||
                 0).toLocaleString() }}</td>
               <td class="p-5 text-[11px] text-slate-400 font-normal italic truncate max-w-[200px]">{{ item.reason }}</td>
@@ -330,7 +330,7 @@
                   {{ item.type }}
                 </span>
               </td>
-              <td class="p-5 text-center font-normal tabular-nums text-emerald-600 text-sm">{{ item.quantity }}</td>
+              <td class="p-5 text-center font-normal tabular-nums text-emerald-600 text-sm">{{ formatQuantity(item.quantity) }}</td>
               <td class="p-5 text-[11px] text-slate-400 font-normal italic">{{ item.reason }}</td>
             </template>
 
@@ -571,7 +571,7 @@
                       </div>
                     </div>
                   </td>
-                  <td class="p-4 text-center font-normal text-slate-900 tabular-nums">{{ item.Quantity }}</td>
+                  <td class="p-4 text-center font-normal text-slate-900 tabular-nums">{{ formatQuantity(item.Quantity) }}</td>
                   <td class="p-4 text-right text-slate-500 tabular-nums">{{ formatNumber(item.UnitPrice) }}</td>
                   <td class="p-4 text-right font-normal text-slate-900 tabular-nums">{{ formatNumber(lineSubtotal(item)) }}
                   </td>
@@ -704,7 +704,7 @@
                     <span class="block text-[10px] text-slate-400 font-normal">Unit: {{ item.UnitName || item.unitName
                     }}</span>
                   </td>
-                  <td class="p-4 text-center tabular-nums font-normal text-slate-700">{{ item.Quantity || item.quantity }}
+                  <td class="p-4 text-center tabular-nums font-normal text-slate-700">{{ formatQuantity(item.Quantity || item.quantity) }}
                   </td>
                   <td class="p-4 text-right tabular-nums text-slate-500">{{ formatNumber(item.CostPrice ||
                     item.costPrice)
@@ -854,11 +854,11 @@
                   <td class="p-4 text-slate-500 tabular-nums">{{ formatDateTime(batch.orderDate) }}</td>
                   <td class="p-4 text-slate-800">{{ batch.supplierName || '-' }}</td>
                   <td class="p-4 text-slate-600">{{ batch.branchName || '-' }}</td>
-                  <td class="p-4 text-right tabular-nums">{{ formatNumber(batch.quantity) }}</td>
-                  <td class="p-4 text-right tabular-nums">{{ formatNumber(batch.focQuantity) }}</td>
+                  <td class="p-4 text-right tabular-nums">{{ formatQuantity(batch.quantity) }}</td>
+                  <td class="p-4 text-right tabular-nums">{{ formatQuantity(batch.focQuantity) }}</td>
                   <td class="p-4 text-right tabular-nums">{{ formatNullableNumber(batch.soldQuantity) }}</td>
                   <td class="p-4 text-right tabular-nums">{{ formatNullableNumber(batch.returnedQuantity) }}</td>
-                  <td class="p-4 text-right tabular-nums text-emerald-700">{{ formatNumber(batch.remainingQuantity) }}</td>
+                  <td class="p-4 text-right tabular-nums text-emerald-700">{{ formatQuantity(batch.remainingQuantity) }}</td>
                   <td class="p-4 text-slate-500">{{ batch.unitName || '-' }}</td>
                   <td class="p-4 text-right tabular-nums">{{ formatNumber(batch.costPrice) }}</td>
                   <td class="p-4 tabular-nums" :class="getBatchExpiryStatus(batch).className">
@@ -945,7 +945,7 @@
                   <tr v-for="item in selectedTransfer.items" :key="item.TransferId + '-' + item.ProductId">
                     <td class="p-4 font-normal text-slate-800">{{ item.ProductName }}</td>
                     <td class="p-4 text-center font-normal text-slate-500 italic">{{ item.UnitName || '-' }}</td>
-                    <td class="p-4 text-center font-normal text-slate-900 tabular-nums text-base">{{ item.Quantity }}
+                    <td class="p-4 text-center font-normal text-slate-900 tabular-nums text-base">{{ formatQuantity(item.Quantity) }}
                     </td>
                   </tr>
                 </tbody>
@@ -1027,7 +1027,7 @@
                   * {{ item.Note || item.note }}
                 </div>
               </td>
-              <td style="text-align: center; vertical-align: top; padding: 2px 0 4px 0; line-height: 1.18;">{{ item.Quantity }}</td>
+              <td style="text-align: center; vertical-align: top; padding: 2px 0 4px 0; line-height: 1.18;">{{ formatQuantity(item.Quantity) }}</td>
               <td style="text-align: right; vertical-align: top; padding: 2px 0 4px 0; line-height: 1.18;">
                 {{ formatNumber(lineSubtotal(item)) }}
               </td>
@@ -1041,7 +1041,7 @@
             <tr>
               <td></td>
               <td style="text-align: center; padding: 0 0 8px 0; font-weight: bold; border-bottom: 1px solid black;">
-                {{selectedSale.items.reduce((sum, i) => sum + i.Quantity, 0)}}
+                {{ selectedSale.items.reduce((sum, i) => sum + i.Quantity, 0) }}
               </td>
               <td></td>
             </tr>
@@ -1165,7 +1165,7 @@
                   Note: {{ item.Note || item.note }}
                 </div>
               </td>
-              <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ item.Quantity }}</td>
+              <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ formatQuantity(item.Quantity) }}</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">{{ receiptUnitName(item, item.UnitName || 'N/A') }}</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(item.UnitPrice) }}
               </td>
@@ -1234,6 +1234,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRoute } from 'vue-router'; // ✅ သေချာအောင် ပြန်စစ်ပါ
 import api from '../services/api';
@@ -1424,7 +1426,7 @@ const buildAndroidHistoryReceiptText = () => {
   if (sale.CustomerPhone || sale.CustomerAddress) lines.push(clip(`${sale.CustomerPhone || ''} ${sale.CustomerAddress || ''}`.trim(), width));
   if (sale.VoucherNote || sale.voucherNote) lines.push(`Note: ${clip(sale.VoucherNote || sale.voucherNote, width - 6)}`);
   lines.push(line);
-  const qtyWidth = 5;
+  const qtyWidth = 9;
   const amountWidth = Math.min(14, Math.max(10, width - 21));
   const nameWidth = Math.max(12, width - qtyWidth - amountWidth);
   lines.push(`${'Name'.padEnd(nameWidth, ' ')}${'Qty'.padStart(qtyWidth, ' ')}${'Amount'.padStart(amountWidth, ' ')}`);
@@ -1434,7 +1436,7 @@ const buildAndroidHistoryReceiptText = () => {
     const qty = Number(item.Quantity || item.quantity || 0);
     const amount = lineSubtotal(item);
     const itemLines = wrap(`${item.ItemName || item.ProductName || item.productName || 'Item'}${item.IsFOC ? ' (FOC)' : ''}`, nameWidth);
-    lines.push(`${itemLines[0].padEnd(nameWidth, ' ')}${String(qty).padStart(qtyWidth, ' ')}${formatNumber(amount).padStart(amountWidth, ' ')}`);
+    lines.push(`${itemLines[0].padEnd(nameWidth, ' ')}${formatQuantity(qty).padStart(qtyWidth, ' ')}${formatNumber(amount).padStart(amountWidth, ' ')}`);
     itemLines.slice(1).forEach(extra => lines.push(extra));
     lines.push(`  (${receiptUnitName(item, item.UnitName || item.unitName || 'N/A')}) @ ${formatNumber(item.UnitPrice || item.unitPrice || 0)}`);
     const discount = lineDiscount(item);
@@ -1448,7 +1450,7 @@ const buildAndroidHistoryReceiptText = () => {
   const deliveryFee = Number(sale.DeliveryFee ?? sale.deliveryFee ?? 0);
   const finalTotal = Math.max(0, subtotal - discount + deliveryFee);
   lines.push(line);
-  lines.push(columns('Total Qty', formatNumber(totalQty)));
+  lines.push(columns('Total Qty', formatQuantity(totalQty)));
   lines.push(columns('Sub-Total:', formatNumber(subtotal)));
   if (discount > 0) lines.push(columns(receiptDiscountPrintLabel.value, formatNumber(discount)));
   if (deliveryFee > 0) lines.push(columns('Delivery (+):', formatNumber(deliveryFee)));
@@ -1587,6 +1589,16 @@ const printFromDetail = async (preOpenedWindow = null) => {
             print-color-adjust: exact !important;
           }
           * { box-sizing: border-box; color: black !important; }
+          #history-print-controls {
+            position: sticky; top: 0; z-index: 9999;
+            display: flex; gap: 8px; padding: 10px;
+            background: white; border-bottom: 1px solid #d1d5db;
+          }
+          #history-print-controls button {
+            cursor: pointer; padding: 8px 16px; border: 1px solid #9ca3af;
+            border-radius: 6px; background: #f3f4f6; font: 14px sans-serif;
+          }
+          @media print { #history-print-controls { display: none !important; } }
           #print-area-a4 thead tr { background-color: #3f3f46 !important; }
           #print-area-a4 th { color: white !important; -webkit-print-color-adjust: exact; }
           #print-area th {
@@ -1597,19 +1609,24 @@ const printFromDetail = async (preOpenedWindow = null) => {
         </style>
       </head>
       <body>
+        <div id="history-print-controls">
+          <button id="history-print-button" type="button">Print</button>
+          <button id="history-close-button" type="button">Close</button>
+        </div>
         ${logoHtml} ${printArea.innerHTML}
         <script>
           (function () {
-            var ua = navigator.userAgent || '';
-            var isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+            var autoPrintTimer;
+            function printReceipt() {
+              clearTimeout(autoPrintTimer);
+              window.focus();
+              window.print();
+            }
+            document.getElementById('history-print-button').addEventListener('click', printReceipt);
+            document.getElementById('history-close-button').addEventListener('click', function () { window.close(); });
             window.onload = function () {
-              if (isMobile) {
-                setTimeout(function () { window.print(); }, 150);
-                return;
-              }
-              setTimeout(function () { window.print(); }, 200);
+              autoPrintTimer = setTimeout(printReceipt, 200);
             };
-          })();
           })();
         <\/script>
       </body>
@@ -2154,7 +2171,7 @@ const getBatchExpiryStatus = (batch) => {
 
 const formatNullableNumber = (value) => {
   if (value === null || value === undefined || value === '') return '-';
-  return formatNumber(value);
+  return formatQuantity(value);
 };
 
 const isConsignmentBatch = (batch) => String(batch?.sourceType || '').toLowerCase() === 'consignment';

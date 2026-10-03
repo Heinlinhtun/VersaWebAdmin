@@ -24,24 +24,26 @@ function setup(t, source, dependencies, returned) {
 }
 function mountPartners(t) {
   const exports = [];
+  const notices = [];
   const vm = setup(t, partners.scriptSetup.content, {
     ref, computed, reactive, watch, onMounted() {}, useI18n,
-    useToast: () => ({ addToast() {} }),
+    useToast: () => ({ addToast: (...args) => notices.push(args) }),
     useCsvExport: () => ({ exportToCsv: (...args) => exports.push(args) }),
     usePermissions: () => ({ can: () => true, PERMISSIONS: {} }),
     useRouter: () => ({}), api: {},
   }, 'cust, supp, staff, exportPartnersCsv, activeTab, supplierHistoryTarget');
-  return { ...vm, exports };
+  return { ...vm, exports, notices };
 }
-function mountHistory(t, get, supplier = { SupplierId: 7 }) {
+function mountHistory(t, get, supplier = { SupplierId: 7 }, { post, admin = true } = {}) {
+  const events = [];
   const props = reactive({ supplier });
   let mounted, unmount;
   const vm = setup(t, modal.scriptSetup.content, {
-    ref, watch, useI18n, api: { get }, defineProps: () => props, defineEmits() {},
+    ref, computed, watch, nextTick, useI18n, usePermissions: () => ({ hasRole: () => admin }), api: { get, post }, defineProps: () => props, defineEmits: () => (...args) => events.push(args),
     onMounted: cb => { mounted = cb; }, onBeforeUnmount: cb => { unmount = cb; },
-  }, 'payments, loading, error, loadHistory, displayValue, dialog, closeButton, trapFocus');
+  }, 'payments, loading, error, loadHistory, displayValue, dialog, closeButton, trapFocus, columns, selectReversal, reversalTarget, reversalReason, reversePayment, reversing, reversalError, reversalSuccess');
   t.after(() => unmount());
-  return { ...vm, props, mounted, unmount };
+  return { ...vm, props, mounted, unmount, events };
 }
 const flush = async () => { await nextTick(); await Promise.resolve(); await Promise.resolve(); };
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
@@ -84,7 +86,7 @@ test('history uses PascalCase dynamic SQL fields and camelCase equivalents', asy
   await flush();
   assert.deepEqual(requests, ['/suppliers/7/payments']);
   assert.equal(vm.error.value, false);
-  assert.deepEqual(vm.payments.value[0], { id: 1, date: '2026-09-16T23:00:00Z', type: 'Purchase Payment', reference: 'PU01', method: 'Cash', note: 'မှတ်ချက်', amount: 0 });
+  assert.deepEqual(vm.payments.value[0], { id: 1, date: '2026-09-16T23:00:00Z', type: 'Purchase Payment', reference: 'PU01', method: 'Cash', note: 'မှတ်ချက်', amount: 0, canReverse: false, reversed: undefined, reverses: undefined, reversalReason: undefined, reversedBy: undefined, reversedAt: undefined });
   const { locale, t: tr } = useI18n();
   for (const lang of ['en', 'mm']) {
     locale.value = lang;
@@ -179,6 +181,24 @@ test('new UI, CSV headers and export notifications resolve in English and Myanma
   }
 });
 
+test('changing previous credit requires an audit reason before saving', async t => {
+  const vm = mountPartners(t);
+  const { locale, t: tr } = useI18n();
+  locale.value = 'en';
+  vm.cust.form = {
+    CustomerId: 12,
+    Name: 'Aye Aye',
+    Phone: '',
+    Address: '',
+    OpeningBalance: 800,
+    OriginalOpeningBalance: 500,
+    OpeningBalancePaid: 0,
+    OpeningBalanceAdjustmentReason: '',
+  };
+  await vm.cust.save();
+  assert.deepEqual(vm.notices.at(-1), [tr('customers.openingBalanceAdjustmentReasonRequired'), 'warning']);
+});
+
 test('CSV download includes Myanmar BOM, escapes cells and reports empty/error states', async () => {
   const notices = [], blobs = [], links = [];
   const { t: tr, locale } = useI18n(); locale.value = 'en';
@@ -200,4 +220,50 @@ test('CSV download includes Myanmar BOM, escapes cells and reports empty/error s
   const original = console.error;
   try { console.error = () => {}; exportToCsv('failed', ['Name'], [['Test']]); } finally { console.error = original; }
   assert.deepEqual(notices.at(-1), [tr('common.exportFailed'), 'error']);
+});
+
+
+test('admin reversal sends the selected payment once and refreshes after success', async t => {
+  const pending = deferred(), requests = [];
+  let loads = 0;
+  const vm = mountHistory(t, async () => { loads++; return { data: [{ PaymentId: 92, Amount: 700, CanRequestReversal: 1 }] }; }, { SupplierId: 7 },
+    { post: (url, body) => { requests.push([url, body]); return pending.promise; } });
+  await flush();
+  await vm.selectReversal(vm.payments.value[0]);
+  vm.reversalReason.value = 'Duplicate confirmed';
+  const first = vm.reversePayment();
+  await vm.reversePayment();
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0], ['/suppliers/7/payments/92/reverse', { Reason: 'Duplicate confirmed' }]);
+  pending.resolve({ data: {} }); await first;
+  assert.equal(vm.reversalSuccess.value, true);
+  assert.equal(vm.reversalTarget.value, null);
+  assert.equal(loads, 2);
+  assert.deepEqual(vm.events, [['changed']]);
+});
+
+test('non-admin cannot select or submit a reversal', async t => {
+  let called = false;
+  const vm = mountHistory(t, async () => ({ data: [{ PaymentId: 1, CanRequestReversal: 1 }] }), { SupplierId: 7 },
+    { admin: false, post: async () => { called = true; } });
+  await flush();
+  await vm.selectReversal(vm.payments.value[0]);
+  await vm.reversePayment();
+  assert.equal(vm.reversalTarget.value, null);
+  assert.equal(called, false);
+  assert.equal(vm.columns.value.some(c => c.key === 'action'), false);
+});
+
+test('failed reversal keeps the same payment and reason for a safe retry', async t => {
+  const vm = mountHistory(t, async () => ({ data: [{ PaymentId: 1, CanRequestReversal: 1 }] }), { SupplierId: 7 },
+    { post: async () => { throw { response: { data: { message: 'Later purchase blocks reversal' } } }; } });
+  await flush();
+  await vm.selectReversal(vm.payments.value[0]);
+  vm.reversalReason.value = 'Duplicate entry';
+  await vm.reversePayment();
+  assert.equal(vm.reversalTarget.value.id, 1);
+  assert.equal(vm.reversalReason.value, 'Duplicate entry');
+  assert.match(vm.reversalError.value, /Later purchase/);
+  assert.equal(vm.reversing.value, false);
+  assert.deepEqual(vm.events, []);
 });

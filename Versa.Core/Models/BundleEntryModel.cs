@@ -6,9 +6,19 @@ namespace Versa.Core.Models
 {
     public class BundleEntryModel
     {
-        public string BundleName { get; set; }
+        public string BundleName { get; set; } = "";
         public decimal BundlePrice { get; set; }
-        public List<BundleComponentSelector> BundleItems { get; set; }
+        public bool AddAsProduct { get; set; }
+        public int? BranchId { get; set; }
+        public int? ProductionUnitId { get; set; }
+        public decimal ProductionQuantity { get; set; }
+        public List<BundleComponentSelector> BundleItems { get; set; } = new();
+    }
+
+    public class BundleProductionAvailabilityModel
+    {
+        public int? BranchId { get; set; }
+        public List<BundleComponentSelector> BundleItems { get; set; } = new();
     }
 
     public class BundleComponentSelector

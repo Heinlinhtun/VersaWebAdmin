@@ -89,7 +89,7 @@
               <tr v-for="item in voucherItems" :key="item.ProductId" class="hover:bg-slate-50/50 transition-colors">
                 <td class="p-5 font-normal text-slate-700">{{ item.ProductName }}</td>
                 <td class="p-5 text-center text-blue-600 font-normal">
-                  {{ item.Quantity }} {{ item.UnitName }}
+                  {{ formatQuantity(item.Quantity) }} {{ item.UnitName }}
                 </td>
                 <td class="p-5 text-right">
                   <button @click="processSaleReturn(item)" :disabled="isSaleReturning"
@@ -165,7 +165,7 @@
                 </div>
                 <div class="text-right pl-3">
                   <p class="text-[10px] font-normal text-slate-600 tabular-nums">
-                    {{ tx.stock }}: {{ p.BaseQuantity || p.Quantity || 0 }}
+                    {{ tx.stock }}: {{ formatQuantity(p.BaseQuantity || p.Quantity || 0) }}
                   </p>
                 </div>
               </div>
@@ -191,7 +191,7 @@
                   {{ formatQty(item.ReturnableQty ?? item.returnableQty ?? item.StockQty) }} {{ item.UnitName }}
                 </td>
                 <td class="p-5 text-center">
-                  <input v-model.number="item.returnQty" type="number"
+                  <input v-quantity v-model.number="item.returnQty" type="number"
                     :max="item.ReturnableQty ?? item.returnableQty ?? item.StockQty"
                     min="0"
                     class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-center font-normal outline-none focus:ring-2 focus:ring-orange-500/20" />
@@ -253,7 +253,7 @@
                   </div>
                   <div class="text-right pl-3">
                     <p class="text-[10px] font-normal text-slate-600 tabular-nums">
-                      {{ tx.current }}: {{ p.BaseQuantity || p.Quantity || 0 }}
+                      {{ tx.current }}: {{ formatQuantity(p.BaseQuantity || p.Quantity || 0) }}
                     </p>
                   </div>
                 </div>
@@ -284,7 +284,7 @@
 
             <div class="col-span-1 space-y-1.5">
               <label class="text-[10px] font-normal text-slate-400 uppercase ml-1 block">{{ tx.quantity }}</label>
-              <input v-model.number="adjForm.Quantity" type="number"
+              <input v-quantity v-model.number="adjForm.Quantity" type="number"
                 class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-normal text-lg outline-none focus:ring-2 focus:ring-slate-900/10" />
             </div>
 
@@ -371,7 +371,7 @@
                   </div>
                   <div class="text-right pl-3">
                     <p class="text-[10px] font-normal text-slate-600 tabular-nums">
-                      {{ tx.stock }}: {{ p.BaseQuantity || p.Quantity || 0 }}
+                      {{ tx.stock }}: {{ formatQuantity(p.BaseQuantity || p.Quantity || 0) }}
                     </p>
                   </div>
                 </div>
@@ -381,9 +381,8 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label class="text-[10px] font-normal text-slate-400 uppercase ml-1 block font-normal">{{ tx.transferQuantity
-                }}</label>
-              <input v-model.number="transferForm.Quantity" type="number"
+              <label class="text-[10px] font-normal text-slate-400 uppercase ml-1 block font-normal">{{ tx.transferQuantity }}</label>
+              <input v-quantity v-model.number="transferForm.Quantity" type="number"
                 class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-normal text-xl text-blue-600 outline-none" />
             </div>
 
@@ -440,6 +439,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, onMounted, onUnmounted, watch, computed } from "vue";
 import api from "../services/api";
 import { useToast } from "../composables/useToast";
@@ -597,10 +598,7 @@ const tx = computed(() => ({
   cancel: t('common.cancel')
 }));
 
-const formatQty = (value) => Number(value || 0).toLocaleString(undefined, {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2
-});
+const formatQty = formatQuantity;
 const formatMoney = (value) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const selectedAdjProduct = computed(() => products.value.find(
   (p) => Number(p.ProductId || p.productId) === Number(adjForm.value.ProductId)

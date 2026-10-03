@@ -92,8 +92,9 @@ const messages = {
       currency: "Currency",
       taxRate: "Tax Rate (%)",
       decimalQuantity: "Use Decimal Quantity",
+      quantityDecimalPlaces: "Quantity decimal places",
       decimalQuantityDesc:
-        "Allow sale quantities like 1.50 kg. Turn off to keep whole-number quantities like 1.",
+        "Set quantity precision across sales, purchases, stock, returns and reports. Turn off for whole-number quantities. Prices and money totals are unchanged.",
       receiptFooter: "Receipt Footer Note",
       receiptFontSize: "Receipt Font Size",
       preferredPaperSize: "Preferred Paper Size",
@@ -451,8 +452,9 @@ const messages = {
       currency: "ငွေကြေး",
       taxRate: "အခွန်နှုန်း (%)",
       decimalQuantity: "ဒဿမ အရေအတွက် သုံးမည်",
+      quantityDecimalPlaces: "အရေအတွက် ဒဿမနေရာ",
       decimalQuantityDesc:
-        "1.50 kg လို ဒဿမအရေအတွက်ဖြင့် ရောင်းနိုင်ရန် ဖွင့်ပါ။ ပိတ်ထားပါက 1 လို ကိန်းပြည့်သာ သုံးပါမည်။",
+        "အရောင်း၊ အဝယ်၊ လက်ကျန်၊ ပြန်အမ်းမှုနှင့် အစီရင်ခံစာများ၏ အရေအတွက် ဒဿမနေရာ သတ်မှတ်ရန်။ ပိတ်ထားပါက ကိန်းပြည့်သာ သုံးပါမည်။ စျေးနှုန်းနှင့် ငွေစုစုပေါင်း မပြောင်းပါ။",
       receiptFooter: "ဘောင်ချာ Foot Notes",
       receiptFontSize: "ဘောင်ချာ စာလုံးအရွယ်",
       preferredPaperSize: "မူလသတ်မှတ် ဘောင်ချာစာရွက်အရွယ်",
@@ -1184,6 +1186,9 @@ messages.en.products = {
   addNewUnit: "Add New Unit",
   addNewCategory: "Add New Category",
   lookupNameRequired: "Please enter a name.",
+  bundleQuantityRequired: "Enter a bundle quantity greater than zero.",
+  bundleQuantityPrecision: "The current quantity increment is",
+  bundlePrecisionSettings: "For smaller amounts, enable decimal quantities and increase Quantity decimal places in Settings.",
   ...messages.en.products,
   searchPlaceholder: "Search by item name or SKU...",
   no: "No.",
@@ -1484,6 +1489,9 @@ messages.mm.products = {
   addNewUnit: "ယူနစ်အသစ်ထည့်ရန်",
   addNewCategory: "အမျိုးအစားအသစ်ထည့်ရန်",
   lookupNameRequired: "အမည်ထည့်ပါ။",
+  bundleQuantityRequired: "သုညထက်ကြီးသော Bundle အရေအတွက် ထည့်ပါ။",
+  bundleQuantityPrecision: "လက်ရှိ အရေအတွက် အနည်းဆုံးအဆင့်မှာ",
+  bundlePrecisionSettings: "ပိုသေးသောအရေအတွက်အတွက် Settings တွင် ဒဿမအရေအတွက်ဖွင့်ပြီး အရေအတွက် ဒဿမနေရာ တိုးပါ။",
   searchPlaceholder: "အမည် သို့ SKU ဖြင့် ရှာရန်...",
   catalogManagement: "Catalog စီမံခန့်ခွဲမှု",
   masterInventory: "ကုန်ပစ္စည်း၊ ဝန်ဆောင်မှု နှင့် Bundle",
@@ -2040,6 +2048,18 @@ messages.en.customers = {
   loadFailed: "Load Failed",
   removed: "Customer removed",
   deleteFailed: "Delete failed",
+  labelOpeningBalance: "Previous Credit",
+  placeholderOpeningBalance: "Enter credit from before this system...",
+  openingRemaining: "Previous credit remaining",
+  salesCredit: "Sales credit",
+  openingBalanceHint: "Credit owed before using this system.",
+  openingBalancePaidHint: "Already paid",
+  openingBalanceInvalid: "Previous credit must be a valid non-negative amount.",
+  openingBalanceBelowPaid: "Previous credit cannot be below the amount already paid.",
+  openingBalanceAdjustmentReason: "Reason for credit change",
+  openingBalanceAdjustmentReasonPlaceholder: "Explain why this previous credit is changing...",
+  openingBalanceAdjustmentReasonHint: "This reason is saved in the customer audit trail.",
+  openingBalanceAdjustmentReasonRequired: "Provide a reason before changing previous credit.",
 };
 
 messages.mm.customers = {
@@ -2087,6 +2107,18 @@ messages.mm.customers = {
   loadFailed: "Data မရပါ",
   removed: "ဝယ်ယူသူကို ဖျက်ပြီးပါပြီ",
   deleteFailed: "ဖျက်မရပါ",
+  labelOpeningBalance: "ယခင်အကြွေး",
+  placeholderOpeningBalance: "စနစ်မသုံးမီက အကြွေးပမာဏ ထည့်ပါ...",
+  openingRemaining: "ယခင်အကြွေးကျန်",
+  salesCredit: "အရောင်းအကြွေး",
+  openingBalanceHint: "ဤစနစ်မသုံးမီက ရှိခဲ့သော အကြွေးပမာဏ ဖြစ်ပါသည်။",
+  openingBalancePaidHint: "ပေးချေပြီး",
+  openingBalanceInvalid: "ယခင်အကြွေးသည် သုည သို့မဟုတ် အပေါင်းကိန်းဖြစ်ရမည်။",
+  openingBalanceBelowPaid: "ယခင်အကြွေးသည် ပေးချေပြီးပမာဏထက် မနည်းရပါ။",
+  openingBalanceAdjustmentReason: "ယခင်အကြွေးကျန်မှတ်ချက်",
+  openingBalanceAdjustmentReasonPlaceholder: "ယခင်အကြွေးကျန်မှတ်ချက်ကို ရေးပါ...",
+  openingBalanceAdjustmentReasonHint: "ဤမှတ်ချက်ကို customer audit မှတ်တမ်းတွင် သိမ်းဆည်းပါမည်။",
+  openingBalanceAdjustmentReasonRequired: "ယခင်အကြွေးကျန်မှတ်ချက် ထည့်ပါ။",
 };
 
 messages.en.suppliers = {
@@ -2206,6 +2238,11 @@ messages.mm.suppliers = {
 };
 
 messages.en.expenses = {
+  paid: "Paid",
+  pending: "Pending",
+  paymentStatus: "Payment status",
+  allPaymentStatuses: "All payment statuses",
+  paymentMethod: "Payment method",
   title: "Day-to-day Expenses",
   subtitle: "Track and manage operational expenditures",
   addExpense: "Add Expense",
@@ -2240,6 +2277,11 @@ messages.en.expenses = {
 };
 
 messages.mm.expenses = {
+  paid: "ပေးချေပြီး",
+  pending: "ပေးချေရန်ကျန်",
+  paymentStatus: "ပေးချေမှုအခြေအနေ",
+  allPaymentStatuses: "ပေးချေမှုအခြေအနေအားလုံး",
+  paymentMethod: "ငွေပေးချေမှုနည်းလမ်း",
   title: "နေ့စဉ်အသုံးစရိတ်",
   subtitle: "လုပ်ငန်းတွင်းအထွေထွေအသုံးစရိတ်များကို စီမံခန့်ခွဲရန်",
   addExpense: "အသုံးစရိတ်အသစ်",
@@ -2687,3 +2729,91 @@ messages.mm.reportViews.consignment = {
   noPayouts: "ပေးချေမှုမှတ်တမ်း မရှိပါ",
   noCurrentStock: "လက်ရှိ Consignment Stock မရှိပါ"
 };
+
+
+messages.en.products.production = {
+  label: "Add Bundle as New Product (Production)",
+  warning: "Stock for the component items will be deducted in advance before the product is sold.",
+  branchNote: "Stock is calculated for your current branch. Services do not consume stock.",
+  unit: "Finished Product Unit",
+  selectUnit: "Select unit",
+  maximum: "Maximum Availability (Read-Only)",
+  quantity: "Production Quantity",
+  refresh: "Refresh availability",
+  calculating: "Calculating…",
+  unavailable: "Unavailable",
+  success: "Product produced successfully.",
+  availabilityFailed: "Could not calculate production availability. Please try again.",
+  saveFailed: "Could not produce the product. Please try again.",
+  branchRequired: "A production branch is required.",
+  componentsRequired: "Add at least one product component to calculate availability.",
+  branchMissing: "The production branch does not exist.",
+  componentQuantity: "Component quantities must be positive.",
+  serviceUnavailable: "A selected service is unavailable.",
+  invalidComponent: "Invalid production component.",
+  productUnavailable: "A component product is unavailable or has no base unit.",
+  invalidConversion: "A component unit conversion is invalid.",
+  componentPrecision: "Component consumption cannot exceed five decimal places in base units.",
+  namePriceRequired: "A product name and a non-negative selling price are required.",
+  unitRequired: "Select a unit for the produced product.",
+  stockChanged: "Component stock changed. Refresh availability and try again.",
+  physicalProductRequired: "Production requires at least one product with a positive component quantity.",
+  quantityInvalid: "Production quantity must be a positive whole number.",
+  insufficientStock: "Component stock is insufficient for this production quantity. Check the refreshed maximum availability.",
+  creationOnly: "Production is only available when creating a new product."
+};
+
+messages.mm.products.production = {
+  label: "Bundle ကို ကုန်ပစ္စည်းအသစ်အဖြစ် ထည့်ရန် (ထုတ်လုပ်မှု)",
+  warning: "ကုန်ပစ္စည်းကို မရောင်းချမီ ပါဝင်ပစ္စည်းများ၏ လက်ကျန်အရေအတွက်ကို ကြိုတင်နုတ်ယူမည်။",
+  branchNote: "လက်ရှိဆိုင်ခွဲ၏ ပစ္စည်းလက်ကျန်ဖြင့် တွက်ချက်ထားသည်။ ဝန်ဆောင်မှုများအတွက် ပစ္စည်းလက်ကျန် နုတ်ယူမည်မဟုတ်ပါ။",
+  unit: "ထုတ်လုပ်ပြီးကုန်ပစ္စည်း၏ ယူနစ်",
+  selectUnit: "ယူနစ်ရွေးပါ",
+  maximum: "အများဆုံး ထုတ်လုပ်နိုင်သည့် အရေအတွက် (ပြင်ဆင်၍မရပါ)",
+  quantity: "ယခုထုတ်လုပ်မည့် အရေအတွက်",
+  refresh: "ထုတ်လုပ်နိုင်သည့် အရေအတွက် ပြန်တွက်ရန်",
+  calculating: "တွက်ချက်နေသည်…",
+  unavailable: "မရရှိနိုင်ပါ",
+  success: "ကုန်ပစ္စည်းကို အောင်မြင်စွာ ထုတ်လုပ်ပြီးပါပြီ။",
+  availabilityFailed: "ထုတ်လုပ်နိုင်သည့် အရေအတွက်ကို မတွက်ချက်နိုင်ပါ။ ထပ်မံကြိုးစားပါ။",
+  saveFailed: "ကုန်ပစ္စည်းကို မထုတ်လုပ်နိုင်ပါ။ ထပ်မံကြိုးစားပါ။",
+  branchRequired: "ထုတ်လုပ်မည့် ဆိုင်ခွဲ လိုအပ်ပါသည်။",
+  componentsRequired: "ထုတ်လုပ်နိုင်သည့် အရေအတွက်တွက်ရန် အနည်းဆုံး ပါဝင်ကုန်ပစ္စည်းတစ်ခု ထည့်ပါ။",
+  branchMissing: "ထုတ်လုပ်မည့် ဆိုင်ခွဲ မရှိပါ။",
+  componentQuantity: "ပါဝင်ပစ္စည်းအရေအတွက်များသည် သုညထက် ကြီးရမည်။",
+  serviceUnavailable: "ရွေးထားသည့် ဝန်ဆောင်မှုတစ်ခုကို မရရှိနိုင်ပါ။",
+  invalidComponent: "ထုတ်လုပ်မှုတွင် ပါဝင်ပစ္စည်း မမှန်ကန်ပါ။",
+  productUnavailable: "ပါဝင်ကုန်ပစ္စည်းတစ်ခုကို မရရှိနိုင်ပါ သို့မဟုတ် အခြေခံယူနစ် မရှိပါ။",
+  invalidConversion: "ပါဝင်ပစ္စည်း၏ ယူနစ်ပြောင်းလဲမှု မမှန်ကန်ပါ။",
+  componentPrecision: "အသုံးပြုမည့် ပါဝင်ပစ္စည်းအရေအတွက်သည် အခြေခံယူနစ်ဖြင့် ဒဿမငါးနေရာထက် မပိုရပါ။",
+  namePriceRequired: "ကုန်ပစ္စည်းအမည်နှင့် သုည သို့မဟုတ် သုညထက်ကြီးသော ရောင်းဈေး လိုအပ်ပါသည်။",
+  unitRequired: "ထုတ်လုပ်မည့် ကုန်ပစ္စည်းအတွက် ယူနစ်ရွေးပါ။",
+  stockChanged: "ပါဝင်ပစ္စည်းလက်ကျန် ပြောင်းလဲသွားပါပြီ။ ထုတ်လုပ်နိုင်သည့် အရေအတွက်ကို ပြန်တွက်ပြီး ထပ်မံကြိုးစားပါ။",
+  physicalProductRequired: "ထုတ်လုပ်ရန် သုညထက်ကြီးသော အရေအတွက်ရှိသည့် ပါဝင်ကုန်ပစ္စည်း အနည်းဆုံးတစ်ခု လိုအပ်ပါသည်။",
+  quantityInvalid: "ထုတ်လုပ်မည့် အရေအတွက်သည် သုညထက်ကြီးသော ကိန်းပြည့် ဖြစ်ရမည်။",
+  insufficientStock: "ယခုထုတ်လုပ်မည့် အရေအတွက်အတွက် ပါဝင်ပစ္စည်းလက်ကျန် မလုံလောက်ပါ။ ပြန်တွက်ထားသည့် အများဆုံးထုတ်လုပ်နိုင်သော အရေအတွက်ကို စစ်ဆေးပါ။",
+  creationOnly: "ကုန်ပစ္စည်းအသစ် ဖန်တီးသည့်အခါမှသာ ထုတ်လုပ်မှုကို အသုံးပြုနိုင်ပါသည်။"
+};
+
+
+Object.assign(messages.en.products.production, {
+  produceMore: "Produce More",
+  recipeHint: "Your saved components are loaded. Review quantities per finished unit, then enter how many more units to produce. Changes to components will be saved with this production.",
+  recoveredRecipe: "Raw materials were recovered from the original production history. Review them and add any service components once; this recipe will be saved for future production.",
+  setupRecipe: "No saved recipe was found. Add the components once; future production will reuse them.",
+  recipeLoadFailed: "Could not load the production recipe. Please try again.",
+  unitChanged: "The finished product unit changed. Review the recipe and restore its original unit before producing.",
+  selfComponent: "A finished product cannot consume itself."
+});
+Object.assign(messages.mm.products.production, {
+  produceMore: "ထပ်မံထုတ်လုပ်ရန်",
+  recipeHint: "သိမ်းထားသော ပါဝင်ပစ္စည်းများကို ဖော်ပြထားသည်။ ကုန်ချောတစ်ခုအတွက် ပမာဏများကို စစ်ဆေးပြီး ထပ်မံထုတ်လုပ်မည့် အရေအတွက် ထည့်ပါ။ ပါဝင်ပစ္စည်းပြောင်းလဲမှုများကို ယခုထုတ်လုပ်မှုနှင့်အတူ သိမ်းဆည်းမည်။",
+  recoveredRecipe: "မူလထုတ်လုပ်မှုမှတ်တမ်းမှ ကုန်ကြမ်းများကို ပြန်လည်ရယူထားသည်။ စစ်ဆေးပြီး ဝန်ဆောင်မှုများပါလျှင် တစ်ကြိမ်ထည့်ပါ။ နောင်ထုတ်လုပ်မှုအတွက် ဤပါဝင်ပစ္စည်းစာရင်းကို သိမ်းဆည်းမည်။",
+  setupRecipe: "သိမ်းထားသော ပါဝင်ပစ္စည်းစာရင်း မတွေ့ပါ။ ပါဝင်ပစ္စည်းများကို တစ်ကြိမ်ထည့်ပါ။ နောင်ထုတ်လုပ်မှုများတွင် ပြန်သုံးနိုင်ပါမည်။",
+  recipeLoadFailed: "ထုတ်လုပ်မှုအတွက် ပါဝင်ပစ္စည်းစာရင်းကို မရယူနိုင်ပါ။ ထပ်မံကြိုးစားပါ။",
+  unitChanged: "ကုန်ချော၏ ယူနစ် ပြောင်းလဲသွားပါပြီ။ ပါဝင်ပစ္စည်းစာရင်းကို စစ်ဆေးပြီး မထုတ်လုပ်မီ မူလယူနစ်ကို ပြန်ထားပါ။",
+  selfComponent: "ထုတ်လုပ်မည့် ကုန်ချောကို ပါဝင်ကုန်ကြမ်းအဖြစ် ပြန်သုံး၍ မရပါ။"
+});
+
+Object.assign(messages.en.products.production, { produce: "Produce", badge: "Production" });
+Object.assign(messages.mm.products.production, { produce: "ထုတ်လုပ်ရန်", badge: "ထုတ်လုပ်မှု" });

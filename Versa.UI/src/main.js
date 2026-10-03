@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import './style.css' // Tailwind သုံးထားရင် ဒါလေး ထည့်ပါ
 import App from './App.vue'
+import { quantityInput } from './utils/quantityInput'
 import router from './router' // router ကို import လုပ်ပါ
 
 const theme = localStorage.getItem('app_theme') === 'dark' ? 'dark' : 'light'
@@ -8,6 +9,7 @@ document.documentElement.classList.add(theme === 'dark' ? 'theme-dark' : 'theme-
 document.documentElement.setAttribute('data-theme', theme)
 
 const app = createApp(App)
+app.directive('quantity', quantityInput)
 app.use(router) // router ကို အသုံးပြုရန် ပြောခြင်း
 app.mount('#app')
 

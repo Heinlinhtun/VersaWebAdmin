@@ -12,7 +12,7 @@
       <div class="text-right bg-white/5 p-3 rounded-lg border border-white/10">
         <div class="text-[9px] font-normal uppercase text-emerald-400 tracking-widest mb-1">{{ tx.stockStatus }}</div>
         <div class="text-xs font-normal font-mono text-emerald-50">{{ tx.operationalItems }}: {{ inventory.length }}</div>
-        <div class="text-xs font-normal font-mono text-emerald-50">{{ tx.totalQty }}: {{ formatNumber(totalStockQty) }}</div>
+        <div class="text-xs font-normal font-mono text-emerald-50">{{ tx.totalQty }}: {{ formatQuantity(totalStockQty) }}</div>
       </div>
     </div>
 
@@ -55,7 +55,7 @@
                     ? 'bg-rose-50 text-rose-600 border-rose-100 shadow-[0_0_10px_rgba(225,29,72,0.1)]'
                     : 'bg-slate-50 text-slate-600 border-slate-100'
                 ]">
-                  {{ formatNumber(valueOf(i, 'StockQty', 'stockQty', 0)) }}
+                  {{ formatQuantity(valueOf(i, 'StockQty', 'stockQty', 0)) }}
                 </span>
               </td>
               <td class="p-4 text-right tabular-nums text-slate-500">
@@ -95,6 +95,8 @@
 </template>
 
 <script setup>
+import { useQuantitySettings } from '../../composables/useQuantitySettings';
+const { formatQuantity } = useQuantitySettings();
 import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../services/api';
 import { useI18n } from '../../composables/useI18n';
