@@ -353,17 +353,13 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from '../composables/useI18n';
 import api from '../services/api';
+import { currentBusinessDateInput } from '../utils/businessDay';
 
 const { t } = useI18n();
 const router = useRouter();
 const branchId = localStorage.getItem('BranchId') || 0;
 const chartInterval = ref(7);
-const todayInputDate = () => {
-  const date = new Date();
-  const offset = date.getTimezoneOffset();
-  const localDate = new Date(date.getTime() - offset * 60 * 1000);
-  return localDate.toISOString().slice(0, 10);
-};
+const todayInputDate = () => currentBusinessDateInput();
 const selectedDate = ref(todayInputDate());
 
 const activeStat = ref('sales');

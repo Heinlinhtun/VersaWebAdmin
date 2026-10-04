@@ -142,6 +142,13 @@
                             </div>
                         </div>
 
+                        <div class="p-5 bg-blue-50 rounded-xl border border-blue-100">
+                            <label class="text-[10px] font-normal text-blue-800 uppercase tracking-widest">{{ t('settings.businessDayCutoff') }}</label>
+                            <p class="text-[11px] text-blue-600 mt-1 mb-3">{{ t('settings.businessDayCutoffDesc') }}</p>
+                            <input v-model="form.BusinessDayCutoffTime" type="time"
+                                class="p-3 bg-white border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-slate-700 tabular-nums">
+                        </div>
+
                         <div class="p-5 bg-white rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
                             <div>
                                 <label class="text-[10px] font-normal text-slate-500 uppercase tracking-widest">{{
@@ -222,7 +229,8 @@ const form = ref({
     ReceiptFontSize: 'Medium', // Default receipt font size
     PreferredPaperSize: '80mm',
     QuantityDecimalPlaces: 2,
-    UseDecimalQuantity: false
+    UseDecimalQuantity: false,
+    BusinessDayCutoffTime: '00:00'
 });
 
 // GET API: Settings Management
@@ -269,7 +277,8 @@ const fetchSettings = async () => {
                     ? (res.data.PreferredPaperSize ?? res.data.preferredPaperSize)
                     : '80mm',
                 QuantityDecimalPlaces: normalizeQuantityDecimals(res.data.QuantityDecimalPlaces ?? res.data.quantityDecimalPlaces),
-                UseDecimalQuantity: toBooleanSetting(res.data.UseDecimalQuantity ?? res.data.useDecimalQuantity)
+                UseDecimalQuantity: toBooleanSetting(res.data.UseDecimalQuantity ?? res.data.useDecimalQuantity),
+                BusinessDayCutoffTime: String(res.data.BusinessDayCutoffTime ?? res.data.businessDayCutoffTime ?? '00:00').slice(0, 5)
             };
             if (res.data.LogoData) {
                 logoPreview.value = res.data.LogoData;

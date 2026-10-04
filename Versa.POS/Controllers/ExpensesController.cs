@@ -72,7 +72,7 @@ namespace Versa.POS.Controllers
                 model.Amount,
                 model.IsPaid,
                 PaymentMethod = string.IsNullOrWhiteSpace(model.PaymentMethod) ? "Cash" : model.PaymentMethod,
-                ExpenseDate = model.ExpenseDate?.Date ?? DateTime.Now
+                ExpenseDate = model.ExpenseDate ?? DateTime.Now
             });
             return Ok(new { Message = "Expense recorded successfully." });
         }
@@ -115,7 +115,7 @@ namespace Versa.POS.Controllers
                 model.Amount,
                 model.IsPaid,
                 PaymentMethod = string.IsNullOrWhiteSpace(model.PaymentMethod) ? "Cash" : model.PaymentMethod,
-                ExpenseDate = model.ExpenseDate?.Date ?? DateTime.Now,
+                ExpenseDate = model.ExpenseDate ?? DateTime.Now,
                 BranchId = branchId,
                 id
             });

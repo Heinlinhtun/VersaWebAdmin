@@ -5,6 +5,7 @@ using MySqlConnector;
 using Versa.Core.Models;
 using Versa.Core.Models.Versa.Core.Models;
 using Versa.Core.Services;
+using Versa.POS.Services;
 
 namespace Versa.POS.Controllers
 {
@@ -1532,12 +1533,13 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
             await conn.OpenAsync();
             await EnsureStockAdjustmentLossColumnsAsync(conn);
             var scopedBranchId = ResolveBranchScope(branchId);
+            var range = fromDate.HasValue && toDate.HasValue
+                ? await BusinessDayService.GetRangeAsync(conn, fromDate.Value, toDate.Value)
+                : (BusinessDayRange?)null;
             
             string whereClause = "WHERE (@branchId IS NULL OR sa.BranchId = @branchId) AND sa.AdjustmentKind <> 'InventoryLoss'";
             if (fromDate.HasValue && toDate.HasValue)
             {
-                var start = fromDate.Value.Date;
-                var end = toDate.Value.Date.AddDays(1).AddTicks(-1);
                 whereClause += " AND sa.AdjustmentDate BETWEEN @start AND @end";
             }
 
@@ -1561,8 +1563,8 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
                 ORDER BY sa.AdjustmentDate DESC";
 
             var items = await conn.QueryAsync<dynamic>(sql, new { 
-                start = fromDate?.Date, 
-                end = toDate?.Date.AddDays(1).AddTicks(-1),
+                start = range?.Start,
+                end = range?.End,
                 branchId = scopedBranchId
             });
             return Ok(items);
@@ -1575,9 +1577,11 @@ VALUES (@SaleId, 'Service', NULL, NULL, @ServiceId, @BranchId, @Quantity, NULL, 
             await conn.OpenAsync();
             await EnsureStockAdjustmentLossColumnsAsync(conn);
             var scopedBranchId = ResolveBranchScope(branchId);
-
-            var start = fromDate?.Date;
-            var end = toDate?.Date.AddDays(1).AddTicks(-1);
+            var range = fromDate.HasValue && toDate.HasValue
+                ? await BusinessDayService.GetRangeAsync(conn, fromDate.Value, toDate.Value)
+                : (BusinessDayRange?)null;
+            var start = range?.Start;
+            var end = range?.End;
             const string sql = @"
 SELECT
     sa.AdjustmentId AS LossId,

@@ -980,7 +980,7 @@ const savePurchase = async () => {
     PaidAmount: Number(form.value.PaidAmount),
     PaymentMethod: form.value.PaymentMethod,
     PurchaseDate: form.value.PurchaseDate
-      ? new Date(form.value.PurchaseDate + 'T' + new Date().toTimeString().split(' ')[0]).toISOString()
+      ? `${form.value.PurchaseDate}T${new Date().toTimeString().split(' ')[0]}`
       : new Date().toISOString(),
     Remarks: form.value.Remarks,
     Items: form.value.Items.map(i => ({
@@ -1029,7 +1029,7 @@ const saveConsignment = async () => {
     PaidAmount: 0,
     PaymentMethod: '',
     PurchaseDate: form.value.PurchaseDate
-      ? new Date(form.value.PurchaseDate + 'T' + new Date().toTimeString().split(' ')[0]).toISOString()
+      ? `${form.value.PurchaseDate}T${new Date().toTimeString().split(' ')[0]}`
       : new Date().toISOString(),
     Remarks: form.value.Remarks,
     Items: form.value.Items.map(i => ({

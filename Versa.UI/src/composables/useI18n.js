@@ -93,6 +93,8 @@ const messages = {
       taxRate: "Tax Rate (%)",
       decimalQuantity: "Use Decimal Quantity",
       quantityDecimalPlaces: "Quantity decimal places",
+      businessDayCutoff: "Business day cut-off",
+      businessDayCutoffDesc: "Transactions at or after this time belong to the following business day. Set 00:00 to use calendar days.",
       decimalQuantityDesc:
         "Set quantity precision across sales, purchases, stock, returns and reports. Turn off for whole-number quantities. Prices and money totals are unchanged.",
       receiptFooter: "Receipt Footer Note",
@@ -453,6 +455,8 @@ const messages = {
       taxRate: "အခွန်နှုန်း (%)",
       decimalQuantity: "ဒဿမ အရေအတွက် သုံးမည်",
       quantityDecimalPlaces: "အရေအတွက် ဒဿမနေရာ",
+      businessDayCutoff: "တစ်ရက်တာစာရင်းပိတ်ချိန်",
+      businessDayCutoffDesc: "ဤအချိန်နှင့် တူညီသော သို့မဟုတ် နောက်ပိုင်းလုပ်ဆောင်မှုများကို နောက်လုပ်ငန်းနေ့အဖြစ် သတ်မှတ်ပါမည်။ 00:00 သတ်မှတ်လျှင် ပြက္ခဒိန်ရက်ကို သုံးပါမည်။",
       decimalQuantityDesc:
         "အရောင်း၊ အဝယ်၊ လက်ကျန်၊ ပြန်အမ်းမှုနှင့် အစီရင်ခံစာများ၏ အရေအတွက် ဒဿမနေရာ သတ်မှတ်ရန်။ ပိတ်ထားပါက ကိန်းပြည့်သာ သုံးပါမည်။ စျေးနှုန်းနှင့် ငွေစုစုပေါင်း မပြောင်းပါ။",
       receiptFooter: "ဘောင်ချာ Foot Notes",

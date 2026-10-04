@@ -104,6 +104,8 @@ const fetchAnalytics = async () => {
   try {
     const res = await api.get('/Reports/expense-analytics', {
       params: {
+        fromDate: props.filters.fromDate,
+        toDate: props.filters.toDate,
         branchId: props.filters.branchId
       }
     });

@@ -117,6 +117,7 @@ import ProfitReport from './reports/ProfitReport.vue';
 import ExpiredReport from './reports/ExpiredReport.vue';
 import AdjustmentReport from './reports/AdjustmentReport.vue';
 import InventoryLossReport from './reports/InventoryLossReport.vue';
+import { currentBusinessDateInput } from '../utils/businessDay';
 
 const activeTab = ref('sales');
 const { t } = useI18n();
@@ -142,7 +143,7 @@ const tx = computed(() => ({
   inventoryLoss: t('reports.inventoryLoss')
 }));
 
-const today = new Date().toISOString().substr(0, 10);
+const today = currentBusinessDateInput();
 const userRole = (localStorage.getItem('Role') || '').toLowerCase();
 const isAdmin = userRole === 'admin';
 const userBranchId = localStorage.getItem('BranchId');

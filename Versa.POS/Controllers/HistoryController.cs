@@ -5,6 +5,7 @@ using MySqlConnector;
 using Versa.Core.Models;
 using Versa.Core.Services;
 using Versa.POS.Controllers;
+using Versa.POS.Services;
 
 [Authorize]
 [Route("api/[controller]")]
@@ -42,9 +43,8 @@ WHERE poi.RemainingQuantity IS NULL");
     private string BuildDateFilter(string dateField = "s.SaleDate")
     {
         // Returns SQL fragment for date range filtering
-        return @"AND (@StartDate IS NULL OR DATE(" + dateField + @") >= @StartDate)
-    AND (@EndDate IS NULL OR DATE(" + dateField + @") <= @EndDate)
-    AND (@Date IS NULL OR DATE(" + dateField + @") = @Date)";
+        return @"AND (@StartDate IS NULL OR " + dateField + @" >= @StartDate)
+    AND (@EndDate IS NULL OR " + dateField + @" <= @EndDate)";
     }
 
     private static async Task EnsureSalesOrderStatusColumnAsync(MySqlConnection conn)
@@ -69,6 +69,7 @@ WHERE TABLE_SCHEMA = DATABASE()
         await conn.OpenAsync();
         await conn.ExecuteAsync("SET time_zone = '+06:30'");
         await EnsureSalesOrderStatusColumnAsync(conn);
+        var businessDayRange = await BusinessDayService.GetFilterAsync(conn, filter.Date, filter.StartDate, filter.EndDate);
 
         int? bId = User.IsInRole("Admin") ? filter.BranchId : int.Parse(User.FindFirst("BranchId").Value);
 
@@ -147,9 +148,8 @@ WHERE TABLE_SCHEMA = DATABASE()
             BranchId = bId,
             Query = filter.Query ?? "",
             CustomerName = CleanText(filter.CustomerName),
-            Date = CleanDate(filter.Date),
-            StartDate = CleanDate(filter.StartDate),
-            EndDate = CleanDate(filter.EndDate),
+            StartDate = businessDayRange.Start,
+            EndDate = businessDayRange.End,
             OrderStatus = CleanText(filter.OrderStatus),
             Limit = filter.Limit,
             Offset = (filter.Page - 1) * filter.Limit
@@ -166,6 +166,7 @@ WHERE TABLE_SCHEMA = DATABASE()
     public async Task<IActionResult> GetPurchaseHistory([FromQuery] HistoryFilter filter)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+        var businessDayRange = await BusinessDayService.GetFilterAsync(conn, filter.Date, filter.StartDate, filter.EndDate);
 
         // Role-based Branch Filtering
         int? bId = User.IsInRole("Admin") ? filter.BranchId : int.Parse(User.FindFirst("BranchId").Value);
@@ -210,9 +211,8 @@ WHERE TABLE_SCHEMA = DATABASE()
             BranchId = bId,
             Query = filter.Query ?? "",
             SupplierName = CleanText(filter.SupplierName),
-            Date = CleanDate(filter.Date),
-            StartDate = CleanDate(filter.StartDate),
-            EndDate = CleanDate(filter.EndDate),
+            StartDate = businessDayRange.Start,
+            EndDate = businessDayRange.End,
             Limit = filter.Limit,
             Offset = (filter.Page - 1) * filter.Limit
         });
@@ -288,6 +288,7 @@ WHERE TABLE_SCHEMA = DATABASE()
     public async Task<IActionResult> GetReturnHistory([FromQuery] HistoryFilter filter)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+        var businessDayRange = await BusinessDayService.GetFilterAsync(conn, filter.Date, filter.StartDate, filter.EndDate);
         int? bId = User.IsInRole("Admin") ? filter.BranchId : int.Parse(User.FindFirst("BranchId").Value);
 
         string dateFilter = BuildDateFilter("returnDate");
@@ -317,9 +318,8 @@ WHERE TABLE_SCHEMA = DATABASE()
         var list = await conn.QueryAsync<dynamic>(sql, new
         {
             BranchId = bId,
-            Date = CleanDate(filter.Date),
-            StartDate = CleanDate(filter.StartDate),
-            EndDate = CleanDate(filter.EndDate),
+            StartDate = businessDayRange.Start,
+            EndDate = businessDayRange.End,
             Limit = filter.Limit,
             Offset = (filter.Page - 1) * filter.Limit
         });
@@ -330,6 +330,7 @@ WHERE TABLE_SCHEMA = DATABASE()
     public async Task<IActionResult> GetAdjustmentHistory([FromQuery] HistoryFilter filter)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+        var businessDayRange = await BusinessDayService.GetFilterAsync(conn, filter.Date, filter.StartDate, filter.EndDate);
         int? bId = User.IsInRole("Admin") ? filter.BranchId : int.Parse(User.FindFirst("BranchId").Value);
 
         string dateFilter = BuildDateFilter("a.AdjustmentDate");
@@ -353,9 +354,8 @@ WHERE TABLE_SCHEMA = DATABASE()
         var multi = await conn.QueryMultipleAsync(sql, new
         {
             BranchId = bId,
-            Date = CleanDate(filter.Date),
-            StartDate = CleanDate(filter.StartDate),
-            EndDate = CleanDate(filter.EndDate),
+            StartDate = businessDayRange.Start,
+            EndDate = businessDayRange.End,
             Limit = filter.Limit,
             Offset = (filter.Page - 1) * filter.Limit
         });
@@ -371,6 +371,7 @@ WHERE TABLE_SCHEMA = DATABASE()
     public async Task<IActionResult> GetTransferHistory([FromQuery] HistoryFilter filter)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+        var businessDayRange = await BusinessDayService.GetFilterAsync(conn, filter.Date, filter.StartDate, filter.EndDate);
         int currentId = int.Parse(User.FindFirst("BranchId").Value);
         bool isAdmin = User.IsInRole("Admin");
 
@@ -404,9 +405,8 @@ WHERE TABLE_SCHEMA = DATABASE()
             IsAdmin = isAdmin,
             CurrentId = currentId,
             BranchId = filter.BranchId,
-            Date = CleanDate(filter.Date),
-            StartDate = CleanDate(filter.StartDate),
-            EndDate = CleanDate(filter.EndDate),
+            StartDate = businessDayRange.Start,
+            EndDate = businessDayRange.End,
             Limit = filter.Limit,
             Offset = (filter.Page - 1) * filter.Limit
         });

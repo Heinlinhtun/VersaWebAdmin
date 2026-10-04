@@ -43,6 +43,8 @@ namespace Versa.POS.Controllers
                 model.PreferredPaperSize = model.PreferredPaperSize is "A4" or "A5" or "80mm"
                     ? model.PreferredPaperSize
                     : "80mm";
+                if (model.BusinessDayCutoffTime < TimeSpan.Zero || model.BusinessDayCutoffTime >= TimeSpan.FromDays(1))
+                    return BadRequest(new { Message = "Business-day cut-off time must be between 00:00 and 23:59." });
 
                 // 1. Logo Resize & Binary Logic
                 if (logo != null)
@@ -77,15 +79,16 @@ namespace Versa.POS.Controllers
                         LogoSize = @LogoSize,
                         ReceiptFontSize = @ReceiptFontSize,
                         PreferredPaperSize = @PreferredPaperSize,
-                        UseDecimalQuantity = @UseDecimalQuantity, QuantityDecimalPlaces = @QuantityDecimalPlaces
+                        UseDecimalQuantity = @UseDecimalQuantity, QuantityDecimalPlaces = @QuantityDecimalPlaces,
+                        BusinessDayCutoffTime = @BusinessDayCutoffTime
                        WHERE SettingId = @SettingId OR SettingId > 0 LIMIT 1";
 
                 var rowsAffected = await conn.ExecuteAsync(sql, model);
 
                 if (rowsAffected == 0 && await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Settings") == 0)
                 {
-                    string insertSql = @"INSERT INTO Settings (ShopName, Address, Phone, ReceiptFooter, TaxRate, CurrencySymbol, LogoData, LogoSize, ReceiptFontSize, PreferredPaperSize, UseDecimalQuantity, QuantityDecimalPlaces)
-                                 VALUES (@ShopName, @Address, @Phone, @ReceiptFooter, @TaxRate, @CurrencySymbol, @LogoData, @LogoSize, @ReceiptFontSize, @PreferredPaperSize, @UseDecimalQuantity, @QuantityDecimalPlaces)";
+                    string insertSql = @"INSERT INTO Settings (ShopName, Address, Phone, ReceiptFooter, TaxRate, CurrencySymbol, LogoData, LogoSize, ReceiptFontSize, PreferredPaperSize, UseDecimalQuantity, QuantityDecimalPlaces, BusinessDayCutoffTime)
+                                 VALUES (@ShopName, @Address, @Phone, @ReceiptFooter, @TaxRate, @CurrencySymbol, @LogoData, @LogoSize, @ReceiptFontSize, @PreferredPaperSize, @UseDecimalQuantity, @QuantityDecimalPlaces, @BusinessDayCutoffTime)";
                     await conn.ExecuteAsync(insertSql, model);
                 }
 
@@ -175,6 +178,14 @@ namespace Versa.POS.Controllers
             if (preferredPaperSizeExists == 0)
             {
                 await conn.ExecuteAsync("ALTER TABLE Settings ADD COLUMN PreferredPaperSize VARCHAR(10) NOT NULL DEFAULT '80mm'");
+            }
+
+            var cutoffExists = await conn.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Settings' AND COLUMN_NAME = 'BusinessDayCutoffTime'");
+            if (cutoffExists == 0)
+            {
+                await conn.ExecuteAsync("ALTER TABLE Settings ADD COLUMN BusinessDayCutoffTime TIME NOT NULL DEFAULT '00:00:00'");
             }
         }
     }

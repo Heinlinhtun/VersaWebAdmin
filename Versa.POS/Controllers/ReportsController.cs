@@ -4,6 +4,7 @@ using MySqlConnector;
 using System.Dynamic;
 using Versa.Core.Services;
 using Versa.POS.Controllers;
+using Versa.POS.Services;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -283,8 +284,9 @@ WHERE TABLE_SCHEMA = DATABASE()
     public async Task<IActionResult> GetSalesSummary([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
-        var start = fromDate.Date;
-        var end = toDate.Date.AddDays(1).AddTicks(-1);
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         string sql = @"
@@ -338,8 +340,9 @@ WHERE TABLE_SCHEMA = DATABASE()
     public async Task<IActionResult> GetSalesList([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
-        var start = fromDate.Date;
-        var end = toDate.Date.AddDays(1).AddTicks(-1);
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         // Discount မပါတဲ့ အရောင်းတွေပါ ထွက်လာဖို့ WHERE clause ကို ပြင်ရန်
@@ -413,8 +416,9 @@ WHERE TABLE_SCHEMA = DATABASE()
     public async Task<IActionResult> GetSalesItems([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
-        var start = fromDate.Date;
-        var end = toDate.Date.AddDays(1).AddTicks(-1);
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         string sql = @"
@@ -463,8 +467,9 @@ WHERE TABLE_SCHEMA = DATABASE()
     public async Task<IActionResult> GetCreditCollections([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
-        var start = fromDate.Date;
-        var end = toDate.Date.AddDays(1).AddTicks(-1);
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         string sql = @"
@@ -499,8 +504,9 @@ WHERE TABLE_SCHEMA = DATABASE()
     {
         // ၂။ ရလာတဲ့ Database Name နဲ့ Connection String ကို တောင်းပါ
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
-        var start = fromDate.Date;
-        var end = toDate.Date.AddDays(1).AddTicks(-1);
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         try
@@ -548,8 +554,9 @@ WHERE TABLE_SCHEMA = DATABASE()
     public async Task<IActionResult> GetPurchaseItems([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId, [FromQuery] int? supplierId)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
-        var start = fromDate.Date;
-        var end = toDate.Date.AddDays(1).AddTicks(-1);
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         try
@@ -599,8 +606,9 @@ WHERE TABLE_SCHEMA = DATABASE()
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
         await EnsureSaleReturnsPaymentMethodColumnAsync(conn);
-        var start = fromDate.Date;
-        var end = toDate.Date.AddDays(1).AddTicks(-1);
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         var paymentRows = await conn.QueryAsync<(int SaleId, string Method, decimal Amount)>(@"
@@ -743,9 +751,9 @@ WHERE TABLE_SCHEMA = DATABASE()
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
         var scopedBranchId = ResolveBranchScope(branchId);
 
-        // ၁။ DateTime Range ကို တစ်ရက်အပြည့်ရအောင် ညှိခြင်း (အရေးကြီးဆုံး)
-        var start = fromDate.Date; // 00:00:00
-        var end = toDate.Date.AddDays(1).AddTicks(-1); // 23:59:59
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
 
         // ၂။ MySQL အတွက် EXISTS ကို Boolean (1/0) သေချာဖြစ်အောင် CAST လုပ်ခြင်း
         string sql = @"
@@ -800,8 +808,9 @@ WHERE TABLE_SCHEMA = DATABASE()
     public async Task<IActionResult> GetConsignmentReport([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
-        var start = fromDate.Date;
-        var end = toDate.Date.AddDays(1).AddTicks(-1);
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         const string summarySql = @"
@@ -1031,8 +1040,9 @@ ORDER BY c.OrderDate DESC, ci.ConsignItemId DESC";
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
         await EnsureBundleItemsSupportsServicesAsync(conn);
         await EnsureStockAdjustmentLossColumnsAsync(conn);
-        var start = fromDate.Date;
-        var end = toDate.Date.AddDays(1).AddTicks(-1);
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         // Keep the main profit aggregation on the last known-good query path.
@@ -1429,8 +1439,9 @@ WHERE AdjustmentKind = 'InventoryLoss'
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
         await EnsureBundleItemsSupportsServicesAsync(conn);
-        var start = fromDate.Date;
-        var end = toDate.Date.AddDays(1).AddTicks(-1);
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         const string sql = @"
@@ -1624,8 +1635,9 @@ WHERE AdjustmentKind = 'InventoryLoss'
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
         await EnsureBundleItemsSupportsServicesAsync(conn);
         await EnsureStockAdjustmentLossColumnsAsync(conn);
-        var start = fromDate.Date;
-        var end = toDate.Date.AddDays(1).AddTicks(-1);
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         // Use the same net revenue / net COGS logic as GetProfitReport,
@@ -1772,16 +1784,20 @@ WHERE AdjustmentKind = 'InventoryLoss'
     }
 
     [HttpGet("expense-analytics")]
-    public async Task<IActionResult> GetExpenseAnalytics([FromQuery] int? branchId)
+    public async Task<IActionResult> GetExpenseAnalytics([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+        var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
+        var start = range.Start;
+        var end = range.End;
         var scopedBranchId = ResolveBranchScope(branchId);
 
         // ၁။ Category အလိုက် စုစုပေါင်း (Pie Chart visual အတွက်)
         string categorySql = @"
         SELECT Category, SUM(Amount) as Total 
         FROM Expenses 
-        WHERE (@branchId IS NULL OR BranchId = @branchId)
+        WHERE ExpenseDate BETWEEN @start AND @end
+        AND (@branchId IS NULL OR BranchId = @branchId)
         GROUP BY Category 
         ORDER BY Total DESC";
 
@@ -1789,13 +1805,14 @@ WHERE AdjustmentKind = 'InventoryLoss'
         string monthlySql = @"
         SELECT DATE_FORMAT(ExpenseDate, '%Y-%m') as Month, SUM(Amount) as Total 
         FROM Expenses 
-        WHERE (@branchId IS NULL OR BranchId = @branchId)
-        AND ExpenseDate >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+        WHERE ExpenseDate BETWEEN @start AND @end
+        AND (@branchId IS NULL OR BranchId = @branchId)
         GROUP BY Month 
         ORDER BY Month ASC";
 
-        var categories = (await conn.QueryAsync<dynamic>(categorySql, new { branchId = scopedBranchId })).ToList();
-        var monthly = (await conn.QueryAsync<dynamic>(monthlySql, new { branchId = scopedBranchId })).ToList();
+        var parameters = new { start, end, branchId = scopedBranchId };
+        var categories = (await conn.QueryAsync<dynamic>(categorySql, parameters)).ToList();
+        var monthly = (await conn.QueryAsync<dynamic>(monthlySql, parameters)).ToList();
 
         return Ok(new { categories, monthly });
     }

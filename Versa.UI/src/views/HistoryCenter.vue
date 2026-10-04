@@ -1617,13 +1617,26 @@ const printFromDetail = async (preOpenedWindow = null) => {
         <script>
           (function () {
             var autoPrintTimer;
+            function returnToApp() {
+              try {
+                if (window.opener && !window.opener.closed) window.opener.focus();
+              } catch (_) { }
+            }
+            function closePrintWindow() {
+              returnToApp();
+              window.close();
+            }
             function printReceipt() {
               clearTimeout(autoPrintTimer);
               window.focus();
               window.print();
             }
             document.getElementById('history-print-button').addEventListener('click', printReceipt);
-            document.getElementById('history-close-button').addEventListener('click', function () { window.close(); });
+            document.getElementById('history-close-button').addEventListener('click', closePrintWindow);
+            // Chromium fires afterprint whether the user prints or cancels the preview.
+            // Closing this child window releases its modal relationship with the desktop app.
+            window.addEventListener('afterprint', closePrintWindow);
+            window.addEventListener('beforeunload', returnToApp);
             window.onload = function () {
               autoPrintTimer = setTimeout(printReceipt, 200);
             };
@@ -2455,15 +2468,23 @@ const buildCsvPayload = (tab, sourceData) => {
       csvValueOf(item, 'TotalAmount', 'totalAmount', 0)
     ]);
   } else if (tab === 'return') {
-    headers = [t('history.dateTime'), t('history.category'), t('history.productName'), t('history.qty'), t('history.refund'), t('history.reason')];
-    rows = sourceData.map(item => [
-      formatDateTime(csvValueOf(item, 'ReturnDate', 'returnDate')),
-      csvValueOf(item, 'ReturnType', 'returnType'),
-      csvValueOf(item, 'ProductName', 'productName'),
-      csvValueOf(item, 'Quantity', 'quantity', 0),
-      csvValueOf(item, 'RefundAmount', 'refundAmount', 0),
-      csvValueOf(item, 'Reason', 'reason')
-    ]);
+    headers = [t('history.dateTime'), t('history.voucherNo') || 'Voucher No', t('history.category'), t('history.productName'), t('history.qty'), t('history.refund'), t('history.reason')];
+    rows = sourceData.map(item => {
+      const returnType = csvValueOf(item, 'ReturnType', 'returnType');
+      const voucherNo = returnType === 'Sale'
+        ? `SA-${String(csvValueOf(item, 'SaleId', 'saleId', 0)).padStart(7, '0')}`
+        : `PO-${String(csvValueOf(item, 'POId', 'poId', 0)).padStart(7, '0')}`;
+
+      return [
+        formatDateTime(csvValueOf(item, 'ReturnDate', 'returnDate')),
+        voucherNo,
+        returnType,
+        csvValueOf(item, 'ProductName', 'productName'),
+        csvValueOf(item, 'Quantity', 'quantity', 0),
+        csvValueOf(item, 'RefundAmount', 'refundAmount', 0),
+        csvValueOf(item, 'Reason', 'reason')
+      ];
+    });
   } else if (tab === 'adjustment') {
     headers = [t('history.dateTime'), t('history.product'), t('history.type'), t('history.qty'), t('history.reason')];
     rows = sourceData.map(item => [

@@ -2,6 +2,7 @@ using Dapper;
 using Microsoft.AspNetCore.Mvc;
 using MySqlConnector;
 using Versa.Core.Services;
+using Versa.POS.Services;
 
 namespace Versa.POS.Controllers
 {
@@ -45,6 +46,10 @@ WHERE poi.RemainingQuantity IS NULL");
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
             await EnsurePurchaseBatchRemainingColumnAsync(conn);
             var selectedDate = ResolveDashboardDate(date);
+            var cutoff = await BusinessDayService.GetCutoffAsync(conn);
+            var dayRange = BusinessDayService.CreateRange(DateTime.Parse(selectedDate), DateTime.Parse(selectedDate), cutoff);
+            var chartRange = BusinessDayService.CreateRange(DateTime.Parse(selectedDate).AddDays(-days + 1), DateTime.Parse(selectedDate), cutoff);
+            var businessDateOffsetSeconds = cutoff == TimeSpan.Zero ? 0 : (int)(TimeSpan.FromDays(1) - cutoff).TotalSeconds;
 
             // ၁။ ဒီနေ့အရောင်းနှင့် အကြွေးစာရင်းချုပ်
             string salesSql = @"
@@ -54,18 +59,18 @@ WHERE poi.RemainingQuantity IS NULL");
                     IFNULL(SUM(DueAmount), 0) as todayCredit,
                     COUNT(SaleId) as invoiceCount
                 FROM Sales 
-                WHERE BranchId = @branchId AND DATE(SaleDate) = @selectedDate";
+                WHERE BranchId = @branchId AND SaleDate BETWEEN @start AND @end";
 
-            var salesSummary = await conn.QueryFirstOrDefaultAsync<dynamic>(salesSql, new { branchId, selectedDate });
+            var salesSummary = await conn.QueryFirstOrDefaultAsync<dynamic>(salesSql, new { branchId, start = dayRange.Start, end = dayRange.End });
 
             // ၂။ ဒီနေ့အမြတ် (Gross Profit)
             string profitSql = @"
                 SELECT IFNULL(SUM((si.UnitPrice - si.CostPrice) * si.Quantity), 0)
                 FROM SaleItems si
                 JOIN Sales s ON si.SaleId = s.SaleId
-                WHERE s.BranchId = @branchId AND DATE(s.SaleDate) = @selectedDate";
+                WHERE s.BranchId = @branchId AND s.SaleDate BETWEEN @start AND @end";
 
-            decimal grossProfit = await conn.ExecuteScalarAsync<decimal>(profitSql, new { branchId, selectedDate });
+            decimal grossProfit = await conn.ExecuteScalarAsync<decimal>(profitSql, new { branchId, start = dayRange.Start, end = dayRange.End });
 
             // ၃။ ပစ္စည်းလက်ကျန်နည်းနေသည့် List
             string stockAlertSql = @"
@@ -91,8 +96,8 @@ WHERE poi.RemainingQuantity IS NULL");
             int activeCustomers = await conn.ExecuteScalarAsync<int>(activeCustomersSql);
 
             // ၆။ ဒီနေ့အသုံးစရိတ် (Today's Expenses)
-            string expensesSql = "SELECT IFNULL(SUM(Amount), 0) FROM Expenses WHERE BranchId = @branchId AND DATE(ExpenseDate) = @selectedDate";
-            decimal todayExpenses = await conn.ExecuteScalarAsync<decimal>(expensesSql, new { branchId, selectedDate });
+            string expensesSql = "SELECT IFNULL(SUM(Amount), 0) FROM Expenses WHERE BranchId = @branchId AND ExpenseDate BETWEEN @start AND @end";
+            decimal todayExpenses = await conn.ExecuteScalarAsync<decimal>(expensesSql, new { branchId, start = dayRange.Start, end = dayRange.End });
  
             // ၇။ သက်တမ်းကုန်ခါနီး ပစ္စည်းများ (Expiring Soon - based on product-specific AlertDays)
             string expirySoonSql = @"
@@ -114,12 +119,12 @@ WHERE poi.RemainingQuantity IS NULL");
 
             // ၇။ ရက်သတ္တပတ်အရောင်း Analytics (Last 7 Days)
             string chartSql = @"
-                SELECT DATE(SaleDate) as `date`, SUM(TotalAmount) as total 
+                SELECT DATE(DATE_ADD(SaleDate, INTERVAL @businessDateOffsetSeconds SECOND)) as `date`, SUM(TotalAmount) as total
                 FROM Sales 
-                WHERE BranchId = @branchId AND SaleDate >= DATE_SUB(CURDATE(), INTERVAL @days DAY) 
-                GROUP BY DATE(SaleDate) 
+                WHERE BranchId = @branchId AND SaleDate BETWEEN @chartStart AND @chartEnd
+                GROUP BY DATE(DATE_ADD(SaleDate, INTERVAL @businessDateOffsetSeconds SECOND))
                 ORDER BY `date` ASC";
-            var salesAnalyticsList = (await conn.QueryAsync<dynamic>(chartSql, new { branchId, days })).ToList();
+            var salesAnalyticsList = (await conn.QueryAsync<dynamic>(chartSql, new { branchId, chartStart = chartRange.Start, chartEnd = chartRange.End, businessDateOffsetSeconds })).ToList();
 
             // ၈။ လတ်တလော ဆောင်ရွက်ချက်များ (Recent Activity)
             string activitySql = @"
@@ -201,17 +206,18 @@ WHERE poi.RemainingQuantity IS NULL");
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
             var selectedDate = ResolveDashboardDate(date);
+            var range = await BusinessDayService.GetRangeAsync(conn, DateTime.Parse(selectedDate), DateTime.Parse(selectedDate));
             string sql = @"
                 SELECT p.Name as name, u.UnitName as UnitName, SUM(si.Quantity) as totalQuantity, SUM(si.SubTotal) as totalAmount
                 FROM SaleItems si
                 JOIN Sales s ON si.SaleId = s.SaleId
                 JOIN Products p ON si.ProductId = p.ProductId
                 LEFT JOIN Units u ON si.UnitId = u.UnitId
-                WHERE s.BranchId = @branchId AND DATE(s.SaleDate) = @selectedDate
+                WHERE s.BranchId = @branchId AND s.SaleDate BETWEEN @start AND @end
                 GROUP BY p.ProductId, p.Name, u.UnitName
                 ORDER BY totalAmount DESC";
 
-            var result = await conn.QueryAsync<dynamic>(sql, new { branchId, selectedDate });
+            var result = await conn.QueryAsync<dynamic>(sql, new { branchId, start = range.Start, end = range.End });
             return Ok(result);
         }
 
@@ -220,15 +226,16 @@ WHERE poi.RemainingQuantity IS NULL");
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
             var selectedDate = ResolveDashboardDate(date);
+            var range = await BusinessDayService.GetRangeAsync(conn, DateTime.Parse(selectedDate), DateTime.Parse(selectedDate));
             string sql = @"
                 SELECT Title as name, SUM(Amount) as totalAmount
                 FROM Expenses
-                WHERE BranchId = @branchId AND DATE(ExpenseDate) = @selectedDate
+                WHERE BranchId = @branchId AND ExpenseDate BETWEEN @start AND @end
                 GROUP BY Title
                 ORDER BY totalAmount DESC
                 LIMIT 10";
 
-            var result = await conn.QueryAsync<dynamic>(sql, new { branchId, selectedDate });
+            var result = await conn.QueryAsync<dynamic>(sql, new { branchId, start = range.Start, end = range.End });
             return Ok(result);
         }
 

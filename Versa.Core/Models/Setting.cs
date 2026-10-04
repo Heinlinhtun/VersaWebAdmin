@@ -19,5 +19,6 @@ namespace Versa.Core.Models
         public string PreferredPaperSize { get; set; } = "80mm";
         public bool UseDecimalQuantity { get; set; } = false;
         public int QuantityDecimalPlaces { get; set; } = 2;
+        public TimeSpan BusinessDayCutoffTime { get; set; } = TimeSpan.Zero;
     }
 }

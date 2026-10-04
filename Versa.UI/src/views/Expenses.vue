@@ -418,7 +418,7 @@ const saveExpense = async () => {
       // For new expenses, include current time in the date
       const datePart = form.value.ExpenseDate || todayInput();
       payload.ExpenseDate = datePart
-        ? new Date(datePart + 'T' + new Date().toTimeString().split(' ')[0]).toISOString()
+        ? `${datePart}T${new Date().toTimeString().split(' ')[0]}`
         : new Date().toISOString();
     } else {
       form.value.ExpenseDate = form.value.ExpenseDate || todayInput();

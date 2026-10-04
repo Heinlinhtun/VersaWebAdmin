@@ -92,7 +92,7 @@ WHERE poi.RemainingQuantity IS NULL",
                 else if (paid < total) poStatus = "Partial";
                 else poStatus = "Paid";
 
-                var purchaseDate = model.PurchaseDate?.Date ?? DateTime.Now;
+                var purchaseDate = model.PurchaseDate ?? DateTime.Now;
 
                 // ၂။ Purchase Order (Voucher Master) သွင်းခြင်း
                 string purchaseSql = @"INSERT INTO PurchaseOrders (SupplierId, BranchId, TotalAmount, PaidAmount, Status, Remarks, OrderDate) 
@@ -441,7 +441,7 @@ WHERE poi.RemainingQuantity IS NULL",
                 decimal newDue = Math.Max(0, total - newPaid);
                 int oldSupplierId = (int)oldMaster.SupplierId;
                 string status = newPaid <= 0 ? "Unpaid" : (newPaid < total ? "Partial" : "Paid");
-                var orderDate = model.PurchaseDate?.Date ?? ((DateTime)oldMaster.OrderDate).Date;
+                var orderDate = model.PurchaseDate ?? (DateTime)oldMaster.OrderDate;
                 string invoiceNo = $"PU{id:D7}";
                 string method = string.IsNullOrWhiteSpace(model.PaymentMethod) ? "Cash" : model.PaymentMethod.Trim();
 
