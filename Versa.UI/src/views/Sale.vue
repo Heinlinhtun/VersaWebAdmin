@@ -252,8 +252,15 @@
             <div v-if="item.itemType !== 'QuickSale'"
               :class="catalogView === 'grid' ? 'mt-1 sm:mt-3 pt-1 sm:pt-2 border-t border-dashed border-gray-100' : 'shrink-0 gap-4 sm:min-w-[135px]'"
               class="flex flex-wrap gap-1 justify-between items-end break-words">
-              <div class="text-blue-700 font-semibold text-xs sm:text-[15px]">{{ formatNumber(item.SalePrice) }} <small
-                  class="text-[9px] sm:text-[10px] font-normal">{{ currencySymbol }}</small></div>
+              <div>
+                <div class="text-blue-700 font-semibold text-xs sm:text-[15px]">{{ formatNumber(item.SalePrice) }} <small
+                    class="text-[9px] sm:text-[10px] font-normal">{{ currencySymbol }}</small></div>
+                <div v-if="canShowLatestPurchasePrice && item.itemType === 'Product' && item.LatestPurchasePrice != null"
+                  class="mt-0.5 text-[8px] sm:text-[9px] font-normal text-amber-700 tabular-nums">
+                  {{ t('history.latestPurchasePrice') }}: {{ formatNumber(item.LatestPurchasePrice) }}
+                  <small class="font-normal">{{ currencySymbol }}</small>
+                </div>
+              </div>
               <div class="bg-gray-100 text-[8px] sm:text-[9px] px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-normal text-gray-400 uppercase">
                 {{ item.itemType === 'Product' ? item.UnitName : t('sale.fixedUnit') }}
               </div>
@@ -1349,6 +1356,7 @@ import { normalizeReceiptPayments, receiptUnitName } from '../utils/receiptData'
 import androidBridge from '../services/androidBridge';
 const { addToast } = useToast();
 const { t, locale } = useI18n();
+const isAdmin = computed(() => localStorage.getItem('Role') === 'Admin');
 const supportsEpsonAssistant = isAppleMobile() && !androidBridge.isAvailable();
 const applePrintMethod = ref(localStorage.getItem('AppleReceiptPrintMethod') === 'epson' ? 'epson' : 'standard');
 const preparingEpson = ref(false);
@@ -1480,6 +1488,9 @@ const applyShopSettings = (settings = {}) => {
   applyQuantitySettings(shopInfo.value);
 };
 const shopInfo = ref(readCachedShopSettings());
+const canShowLatestPurchasePrice = computed(() => isAdmin.value && toBooleanSetting(
+  shopInfo.value.ShowLatestPurchasePrice ?? shopInfo.value.showLatestPurchasePrice
+));
 const receiptFontSizeMap = { Small: { body: 10, h1: 16, h2: 14, small: 8, tiny: 7, footer: 9, total: 10 }, Medium: { body: 13, h1: 20, h2: 18, small: 11, tiny: 9, footer: 11, total: 12 }, Large: { body: 16, h1: 26, h2: 22, small: 14, tiny: 11, footer: 14, total: 15 } };
 const receiptFont = computed(() => receiptFontSizeMap[shopInfo.value.ReceiptFontSize] || receiptFontSizeMap.Medium);
 const currencySymbol = computed(() => shopInfo.value.CurrencySymbol || 'Ks');
@@ -3507,17 +3518,6 @@ const printFromPreview = async () => {
 
   if (androidBridge.isAndroid()) {
     if (isThermal) {
-      const blob = await capturePreviewElement();
-      if (blob) {
-        const imageData = await blobToDataUrl(blob);
-        const imagePrintResult = androidBridge.printImage(imageData);
-        if (imagePrintResult?.ok) {
-          addToast(imagePrintResult.message || t('history.printPopupOpened') || 'Receipt sent to printer.', 'success');
-          return;
-        }
-        console.warn('[PrintInvoice] Android image print failed:', imagePrintResult?.message || imagePrintResult);
-      }
-
       const receiptText = capturedReceiptText.value || buildReceiptText(lastSaleNo.value, { width: 38 });
       await printWithAndroidIfPossible(receiptText, true);
       return;

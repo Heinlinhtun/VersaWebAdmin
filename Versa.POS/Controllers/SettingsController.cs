@@ -80,6 +80,7 @@ namespace Versa.POS.Controllers
                         ReceiptFontSize = @ReceiptFontSize,
                         PreferredPaperSize = @PreferredPaperSize,
                         UseDecimalQuantity = @UseDecimalQuantity, QuantityDecimalPlaces = @QuantityDecimalPlaces,
+                        ShowLatestPurchasePrice = @ShowLatestPurchasePrice,
                         BusinessDayCutoffTime = @BusinessDayCutoffTime
                        WHERE SettingId = @SettingId OR SettingId > 0 LIMIT 1";
 
@@ -87,8 +88,8 @@ namespace Versa.POS.Controllers
 
                 if (rowsAffected == 0 && await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Settings") == 0)
                 {
-                    string insertSql = @"INSERT INTO Settings (ShopName, Address, Phone, ReceiptFooter, TaxRate, CurrencySymbol, LogoData, LogoSize, ReceiptFontSize, PreferredPaperSize, UseDecimalQuantity, QuantityDecimalPlaces, BusinessDayCutoffTime)
-                                 VALUES (@ShopName, @Address, @Phone, @ReceiptFooter, @TaxRate, @CurrencySymbol, @LogoData, @LogoSize, @ReceiptFontSize, @PreferredPaperSize, @UseDecimalQuantity, @QuantityDecimalPlaces, @BusinessDayCutoffTime)";
+                    string insertSql = @"INSERT INTO Settings (ShopName, Address, Phone, ReceiptFooter, TaxRate, CurrencySymbol, LogoData, LogoSize, ReceiptFontSize, PreferredPaperSize, UseDecimalQuantity, QuantityDecimalPlaces, ShowLatestPurchasePrice, BusinessDayCutoffTime)
+                                 VALUES (@ShopName, @Address, @Phone, @ReceiptFooter, @TaxRate, @CurrencySymbol, @LogoData, @LogoSize, @ReceiptFontSize, @PreferredPaperSize, @UseDecimalQuantity, @QuantityDecimalPlaces, @ShowLatestPurchasePrice, @BusinessDayCutoffTime)";
                     await conn.ExecuteAsync(insertSql, model);
                 }
 
@@ -154,6 +155,14 @@ namespace Versa.POS.Controllers
             if (useDecimalExists == 0)
             {
                 await conn.ExecuteAsync("ALTER TABLE Settings ADD COLUMN UseDecimalQuantity TINYINT(1) NOT NULL DEFAULT 0");
+            }
+
+            var latestPurchasePriceExists = await conn.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Settings' AND COLUMN_NAME = 'ShowLatestPurchasePrice'");
+            if (latestPurchasePriceExists == 0)
+            {
+                await conn.ExecuteAsync("ALTER TABLE Settings ADD COLUMN ShowLatestPurchasePrice TINYINT(1) NOT NULL DEFAULT 0");
             }
 
             var receiptFontSizeExists = await conn.ExecuteScalarAsync<int>(@"

@@ -28,14 +28,17 @@ public static class BusinessDayService
         var last = toBusinessDate.Date;
         if (last < first) (first, last) = (last, first);
 
-        // A business date D begins at the cut-off on D-1 and ends just before the cut-off on D.
+        // Midnight uses calendar days. A custom cut-off labels the window by its closing date.
+        if (cutoff == TimeSpan.Zero)
+            return new BusinessDayRange(first, last.AddDays(1).AddTicks(-1));
+
         return new BusinessDayRange(
             first.AddDays(-1).Add(cutoff),
             last.Add(cutoff).AddTicks(-1));
     }
 
     public static DateTime GetCurrentBusinessDate(DateTime localNow, TimeSpan cutoff) =>
-        localNow.TimeOfDay >= cutoff ? localNow.Date.AddDays(1) : localNow.Date;
+        cutoff > TimeSpan.Zero && localNow.TimeOfDay >= cutoff ? localNow.Date.AddDays(1) : localNow.Date;
 
     public static async Task<BusinessDayFilter> GetFilterAsync(MySqlConnection connection, string? date, string? startDate, string? endDate)
     {

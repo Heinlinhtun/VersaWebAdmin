@@ -1332,13 +1332,33 @@ LIMIT 1",
         {
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
 
+            // Purchase cost is sensitive. Include the latest purchase price only in an
+            // administrator's catalogue response; the client-side visibility check is
+            // therefore not the only protection.
+            var latestPurchasePriceSql = User.IsInRole("Admin")
+                ? @"(
+                    SELECT poi.CostPrice / IFNULL(uc.Multiplier, 1)
+                    FROM PurchaseOrderItems poi
+                    INNER JOIN PurchaseOrders po
+                      ON po.POId = poi.POId
+                     AND po.BranchId = @branchId
+                    LEFT JOIN UnitConversions uc
+                      ON uc.ProductId = poi.ProductId
+                     AND uc.FromUnitId = poi.UnitId
+                    WHERE poi.ProductId = p.ProductId
+                    ORDER BY poi.POItemId DESC
+                    LIMIT 1
+                  ) AS LatestPurchasePrice"
+                : "NULL AS LatestPurchasePrice";
+
             // ၁။ Products နှင့် လက်ရှိ Stock ကို ဆွဲထုတ်ခြင်း
-            string sql = @"
+            string sql = $@"
         SELECT p.ProductId, p.Name, p.Sku, p.SalePrice, p.CostPrice, p.CategoryId,
                u.UnitId, u.UnitName,
                IFNULL(ps.Quantity, 0) as StockQuantity,
                IFNULL(cons.ConsignmentQuantity, 0) as ConsignmentQuantity,
-               GREATEST(IFNULL(ps.Quantity, 0) - IFNULL(cons.ConsignmentQuantity, 0), 0) as OwnedQuantity
+               GREATEST(IFNULL(ps.Quantity, 0) - IFNULL(cons.ConsignmentQuantity, 0), 0) as OwnedQuantity,
+               {latestPurchasePriceSql}
         FROM Products p
         JOIN Units u ON p.UnitId = u.UnitId
         LEFT JOIN ProductStocks ps ON p.ProductId = ps.ProductId AND ps.BranchId = @branchId

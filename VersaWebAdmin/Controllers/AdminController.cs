@@ -872,6 +872,21 @@ public class AdminController : Controller
                     branchId = Convert.ToInt64(await cmdBranch.ExecuteScalarAsync());
                 }
 
+                // System defaults are created with each POS tenant, not by Excel import.
+                // They remain available when users leave a product's category or unit blank.
+                const string insertDefaultMasterDataSql = @"
+INSERT INTO Categories (CategoryName)
+SELECT 'General'
+WHERE NOT EXISTS (SELECT 1 FROM Categories WHERE LOWER(CategoryName) = 'general');
+
+INSERT INTO Units (UnitName, ShortName)
+SELECT 'pcs', 'pcs'
+WHERE NOT EXISTS (SELECT 1 FROM Units WHERE LOWER(ShortName) = 'pcs');";
+                using (var defaultMasterDataCmd = new MySqlCommand(insertDefaultMasterDataSql, conn, transaction))
+                {
+                    await defaultMasterDataCmd.ExecuteNonQueryAsync();
+                }
+
                 // ၂။ BCrypt ဖြင့် Password ကို Hash လုပ်ခြင်း
                 string hashedPass = BCrypt.Net.BCrypt.HashPassword(adminPassword);
 

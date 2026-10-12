@@ -173,6 +173,17 @@
                             </div>
                         </div>
 
+                        <div class="p-5 bg-amber-50 rounded-xl border border-amber-100 flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <label class="text-[10px] font-normal text-amber-800 uppercase tracking-widest">{{ t('settings.showLatestPurchasePrice') }}</label>
+                                <p class="text-[11px] text-amber-700 mt-1">{{ t('settings.showLatestPurchasePriceDesc') }}</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                                <input v-model="form.ShowLatestPurchasePrice" type="checkbox" class="sr-only peer">
+                                <span class="w-12 h-6 bg-amber-200 rounded-full peer peer-checked:bg-amber-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:bg-white after:rounded-full after:shadow-sm after:transition-transform peer-checked:after:translate-x-6"></span>
+                            </label>
+                        </div>
+
                         <div class="space-y-1.5">
                             <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{
                                 t('settings.receiptFooter') }}</label>
@@ -230,6 +241,7 @@ const form = ref({
     PreferredPaperSize: '80mm',
     QuantityDecimalPlaces: 2,
     UseDecimalQuantity: false,
+    ShowLatestPurchasePrice: false,
     BusinessDayCutoffTime: '00:00'
 });
 
@@ -278,6 +290,7 @@ const fetchSettings = async () => {
                     : '80mm',
                 QuantityDecimalPlaces: normalizeQuantityDecimals(res.data.QuantityDecimalPlaces ?? res.data.quantityDecimalPlaces),
                 UseDecimalQuantity: toBooleanSetting(res.data.UseDecimalQuantity ?? res.data.useDecimalQuantity),
+                ShowLatestPurchasePrice: toBooleanSetting(res.data.ShowLatestPurchasePrice ?? res.data.showLatestPurchasePrice),
                 BusinessDayCutoffTime: String(res.data.BusinessDayCutoffTime ?? res.data.businessDayCutoffTime ?? '00:00').slice(0, 5)
             };
             if (res.data.LogoData) {

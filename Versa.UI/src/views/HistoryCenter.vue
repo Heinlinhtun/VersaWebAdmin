@@ -1532,7 +1532,6 @@ const printFromDetail = async (preOpenedWindow = null) => {
     }
     return;
   }
-  if (isThermal && await printAndroidDetailImageIfPossible()) return;
   if (isThermal && printWithAndroidIfPossible()) return;
 
   const hasPrintWindow = preOpenedWindow?.document && typeof preOpenedWindow.document.write === 'function';

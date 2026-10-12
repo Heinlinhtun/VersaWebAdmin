@@ -78,7 +78,50 @@ CREATE TABLE IF NOT EXISTS ExcelImportBatchEntities (
     EntityType VARCHAR(20) NOT NULL,
     EntityId INT NOT NULL,
     PRIMARY KEY (BatchId, EntityType, EntityId)
+);
+CREATE TABLE IF NOT EXISTS ExcelImportBatchUnitConversions (
+    BatchId INT NOT NULL,
+    ProductId INT NOT NULL,
+    FromUnitId INT NOT NULL,
+    ToUnitId INT NOT NULL,
+    Multiplier DECIMAL(18,5) NOT NULL,
+    BaseSalePrice DECIMAL(18,4) NOT NULL,
+    PRIMARY KEY (BatchId, ProductId, FromUnitId, ToUnitId)
+);
+CREATE TABLE IF NOT EXISTS ExcelImportBatchProductPrices (
+    BatchId INT NOT NULL,
+    ProductId INT NOT NULL,
+    UnitId INT NOT NULL,
+    PriceName VARCHAR(100) NOT NULL,
+    PriceValue DECIMAL(18,4) NOT NULL,
+    MinQuantity DECIMAL(18,5) NOT NULL,
+    PRIMARY KEY (BatchId, ProductId, UnitId, PriceName)
 );" );
+        }
+
+        [HttpGet("template")]
+        [Authorize(Roles = "Admin,Manager")]
+        public IActionResult DownloadTemplate()
+        {
+            var workbook = new Dictionary<string, object>
+            {
+                ["Products"] = new List<Dictionary<string, object>>
+                {
+                    new() { ["Branch Name"] = "Main Branch", ["Item Name"] = "Example Item", ["SKU/Barcode"] = "SKU123", ["Category"] = "General", ["Basic Unit"] = "pcs", ["Qty"] = 100, ["Purchase Price"] = 1500, ["Selling Price"] = 2000, ["Expiry Date"] = "2026-12-31", ["Warning Day count"] = 30, ["Supplier Name"] = "Main Supplier" }
+                },
+                ["Scaling Units"] = new List<Dictionary<string, object>>
+                {
+                    new() { ["SKU/Barcode"] = "SKU123", ["Scaling Unit"] = "box", ["Multiplier"] = 12, ["Scaling Sale Price"] = 22000 }
+                },
+                ["Price Tiers"] = new List<Dictionary<string, object>>
+                {
+                    new() { ["SKU/Barcode"] = "SKU123", ["Tier Name"] = "Wholesale", ["Unit"] = "pcs", ["Price"] = 1800, ["Minimum Quantity"] = 10 }
+                }
+            };
+
+            using var stream = new MemoryStream();
+            MiniExcel.SaveAs(stream, workbook, excelType: ExcelType.XLSX);
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Inventory_Import_Template.xlsx");
         }
 
         private static async Task EnsurePurchaseBatchRemainingColumnAsync(MySqlConnection conn, MySqlTransaction transaction)
@@ -125,9 +168,18 @@ WHERE poi.RemainingQuantity IS NULL",
 
                 var excelType = GetExcelType(file.FileName);
                 List<dynamic> rows;
+                List<IDictionary<string, object>> scalingRows = [];
+                List<IDictionary<string, object>> priceTierRows = [];
                 try
                 {
                     rows = file.OpenReadStream().Query(useHeaderRow: true, excelType: excelType).ToList();
+                    if (excelType == ExcelType.XLSX)
+                    {
+                        scalingRows = file.OpenReadStream().Query(useHeaderRow: true, excelType: excelType, sheetName: "Scaling Units")
+                            .Cast<IDictionary<string, object>>().ToList();
+                        priceTierRows = file.OpenReadStream().Query(useHeaderRow: true, excelType: excelType, sheetName: "Price Tiers")
+                            .Cast<IDictionary<string, object>>().ToList();
+                    }
                 }
                 catch (System.IO.InvalidDataException)
                 {
@@ -172,7 +224,7 @@ SELECT LAST_INSERT_ID();",
                     
                     int? supplierId = await GetOrCreateId(conn, "Suppliers", "SupplierName", "SupplierId", supplierName, transaction, batchId, "Supplier");
                     int? branchId = string.IsNullOrWhiteSpace(branchName)
-                        ? await GetDefaultBranchId(conn, transaction)
+                        ? 1
                         : await GetOrCreateId(conn, "Branches", "BranchName", "BranchId", branchName, transaction, batchId, "Branch");
 
                     if (branchId == null || branchId == 0) 
@@ -210,14 +262,22 @@ SELECT LAST_INSERT_ID();",
                             bool hasProvidedSku = !string.IsNullOrWhiteSpace(sku);
                             string categoryName = GetValue(dRow, "Category");
                             string unitName = GetValue(dRow, "Basic Unit");
+                            bool useDefaultCategory = string.IsNullOrWhiteSpace(categoryName);
+                            bool useDefaultUnit = string.IsNullOrWhiteSpace(unitName);
+                            categoryName = useDefaultCategory ? "General" : categoryName;
+                            unitName = useDefaultUnit ? "pcs" : unitName;
                             decimal qty = ParseDecimal(GetRawValue(dRow, "Qty"));
                             decimal purchasePrice = ParseDecimal(GetRawValue(dRow, "Purchase Price"));
                             decimal sellingPrice = ParseDecimal(GetRawValue(dRow, "Selling Price"));
                             DateTime? expiryDate = ParseDate(GetRawValue(dRow, "Expiry Date"));
                             int warningDays = (int)ParseDecimal(GetRawValue(dRow, "Warning Day count"));
 
-                            int? catId = await GetOrCreateId(conn, "Categories", "CategoryName", "CategoryId", categoryName, transaction, batchId, "Category");
-                            int? unitId = await GetOrCreateId(conn, "Units", "ShortName", "UnitId", unitName, transaction, batchId, "Unit");
+                            // Default master data is system-owned and must not be removed by an
+                            // import rollback, even when an older tenant did not have it yet.
+                            int? catId = await GetOrCreateId(conn, "Categories", "CategoryName", "CategoryId", categoryName, transaction,
+                                useDefaultCategory ? null : batchId, useDefaultCategory ? null : "Category");
+                            int? unitId = await GetOrCreateId(conn, "Units", "ShortName", "UnitId", unitName, transaction,
+                                useDefaultUnit ? null : batchId, useDefaultUnit ? null : "Unit");
 
                             int productId = 0;
                             if (hasProvidedSku)
@@ -340,6 +400,9 @@ ON DUPLICATE KEY UPDATE ImportedQuantity = ImportedQuantity + VALUES(ImportedQua
                         rowIndex++;
                     }
                 }
+
+                await ImportScalingUnitsAsync(conn, transaction, batchId, scalingRows);
+                await ImportPriceTiersAsync(conn, transaction, batchId, priceTierRows);
 
                 await conn.ExecuteAsync(@"
 UPDATE ExcelImportBatchStocks ibs
@@ -548,6 +611,30 @@ WHERE ibp.BatchId = @batchId
                 if (productChangedCount > 0)
                     return BadRequest(new { Message = "Undo blocked because one or more imported products were edited after the import." });
 
+                var importedConfigurationChangedCount = await conn.ExecuteScalarAsync<int>(@"
+SELECT
+  (SELECT COUNT(*) FROM ExcelImportBatchUnitConversions t
+   WHERE t.BatchId = @batchId AND (
+       SELECT COUNT(*) FROM UnitConversions uc
+       WHERE uc.ProductId = t.ProductId
+         AND uc.FromUnitId = t.FromUnitId
+         AND uc.ToUnitId = t.ToUnitId
+         AND ABS(IFNULL(uc.Multiplier, 0) - t.Multiplier) <= 0.0001
+         AND ABS(IFNULL(uc.BaseSalePrice, 0) - t.BaseSalePrice) <= 0.0001
+   ) <> 1)
+  +
+  (SELECT COUNT(*) FROM ExcelImportBatchProductPrices t
+   WHERE t.BatchId = @batchId AND (
+       SELECT COUNT(*) FROM ProductPrices pp
+       WHERE pp.ProductId = t.ProductId
+         AND pp.UnitId = t.UnitId
+         AND BINARY pp.PriceName = BINARY t.PriceName
+         AND ABS(IFNULL(pp.PriceValue, 0) - t.PriceValue) <= 0.0001
+         AND ABS(IFNULL(pp.MinQuantity, 0) - t.MinQuantity) <= 0.0001
+   ) <> 1)", new { batchId }, transaction);
+                if (importedConfigurationChangedCount > 0)
+                    return BadRequest(new { Message = "Undo blocked because scaling units or price tiers from this import were changed." });
+
                 var createdProductIds = (await conn.QueryAsync<int>(@"
 SELECT ProductId FROM ExcelImportBatchProducts
 WHERE BatchId = @batchId AND WasCreated = 1",
@@ -564,8 +651,30 @@ SELECT SUM(RefCount) FROM (
     UNION ALL SELECT COUNT(*) FROM StockTransferItems WHERE ProductId = @productId
     UNION ALL SELECT COUNT(*) FROM BundleItems WHERE ComponentProductId = @productId
     UNION ALL SELECT COUNT(*) FROM ConsignmentItems WHERE ProductId = @productId
-    UNION ALL SELECT COUNT(*) FROM ProductPrices WHERE ProductId = @productId
-    UNION ALL SELECT COUNT(*) FROM UnitConversions WHERE ProductId = @productId
+    UNION ALL
+        SELECT COUNT(*) FROM UnitConversions uc
+        WHERE uc.ProductId = @productId
+          AND NOT EXISTS (
+              SELECT 1 FROM ExcelImportBatchUnitConversions t
+              WHERE t.BatchId = @batchId
+                AND t.ProductId = uc.ProductId
+                AND t.FromUnitId = uc.FromUnitId
+                AND t.ToUnitId = uc.ToUnitId
+                AND ABS(IFNULL(uc.Multiplier, 0) - t.Multiplier) <= 0.0001
+                AND ABS(IFNULL(uc.BaseSalePrice, 0) - t.BaseSalePrice) <= 0.0001
+          )
+    UNION ALL
+        SELECT COUNT(*) FROM ProductPrices pp
+        WHERE pp.ProductId = @productId
+          AND NOT EXISTS (
+              SELECT 1 FROM ExcelImportBatchProductPrices t
+              WHERE t.BatchId = @batchId
+                AND t.ProductId = pp.ProductId
+                AND t.UnitId = pp.UnitId
+                AND BINARY t.PriceName = BINARY pp.PriceName
+                AND ABS(IFNULL(pp.PriceValue, 0) - t.PriceValue) <= 0.0001
+                AND ABS(IFNULL(pp.MinQuantity, 0) - t.MinQuantity) <= 0.0001
+          )
     UNION ALL
         SELECT COUNT(*) FROM PurchaseOrderItems poi
         WHERE poi.ProductId = @productId
@@ -598,6 +707,26 @@ DELETE po
 FROM PurchaseOrders po
 JOIN ExcelImportBatchPurchaseOrders bp ON bp.POId = po.POId
 WHERE bp.BatchId = @batchId;
+
+DELETE uc
+FROM UnitConversions uc
+JOIN ExcelImportBatchUnitConversions t
+  ON t.ProductId = uc.ProductId
+ AND t.FromUnitId = uc.FromUnitId
+ AND t.ToUnitId = uc.ToUnitId
+ AND ABS(IFNULL(uc.Multiplier, 0) - t.Multiplier) <= 0.0001
+ AND ABS(IFNULL(uc.BaseSalePrice, 0) - t.BaseSalePrice) <= 0.0001
+WHERE t.BatchId = @batchId;
+
+DELETE pp
+FROM ProductPrices pp
+JOIN ExcelImportBatchProductPrices t
+  ON t.ProductId = pp.ProductId
+ AND t.UnitId = pp.UnitId
+ AND BINARY t.PriceName = BINARY pp.PriceName
+ AND ABS(IFNULL(pp.PriceValue, 0) - t.PriceValue) <= 0.0001
+ AND ABS(IFNULL(pp.MinQuantity, 0) - t.MinQuantity) <= 0.0001
+WHERE t.BatchId = @batchId;
 
 UPDATE ProductStocks ps
 JOIN ExcelImportBatchStocks ibs
@@ -647,6 +776,99 @@ WHERE BatchId = @batchId",
                 return BadRequest(new { Message = "Import rollback failed: " + ex.Message });
             }
         }
+
+        private async Task ImportScalingUnitsAsync(
+            MySqlConnection conn,
+            MySqlTransaction transaction,
+            int batchId,
+            IEnumerable<IDictionary<string, object>> rows)
+        {
+            var rowNumber = 2;
+            foreach (var row in rows.Where(row => !IsBlankRow(row)))
+            {
+                var sku = GetValue(row, "SKU/Barcode");
+                var unitName = GetValue(row, "Scaling Unit");
+                var multiplier = ParseDecimal(GetRawValue(row, "Multiplier"));
+                var salePrice = ParseDecimal(GetRawValue(row, "Scaling Sale Price"));
+
+                if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(unitName))
+                    throw new Exception($"Scaling Units row {rowNumber}: SKU/Barcode and Scaling Unit are required.");
+                if (multiplier <= 0 || salePrice < 0)
+                    throw new Exception($"Scaling Units row {rowNumber}: Multiplier must be greater than zero and Scaling Sale Price cannot be negative.");
+
+                var product = await conn.QueryFirstOrDefaultAsync<dynamic>(
+                    "SELECT ProductId, UnitId FROM Products WHERE Sku = @sku LIMIT 1", new { sku }, transaction);
+                if (product == null)
+                    throw new Exception($"Scaling Units row {rowNumber}: SKU/Barcode '{sku}' was not found in Products.");
+
+                var scalingUnitId = await GetOrCreateId(conn, "Units", "ShortName", "UnitId", unitName, transaction, batchId, "Unit");
+                if (!scalingUnitId.HasValue || scalingUnitId == product.UnitId)
+                    throw new Exception($"Scaling Units row {rowNumber}: Scaling Unit must be different from the product's Basic Unit.");
+
+                var exists = await conn.ExecuteScalarAsync<int>(@"
+SELECT COUNT(*) FROM UnitConversions
+WHERE ProductId = @productId AND FromUnitId = @fromUnitId AND ToUnitId = @toUnitId",
+                    new { productId = (int)product.ProductId, fromUnitId = scalingUnitId.Value, toUnitId = (int)product.UnitId }, transaction);
+                if (exists > 0)
+                    throw new Exception($"Scaling Units row {rowNumber}: this product already has a conversion for '{unitName}'.");
+
+                await conn.ExecuteAsync(@"
+INSERT INTO UnitConversions (ProductId, FromUnitId, ToUnitId, Multiplier, BaseSalePrice)
+VALUES (@productId, @fromUnitId, @toUnitId, @multiplier, @salePrice);
+INSERT INTO ExcelImportBatchUnitConversions (BatchId, ProductId, FromUnitId, ToUnitId, Multiplier, BaseSalePrice)
+VALUES (@batchId, @productId, @fromUnitId, @toUnitId, @multiplier, @salePrice);",
+                    new { batchId, productId = (int)product.ProductId, fromUnitId = scalingUnitId.Value, toUnitId = (int)product.UnitId, multiplier, salePrice }, transaction);
+                rowNumber++;
+            }
+        }
+
+        private async Task ImportPriceTiersAsync(
+            MySqlConnection conn,
+            MySqlTransaction transaction,
+            int batchId,
+            IEnumerable<IDictionary<string, object>> rows)
+        {
+            var rowNumber = 2;
+            foreach (var row in rows.Where(row => !IsBlankRow(row)))
+            {
+                var sku = GetValue(row, "SKU/Barcode");
+                var tierName = GetValue(row, "Tier Name");
+                var unitName = GetValue(row, "Unit");
+                var price = ParseDecimal(GetRawValue(row, "Price"));
+                var minimumQuantity = ParseDecimal(GetRawValue(row, "Minimum Quantity"));
+
+                if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(tierName) || string.IsNullOrWhiteSpace(unitName))
+                    throw new Exception($"Price Tiers row {rowNumber}: SKU/Barcode, Tier Name, and Unit are required.");
+                if (price < 0 || minimumQuantity < 0)
+                    throw new Exception($"Price Tiers row {rowNumber}: Price and Minimum Quantity cannot be negative.");
+
+                var productId = await conn.ExecuteScalarAsync<int?>("SELECT ProductId FROM Products WHERE Sku = @sku LIMIT 1", new { sku }, transaction);
+                if (!productId.HasValue)
+                    throw new Exception($"Price Tiers row {rowNumber}: SKU/Barcode '{sku}' was not found in Products.");
+
+                var unitId = await conn.ExecuteScalarAsync<int?>("SELECT UnitId FROM Units WHERE ShortName = @unitName LIMIT 1", new { unitName }, transaction);
+                if (!unitId.HasValue)
+                    throw new Exception($"Price Tiers row {rowNumber}: Unit '{unitName}' does not exist. Add it as a Basic Unit or Scaling Unit first.");
+
+                var exists = await conn.ExecuteScalarAsync<int>(@"
+SELECT COUNT(*) FROM ProductPrices
+WHERE ProductId = @productId AND UnitId = @unitId AND BINARY PriceName = BINARY @tierName",
+                    new { productId, unitId, tierName }, transaction);
+                if (exists > 0)
+                    throw new Exception($"Price Tiers row {rowNumber}: this product already has the '{tierName}' tier for '{unitName}'.");
+
+                await conn.ExecuteAsync(@"
+INSERT INTO ProductPrices (ProductId, PriceName, PriceValue, MinQuantity, UnitId)
+VALUES (@productId, @tierName, @price, @minimumQuantity, @unitId);
+INSERT INTO ExcelImportBatchProductPrices (BatchId, ProductId, UnitId, PriceName, PriceValue, MinQuantity)
+VALUES (@batchId, @productId, @unitId, @tierName, @price, @minimumQuantity);",
+                    new { batchId, productId, unitId, tierName, price, minimumQuantity }, transaction);
+                rowNumber++;
+            }
+        }
+
+        private static bool IsBlankRow(IDictionary<string, object> row) =>
+            row == null || row.Values.All(value => string.IsNullOrWhiteSpace(value?.ToString()));
 
         private string GetValue(IDictionary<string, object> row, string key)
         {

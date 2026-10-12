@@ -111,13 +111,11 @@ import { onMounted, ref } from 'vue';
 import api from '../services/api';
 import { useToast } from '../composables/useToast';
 import { useI18n } from '../composables/useI18n';
-import { useCsvExport } from '../composables/useCsvExport';
 import { sanitizeError } from '../utils/sanitize';
 
 const emit = defineEmits(['close', 'refresh']);
 const { addToast } = useToast();
 const { t } = useI18n();
-const { exportToCsv } = useCsvExport();
 const selectedFile = ref(null);
 const fileInput = ref(null);
 const importing = ref(false);
@@ -145,10 +143,18 @@ const loadHistory = async () => {
 
 const onFileChange = (event) => { selectedFile.value = event.target.files?.[0] || null; };
 
-const downloadTemplate = () => {
-  const headers = ['Branch Name', 'Item Name', 'SKU/Barcode', 'Category', 'Basic Unit', 'Qty', 'Purchase Price', 'Selling Price', 'Expiry Date', 'Warning Day count', 'Supplier Name'];
-  const exampleRow = ['Main Branch', 'Example Item', 'SKU123', 'General', 'pcs', '100', '1500', '2000', '2026-12-31', '30', 'Main Supplier'];
-  exportToCsv('Inventory_Import_Template', headers, [exampleRow]);
+const downloadTemplate = async () => {
+  try {
+    const res = await api.get('/ExcelImport/template', { responseType: 'blob' });
+    const url = URL.createObjectURL(res.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'Inventory_Import_Template.xlsx';
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    addToast(apiError(err, 'Could not download the import template'), 'error');
+  }
 };
 
 const handleUpload = async () => {
