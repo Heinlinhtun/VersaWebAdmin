@@ -70,7 +70,8 @@ public class AuthController : ControllerBase
         var tokenHandler = new JwtSecurityTokenHandler();
 
         // Key ကို config ထဲကဖတ်လို့မရရင် default key တစ်ခု သုံးထားပေးပါ (သို့မဟုတ် Error ပြပါ)
-        var secretKey = _config["Jwt:Key"] ?? "Your_Secret_Key_Here_Must_Be_Long_Enough_12345";
+        var secretKey = _config["Jwt:Key"]
+            ?? throw new InvalidOperationException("JWT signing key is not configured.");
         var key = Encoding.ASCII.GetBytes(secretKey);
 
         var tokenDescriptor = new SecurityTokenDescriptor

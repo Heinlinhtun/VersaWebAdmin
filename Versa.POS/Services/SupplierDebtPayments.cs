@@ -187,6 +187,11 @@ public static class SupplierDebtPayments
         var allocations = new List<Allocation>();
         foreach (var order in orders)
         {
+            // Legacy signed purchases can be fully settled (e.g. total = paid = -112000).
+            // They have no balance to allocate and must remain unchanged for the audit.
+            if (order.TotalAmount.HasValue && order.PaidAmount.HasValue
+                && order.TotalAmount.Value == order.PaidAmount.Value)
+                continue;
             if (order.TotalAmount == null || order.PaidAmount == null || order.PaidAmount < 0)
                 throw new InvalidOperationException("Purchase balances need reconciliation before payment.");
             if (remaining <= 0 || order.PaidAmount >= order.TotalAmount) continue;

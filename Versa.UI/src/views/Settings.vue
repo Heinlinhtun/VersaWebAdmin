@@ -85,6 +85,8 @@
                     <select v-model="form.PreferredPaperSize"
                         class="w-full p-3 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 font-normal text-sm text-slate-700">
                         <option value="80mm">{{ t('common.thermal80') }}</option>
+                        <option value="104mm">{{ t('common.voucher104') }}</option>
+                        <option value="104mm-slip">{{ t('common.voucher104Slip') }}</option>
                         <option value="A4">{{ t('common.a4') }}</option>
                         <option value="A5">{{ t('common.a5') }}</option>
                     </select>
@@ -285,7 +287,7 @@ const fetchSettings = async () => {
         if (res.data) {
             form.value = {
                 ...res.data,
-                PreferredPaperSize: ['80mm', 'A4', 'A5'].includes(res.data.PreferredPaperSize ?? res.data.preferredPaperSize)
+                PreferredPaperSize: ['80mm', '104mm', '104mm-slip', 'A4', 'A5'].includes(res.data.PreferredPaperSize ?? res.data.preferredPaperSize)
                     ? (res.data.PreferredPaperSize ?? res.data.preferredPaperSize)
                     : '80mm',
                 QuantityDecimalPlaces: normalizeQuantityDecimals(res.data.QuantityDecimalPlaces ?? res.data.quantityDecimalPlaces),

@@ -1,8 +1,7 @@
 using Dapper;
+using ImageMagick;
 using Microsoft.AspNetCore.Mvc;
 using MySqlConnector;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
 using Versa.Core.Models;
 using Versa.Core.Services;
 
@@ -40,7 +39,7 @@ namespace Versa.POS.Controllers
                 if (model.QuantityDecimalPlaces < 1 || model.QuantityDecimalPlaces > 5)
                     return BadRequest(new { Message = "Quantity decimal places must be between 1 and 5." });
                 if (model.UseDecimalQuantity) await EnsureQuantityPrecisionAsync(conn);
-                model.PreferredPaperSize = model.PreferredPaperSize is "A4" or "A5" or "80mm"
+                model.PreferredPaperSize = model.PreferredPaperSize is "A4" or "A5" or "80mm" or "104mm" or "104mm-slip"
                     ? model.PreferredPaperSize
                     : "80mm";
                 if (model.BusinessDayCutoffTime < TimeSpan.Zero || model.BusinessDayCutoffTime >= TimeSpan.FromDays(1))
@@ -52,17 +51,15 @@ namespace Versa.POS.Controllers
                     using (var inputStream = logo.OpenReadStream())
                     using (var outputStream = new MemoryStream())
                     {
-                        using (Image image = Image.Load(inputStream))
+                        using (var image = new MagickImage(inputStream))
                         {
-                            // ပုံကို 100x100 အဖြစ် ချုံ့ခြင်း
-                            image.Mutate(x => x.Resize(new ResizeOptions
-                            {
-                                Size = new Size(100, 100),
-                                Mode = ResizeMode.Max // Aspect Ratio ကို ထိန်းပြီး အကြီးဆုံး 100 ထားမည်
-                            }));
+                            // ပုံကို aspect ratio မပျက်ဘဲ အများဆုံး 100x100 အဖြစ် ချုံ့ခြင်း
+                            image.Resize(new MagickGeometry(100, 100) { Greater = true });
 
                             // JPEG အဖြစ်ပြောင်းပြီး Quality 80% ဖြင့် သိမ်းခြင်း
-                            image.SaveAsJpeg(outputStream, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder { Quality = 80 });
+                            image.Format = MagickFormat.Jpeg;
+                            image.Quality = 80;
+                            image.Write(outputStream);
 
                             byte[] fileBytes = outputStream.ToArray();
                             model.LogoData = $"data:image/jpeg;base64,{Convert.ToBase64String(fileBytes)}";
@@ -177,16 +174,20 @@ namespace Versa.POS.Controllers
                 await conn.ExecuteAsync("ALTER TABLE Settings ADD COLUMN ReceiptFontSize VARCHAR(10) NOT NULL DEFAULT 'Medium'");
             }
 
-            var preferredPaperSizeExists = await conn.ExecuteScalarAsync<int>(@"
-                SELECT COUNT(*)
+            var preferredPaperSizeLength = await conn.ExecuteScalarAsync<int?>(@"
+                SELECT CHARACTER_MAXIMUM_LENGTH
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = DATABASE()
                   AND TABLE_NAME = 'Settings'
                   AND COLUMN_NAME = 'PreferredPaperSize'");
 
-            if (preferredPaperSizeExists == 0)
+            if (!preferredPaperSizeLength.HasValue)
             {
-                await conn.ExecuteAsync("ALTER TABLE Settings ADD COLUMN PreferredPaperSize VARCHAR(10) NOT NULL DEFAULT '80mm'");
+                await conn.ExecuteAsync("ALTER TABLE Settings ADD COLUMN PreferredPaperSize VARCHAR(20) NOT NULL DEFAULT '80mm'");
+            }
+            else if (preferredPaperSizeLength.Value < 20)
+            {
+                await conn.ExecuteAsync("ALTER TABLE Settings MODIFY COLUMN PreferredPaperSize VARCHAR(20) NOT NULL DEFAULT '80mm'");
             }
 
             var cutoffExists = await conn.ExecuteScalarAsync<int>(@"

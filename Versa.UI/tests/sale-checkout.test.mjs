@@ -38,7 +38,8 @@ function mountSetup(t, post, { get, online = true } = {}) {
   const instance = scope.run(() => new Function(...Object.keys(dependencies), `${setup}\nreturn {
     newCustomerForm, saveNewCustomer, customers, saleForm, customerSearch,
     showNewCustomerModal, savingNewCustomer, ensureCustomerForOrder,
-    selectedCustomerObj, catalogView, currentPage, refreshCheckoutCustomerBalance, normalizeCartQty, updateQty, quantityButtonStep
+    handleCameraBarcode, handleBarcodeScan, showBarcodeScanner, searchQuery, currentTab, services, cart, products, showOutOfStockItems,
+    selectedCustomerObj, selectedCategory, catalogView, currentPage, refreshCheckoutCustomerBalance, normalizeCartQty, updateQty, quantityButtonStep
   };`)(...Object.values(dependencies)));
   return { ...instance, notices, get cached() { return cached; } };
 }
@@ -151,4 +152,94 @@ test('checkout uses configured quantity precision for entry and increment button
   item.Quantity = 1.7;
   vm.normalizeCartQty(item);
   assert.equal(item.Quantity, 1);
+});
+
+test('camera and keyboard scans share exact matching; unmatched code remains searchable', async t => {
+  const vm = mountSetup(t);
+  vm.services.value = [{ ServiceId: 14, ServiceName: 'Test service', Sku: '00123', Price: 500 }];
+  vm.showBarcodeScanner.value = true;
+  vm.currentTab.value = 'products';
+  vm.currentPage.value = 3;
+  vm.selectedCategory.value = 42;
+  await vm.handleCameraBarcode('00123');
+  assert.equal(vm.showBarcodeScanner.value, false);
+  assert.equal(vm.searchQuery.value, '');
+  assert.equal(vm.cart.value.length, 1);
+  assert.equal(vm.currentTab.value, 'all');
+  assert.equal(vm.currentPage.value, 1);
+  assert.equal(vm.selectedCategory.value, null);
+  vm.searchQuery.value = ' TEST SERVICE ';
+  let prevented = false;
+  await vm.handleBarcodeScan({ preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(vm.cart.value.length, 1);
+  assert.equal(vm.cart.value[0].Quantity, 2);
+  await vm.handleCameraBarcode('https://example.test/unknown');
+  assert.equal(vm.searchQuery.value, 'https://example.test/unknown');
+  assert.equal(vm.cart.value.length, 1);
+  assert.equal(vm.notices.at(-1)[1], 'warning');
+  assert.match(vm.notices.at(-1)[0], /No matching item/);
+});
+
+test('camera scanner messages resolve in both languages', () => {
+  const { locale, t } = useI18n();
+  for (const key of ['open', 'title', 'preview', 'starting', 'scanning', 'noMatch', 'ambiguous', 'invalidPayload', 'insecure', 'unsupported', 'permissionDenied', 'unavailable', 'busy', 'failed']) {
+    locale.value = 'en';
+    assert.notEqual(t(`scanner.${key}`), `scanner.${key}`);
+    locale.value = 'mm';
+    assert.match(t(`scanner.${key}`), /[\u1000-\u109f]/);
+  }
+  locale.value = 'en';
+});
+
+test('trimmed case-insensitive SKU wins over names and preserves leading zeros', async t => {
+  const vm = mountSetup(t);
+  vm.services.value = [
+    { ServiceId: 1, ServiceName: '001Ab', Sku: 'different', Price: 10 },
+    { ServiceId: 2, ServiceName: 'Correct item', Sku: ' 001aB ', Price: 10 },
+  ];
+  await vm.handleCameraBarcode('  001AB  ');
+  assert.equal(vm.cart.value[0].ServiceId, 2);
+  await vm.handleCameraBarcode('1AB');
+  assert.equal(vm.cart.value.length, 1);
+  assert.equal(vm.searchQuery.value, '1AB');
+});
+
+test('duplicate SKU and duplicate fallback names retain search without adding', async t => {
+  const vm = mountSetup(t);
+  vm.services.value = [
+    { ServiceId: 1, ServiceName: 'same name', Sku: ' dupe ', Price: 10 },
+    { ServiceId: 2, ServiceName: 'SAME NAME', Sku: 'DUPE', Price: 10 },
+  ];
+  for (const payload of ['Dupe', 'same name']) {
+    await vm.handleCameraBarcode(payload);
+    assert.equal(vm.searchQuery.value, payload);
+    assert.equal(vm.cart.value.length, 0);
+    assert.match(vm.notices.at(-1)[0], /Multiple items/);
+  }
+});
+
+test('oversized and control payloads cannot replace search or add items', async t => {
+  const vm = mountSetup(t);
+  vm.searchQuery.value = 'keep this';
+  for (const payload of ['x'.repeat(4097), '\t00123', '00123\n', '00\u000023', '00\u007f23', '00\u008523']) {
+    await vm.handleCameraBarcode(payload);
+    assert.equal(vm.searchQuery.value, 'keep this');
+    assert.equal(vm.cart.value.length, 0);
+    assert.match(vm.notices.at(-1)[0], /code is invalid/);
+  }
+  await vm.handleCameraBarcode('x'.repeat(4096));
+  assert.equal(vm.searchQuery.value.length, 4096);
+  assert.match(vm.notices.at(-1)[0], /No matching/);
+});
+
+test('scan reveals out-of-stock items and stock rejection never reports added', async t => {
+  const vm = mountSetup(t);
+  vm.products.value = [{ ProductId: 1, Name: 'Sold out', Sku: '0001', StockQuantity: 0, UnitId: 1 }];
+  await vm.handleCameraBarcode('0001');
+  assert.equal(vm.showOutOfStockItems.value, true);
+  assert.equal(vm.searchQuery.value, '0001');
+  assert.equal(vm.cart.value.length, 0);
+  assert.equal(vm.notices.at(-1)[1], 'error');
+  assert.equal(vm.notices.some(([message]) => message.startsWith('Added ')), false);
 });

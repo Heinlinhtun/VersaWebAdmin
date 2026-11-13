@@ -7,7 +7,7 @@ const source = readFileSync(new URL('../src/views/HistoryCenter.vue', import.met
 const printFunction = source.slice(source.indexOf('const printFromDetail ='), source.indexOf('const shareFromDetail ='));
 const csvPayloadFunction = source.slice(source.indexOf('const csvValueOf ='), source.indexOf('const fetchFilteredExportData ='));
 
-for (const size of ['80mm', 'A4', 'A5']) {
+for (const size of ['80mm', '104mm', '104mm-slip', 'A4', 'A5']) {
   for (const viaAction of [false, true]) {
     test(`History ${viaAction ? 'action' : 'detail'} print opens dialog and offers manual controls (${size})`, async () => {
       let html = '';
@@ -21,13 +21,21 @@ for (const size of ['80mm', 'A4', 'A5']) {
         selectedSale: { value: { sale: { SaleId: 248 } } },
         receiptSize: { value: size },
         supportsEpsonAssistant: false,
+        isSlipReceiptSize: value => value === '80mm' || value === '104mm-slip',
+        receiptPaper: value => ({
+          '80mm': { pageSize: '80mm auto', bodyWidth: '76mm' },
+          '104mm': { pageSize: '104mm auto', bodyWidth: '104mm' },
+          '104mm-slip': { pageSize: '104mm auto', bodyWidth: '100mm' },
+          A5: { pageSize: '148mm 210mm', bodyWidth: '148mm' },
+          A4: { pageSize: '210mm 297mm', bodyWidth: '210mm' },
+        })[value],
         printAndroidDetailImageIfPossible: async () => false,
         printWithAndroidIfPossible: () => false,
         nextTick: async () => {},
         shopInfo: { value: { LogoData: '', LogoSize: 'Large' } },
         window: { open: () => { opened++; return popup; } },
         document: { getElementById: id => {
-          assert.equal(id, size === '80mm' ? 'print-area' : 'print-area-a4');
+          assert.equal(id, ['80mm', '104mm-slip'].includes(size) ? 'print-area' : 'print-area-a4');
           return { innerHTML: '<div>Invoice 248</div>' };
         } },
       };

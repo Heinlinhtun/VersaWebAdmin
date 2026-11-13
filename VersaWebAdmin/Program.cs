@@ -35,7 +35,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 
 var app = builder.Build();
 
-// --- Seed default admin if no MasterUsers exist ---
+// --- Apply schema compatibility changes and optionally bootstrap an administrator ---
 var dbService = app.Services.CreateScope().ServiceProvider.GetRequiredService<DatabaseService>();
 using (var conn = new MySqlConnection(dbService.GetMasterConnectionString()))
 {
@@ -53,12 +53,22 @@ using (var conn = new MySqlConnection(dbService.GetMasterConnectionString()))
     var count = (long)(await new MySqlCommand("SELECT COUNT(*) FROM MasterUsers", conn).ExecuteScalarAsync() ?? 0);
     if (count == 0)
     {
-        string hash = BCrypt.Net.BCrypt.HashPassword("Admin@123");
-        var cmd = new MySqlCommand(
-            "INSERT INTO MasterUsers (Username, PasswordHash, Role) VALUES (@u, @p, 'SuperAdmin')", conn);
-        cmd.Parameters.AddWithValue("@u", "admin");
-        cmd.Parameters.AddWithValue("@p", hash);
-        await cmd.ExecuteNonQueryAsync();
+        var bootstrapUsername = builder.Configuration["BootstrapAdmin:Username"];
+        var bootstrapPassword = builder.Configuration["BootstrapAdmin:Password"];
+        if (!string.IsNullOrWhiteSpace(bootstrapUsername) && !string.IsNullOrWhiteSpace(bootstrapPassword))
+        {
+            string hash = BCrypt.Net.BCrypt.HashPassword(bootstrapPassword);
+            var cmd = new MySqlCommand(
+                "INSERT INTO MasterUsers (Username, PasswordHash, Role) VALUES (@u, @p, 'SuperAdmin')", conn);
+            cmd.Parameters.AddWithValue("@u", bootstrapUsername);
+            cmd.Parameters.AddWithValue("@p", hash);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        else
+        {
+            app.Logger.LogWarning(
+                "No administrator exists. Set BootstrapAdmin__Username and BootstrapAdmin__Password for a one-time bootstrap.");
+        }
     }
 }
 

@@ -16,7 +16,8 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div :class="reportView === 'item' ? 'grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] gap-6 items-start' : ''">
+    <div class="min-w-0 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
         <h3 class="font-normal text-[10px] uppercase text-slate-500 tracking-[0.2em]">{{ tx.purchaseHistoryLedger }}</h3>
         <div class="flex flex-wrap items-center justify-end gap-3">
@@ -94,6 +95,10 @@
       </div>
 
       <div v-else class="overflow-x-auto">
+        <div v-if="selectedItemBar" class="px-6 py-3 flex items-center justify-between gap-3 bg-blue-50 border-b border-blue-100 text-xs text-blue-700">
+          <span>{{ selectedItemBar.name }} ({{ selectedItemBar.unit }})</span>
+          <button type="button" @click="clearItemFilter" class="shrink-0 hover:underline">{{ t('common.clear') }}</button>
+        </div>
         <table class="w-full text-left border-collapse min-w-[920px]">
           <thead class="bg-[#3f3f46] text-white">
             <tr class="text-[10px] font-normal uppercase tracking-[0.2em] text-white">
@@ -110,7 +115,7 @@
               <th class="p-4 text-center px-8 text-white">{{ tx.fulfillmentDate }}</th>
             </tr>
           </thead>
-          <tbody class="text-xs font-normal text-slate-600 divide-y divide-slate-50" v-if="purchaseItems.length > 0">
+          <tbody class="text-xs font-normal text-slate-600 divide-y divide-slate-50" v-if="filteredPurchaseItems.length > 0">
             <tr v-for="(item, i) in paginatedPurchaseItems" :key="item.POItemId || item.poItemId"
               class="hover:bg-blue-50/30 transition-colors group">
               <td class="p-4 text-center text-slate-300 font-mono text-[10px]">
@@ -163,6 +168,27 @@
         </div>
       </div>
     </div>
+    <aside v-if="reportView === 'item'" class="min-w-0 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+      <h3 class="text-[10px] uppercase text-slate-500 tracking-[0.2em] mb-2 text-center">{{ tx.purchasedItems }}</h3>
+      <p class="text-[10px] text-slate-400 mb-4 text-center">{{ tx.itemBarsNote }}</p>
+      <div class="max-h-[680px] overflow-y-auto space-y-3 pr-1">
+        <p v-if="purchaseItemBars.length === 0" class="py-12 text-center text-xs text-slate-400">{{ tx.noPurchaseRecordsFound }}</p>
+        <button v-for="item in purchaseItemBars" :key="item.key" type="button" @click="toggleItemFilter(item)"
+          :aria-pressed="selectedItemKey === item.key" :title="`${item.name} (${item.unit})`"
+          :class="selectedItemKey === item.key ? 'bg-blue-50 border-blue-200 shadow-sm' : 'border-transparent hover:bg-slate-50 hover:border-slate-200'"
+          class="w-full text-left p-2.5 border rounded-lg space-y-1.5 transition-colors">
+          <div class="text-[11px] text-slate-700 break-words">{{ item.name }} <span class="text-slate-400">({{ item.unit }})</span></div>
+          <div class="text-[9px] text-slate-400 break-words">{{ item.sku || '-' }}</div>
+          <div class="text-[10px] text-slate-600 tabular-nums">{{ tx.totalPurchaseQty }}: {{ formatQuantity(item.quantity) }} {{ item.unit }}</div>
+          <div v-if="item.focQuantity" class="text-[10px] text-emerald-600 tabular-nums">{{ tx.foc }}: {{ formatQuantity(item.focQuantity) }} {{ item.unit }}</div>
+          <div class="text-[10px] text-blue-600 tabular-nums">{{ tx.purchaseValue }}: {{ formatNumber(item.amount) }} Ks</div>
+          <div class="h-2.5 bg-slate-100 rounded-full overflow-hidden" aria-hidden="true">
+            <div :class="selectedItemKey === item.key ? 'bg-blue-700' : 'bg-blue-500'" class="h-full rounded-full transition-all duration-500" :style="{ width: `${item.percent}%` }"></div>
+          </div>
+        </button>
+      </div>
+    </aside>
+    </div>
   </div>
 </template>
 
@@ -182,6 +208,7 @@ const purchaseItems = ref([]);
 const suppliers = ref([]);
 const selectedSupplierId = ref('');
 const reportView = ref('voucher');
+const selectedItemKey = ref('');
 const tx = computed(() => ({
   totalProcurementWorth: t('reportViews.purchase.totalProcurementWorth'),
   reportPeriod: t('reportViews.purchase.reportPeriod'),
@@ -189,6 +216,10 @@ const tx = computed(() => ({
   records: t('reportViews.purchase.records'),
   voucherView: t('reportViews.purchase.voucherView'),
   itemView: t('reportViews.purchase.itemView'),
+  purchasedItems: t('reportViews.purchase.purchasedItems'),
+  totalPurchaseQty: t('reportViews.purchase.totalPurchaseQty'),
+  purchaseValue: t('reportViews.purchase.purchaseValue'),
+  itemBarsNote: t('reportViews.purchase.itemBarsNote'),
   poNumber: t('reportViews.purchase.poNumber'),
   product: t('reportViews.purchase.product'),
   qty: t('reportViews.purchase.qty'),
@@ -213,7 +244,14 @@ const tx = computed(() => ({
 // Pagination Logic
 const currentPage = ref(1);
 const itemsPerPage = 12; // Increased for better full-page use
-const activeRows = computed(() => reportView.value === 'item' ? purchaseItems.value : purchases.value);
+const itemBarKey = item => JSON.stringify([
+  item.ProductId ?? item.productId ?? item.Sku ?? item.sku ?? item.ProductName ?? item.productName,
+  item.UnitId ?? item.unitId ?? item.UnitName ?? item.unitName
+]);
+const filteredPurchaseItems = computed(() => selectedItemKey.value
+  ? purchaseItems.value.filter(item => itemBarKey(item) === selectedItemKey.value)
+  : purchaseItems.value);
+const activeRows = computed(() => reportView.value === 'item' ? filteredPurchaseItems.value : purchases.value);
 const totalPages = computed(() => Math.ceil(activeRows.value.length / itemsPerPage) || 1);
 const paginatedPurchases = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
@@ -222,12 +260,40 @@ const paginatedPurchases = computed(() => {
 
 const paginatedPurchaseItems = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
-  return purchaseItems.value.slice(start, start + itemsPerPage);
+  return filteredPurchaseItems.value.slice(start, start + itemsPerPage);
 });
 
 const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const purchaseItemBars = computed(() => {
+  const grouped = new Map();
+  for (const item of purchaseItems.value) {
+    const key = itemBarKey(item);
+    const row = grouped.get(key) || {
+      key, name: item.ProductName || item.productName || '-',
+      sku: item.Sku || item.sku || '', unit: item.UnitName || item.unitName || '-',
+      quantity: 0, focQuantity: 0, amount: 0
+    };
+    row.quantity += toNumber(item.Quantity ?? item.quantity);
+    row.focQuantity += toNumber(item.FOCQuantity ?? item.focQuantity);
+    row.amount += toNumber(item.LineTotal ?? item.lineTotal);
+    grouped.set(key, row);
+  }
+  const rows = [...grouped.values()].sort((a, b) => b.amount - a.amount || b.quantity - a.quantity || a.name.localeCompare(b.name));
+  const maxAmount = Math.max(...rows.map(row => row.amount), 0);
+  return rows.map(row => ({ ...row, percent: maxAmount > 0 ? Math.max(0, row.amount / maxAmount * 100) : 0 }));
+});
+const selectedItemBar = computed(() => purchaseItemBars.value.find(item => item.key === selectedItemKey.value));
+const clearItemFilter = () => {
+  selectedItemKey.value = '';
+  currentPage.value = 1;
+};
+const toggleItemFilter = item => {
+  selectedItemKey.value = selectedItemKey.value === item.key ? '' : item.key;
+  currentPage.value = 1;
 };
 
 const getPurchaseAmount = (purchase) => {
@@ -259,7 +325,7 @@ const handleExportCsv = () => {
       t('reportViews.purchase.fulfillmentDate')
     ];
 
-    const rows = purchaseItems.value.map(item => [
+    const rows = filteredPurchaseItems.value.map(item => [
       item.VoucherNo || item.voucherNo || `PO-${String(item.PurchaseId || item.purchaseId).padStart(5, '0')}`,
       item.ProductName || item.productName || '',
       item.Sku || item.sku || '',
@@ -330,7 +396,7 @@ const formatDate = (date) => date ? new Date(date).toLocaleDateString('en-GB', {
 const formatDateShort = (date) => date ? new Date(date).toLocaleDateString('en-GB') : 'N/A';
 
 watch(() => props.filters, () => {
-  currentPage.value = 1;
+  clearItemFilter();
   fetchPurchases();
 }, { deep: true });
 
@@ -339,7 +405,7 @@ watch(reportView, () => {
 });
 
 watch(selectedSupplierId, () => {
-  currentPage.value = 1;
+  clearItemFilter();
   fetchPurchases();
 });
 

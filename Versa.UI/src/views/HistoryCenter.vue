@@ -640,6 +640,8 @@
                 <select v-model="receiptSize"
                   class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal outline-none focus:ring-2 focus:ring-blue-500/20">
                   <option value="80mm">{{ t('common.thermal80') }}</option>
+                  <option value="104mm">{{ t('common.voucher104') }}</option>
+                  <option value="104mm-slip">{{ t('common.voucher104Slip') }}</option>
                   <option value="A4">{{ t('common.a4') }}</option>
                   <option value="A5">{{ t('common.a5') }}</option>
                 </select>
@@ -968,7 +970,7 @@
     </div>
     <div id="print-area" style="display: none;">
       <div
-        :style="{ width: '76mm', padding: '5px', fontFamily: 'Pyidaungsu, Segoe UI, sans-serif', fontSize: receiptFont.body + 'px', color: 'black', lineHeight: '1.4' }">
+        :style="{ width: receiptPaper(receiptSize).bodyWidth, padding: '5px', fontFamily: 'Pyidaungsu, Segoe UI, sans-serif', fontSize: receiptFont.body + 'px', color: 'black', lineHeight: '1.4' }">
         <div style="text-align: center; margin-bottom: 5px;">
           <h2 :style="{ fontSize: receiptFont.h2 + 'px', margin: 0, textTransform: 'uppercase', fontWeight: 'bold' }">{{ shopInfo.ShopName }}
           </h2>
@@ -1097,16 +1099,16 @@
     </div>
     <div id="print-area-a4" style="display: none;">
       <div :style="{
-        width: receiptSize === 'A4' ? '210mm' : '148mm',
+        width: receiptPaper(receiptSize).bodyWidth,
         minHeight: 'auto',
-        padding: receiptSize === 'A5' ? '4mm' : '10mm',
+        padding: receiptSize === 'A4' ? '10mm' : '4mm',
         backgroundColor: 'white',
         fontFamily: 'Pyidaungsu, sans-serif',
         color: 'black'
       }">
 
         <div style="text-align: center; margin-bottom: 10px;">
-          <h1 :style="{ margin: 0, fontSize: (receiptSize === 'A5' ? receiptFont.h2 : receiptFont.h1) + 'px', fontWeight: 'bold' }">{{
+          <h1 :style="{ margin: 0, fontSize: (receiptSize === 'A4' ? receiptFont.h1 : receiptFont.h2) + 'px', fontWeight: 'bold' }">{{
             shopInfo.ShopName }}</h1>
           <p :style="{ margin: '2px 0', fontSize: receiptFont.small + 'px' }">{{ receiptBranchName }}<span v-if="receiptContact.Address"> | {{ receiptContact.Address }}</span></p>
           <p v-if="receiptContact.Phone" :style="{ margin: '2px 0', fontSize: receiptFont.small + 'px' }">Tel: {{ receiptContact.Phone }}</p>
@@ -1178,7 +1180,7 @@
 
             <tr>
               <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
-                ပမာဏကျသင့်ငွေ:</td>
+                {{ t('sale.invoiceTotal') }}:</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
                 {{ formatNumber(itemsSubtotalDetail) }}
               </td>
@@ -1198,26 +1200,37 @@
             </tr>
             <tr style="font-weight: bold; background-color: #f8fafc;">
               <td colspan="5" style="padding: 8px; border: 1px solid #ccc; text-align: right;">
-                အသားတင်ကျသင့်ငွေ:</td>
+                {{ t('sale.invoiceNetTotal') }}:</td>
               <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">{{
                 formatNumber(receiptTotalDetail) }}</td>
             </tr>
-            <tr v-for="payment in selectedSalePayments" :key="payment.method">
+            <tr>
               <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
-                {{ receiptPaidLabel(payment.method) }}</td>
+                {{ t('sale.invoicePaid') }}:</td>
+              <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(receiptPaidTotalDetail) }}</td>
+            </tr>
+            <tr v-for="payment in selectedSalePayments" :key="`a4-${payment.method}`">
+              <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
+                {{ receiptPaidLabel(payment.method) }}:</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(payment.amount) }}</td>
             </tr>
-            <tr v-if="receiptBalanceDetail !== 0">
+            <tr v-if="receiptRemainingDetail > 0">
               <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
-                {{ receiptBalanceLabel(receiptBalanceDetail) }}</td>
+                {{ t('sale.invoiceRemaining') }}:</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">{{
-                formatNumber(Math.abs(receiptBalanceDetail)) }}</td>
+                formatNumber(receiptRemainingDetail) }}</td>
             </tr>
-            <tr v-if="showPreviousCredit && receiptTotalCreditDetail > 0">
+            <tr v-if="receiptPreviousDebtDetail > 0">
               <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
-                {{ t('sale.totalCredit') }}:</td>
+                {{ t('sale.invoicePreviousDebt') }}:</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold; color: #dc2626;">
-                {{ formatNumber(receiptTotalCreditDetail) }}</td>
+                {{ formatNumber(receiptPreviousDebtDetail) }}</td>
+            </tr>
+            <tr v-if="receiptTotalDueBalanceDetail > 0" style="font-weight: bold; background-color: #fff1f2;">
+              <td colspan="5" style="padding: 8px; border: 1px solid #ccc; text-align: right;">
+                {{ t('sale.invoiceTotalDueBalance') }}:</td>
+              <td style="padding: 8px; border: 1px solid #ccc; text-align: right; color: #be123c;">
+                {{ formatNumber(receiptTotalDueBalanceDetail) }}</td>
             </tr>
           </tbody>
         </table>
@@ -1332,6 +1345,21 @@ const receiptBalanceDetail = computed(() =>
 const receiptTotalCreditDetail = computed(() => toNonNegativeAmount(
   selectedSale.value?.sale?.CustomerCurrentBalance ?? selectedSale.value?.sale?.customerCurrentBalance
 ));
+const receiptPaidTotalDetail = computed(() => toNonNegativeAmount(
+  selectedSale.value?.sale?.PaidAmount ?? selectedSale.value?.sale?.paidAmount
+));
+const receiptRemainingDetail = computed(() => toNonNegativeAmount(
+  selectedSale.value?.sale?.InitialDueAmount
+  ?? selectedSale.value?.sale?.initialDueAmount
+  ?? selectedSale.value?.sale?.DueAmount
+  ?? selectedSale.value?.sale?.dueAmount
+));
+const receiptPreviousDebtDetail = computed(() => toNonNegativeAmount(
+  selectedSale.value?.sale?.PreviousDebtAmount ?? selectedSale.value?.sale?.previousDebtAmount
+));
+const receiptTotalDueBalanceDetail = computed(() =>
+  receiptPreviousDebtDetail.value + receiptRemainingDetail.value
+);
 const receiptPaidLabel = (method) => `${t('history.amountPaid')}${method ? ` (${method})` : ''}:`;
 const receiptBalanceLabel = (balance) => (
   balance > 0
@@ -1352,7 +1380,15 @@ const getSaleNetAmount = (sale) => {
 const shopInfo = ref({});
 const receiptFontSizeMap = { Small: { body: 10, h1: 16, h2: 14, small: 8, tiny: 7, footer: 9, total: 10 }, Medium: { body: 13, h1: 20, h2: 18, small: 11, tiny: 9, footer: 11, total: 12 }, Large: { body: 16, h1: 26, h2: 22, small: 14, tiny: 11, footer: 14, total: 15 } };
 const receiptFont = computed(() => receiptFontSizeMap[shopInfo.value.ReceiptFontSize] || receiptFontSizeMap.Medium);
-const normalizeReceiptSize = (value) => ['80mm', 'A4', 'A5'].includes(value) ? value : '80mm';
+const receiptPaper = (size) => {
+  if (size === '80mm') return { isSlip: true, pageSize: '80mm auto', bodyWidth: '76mm', bodyHeight: 'auto', capturePaddingBottom: '18px' };
+  if (size === '104mm') return { isSlip: false, pageSize: '104mm auto', bodyWidth: '104mm', bodyHeight: 'auto', capturePaddingBottom: '0' };
+  if (size === '104mm-slip') return { isSlip: true, pageSize: '104mm auto', bodyWidth: '100mm', bodyHeight: 'auto', capturePaddingBottom: '18px' };
+  if (size === 'A5') return { isSlip: false, pageSize: '148mm 210mm', bodyWidth: '148mm', bodyHeight: '210mm', capturePaddingBottom: '0' };
+  return { isSlip: false, pageSize: '210mm 297mm', bodyWidth: '210mm', bodyHeight: '297mm', capturePaddingBottom: '0' };
+};
+const isSlipReceiptSize = (size) => receiptPaper(size).isSlip;
+const normalizeReceiptSize = (value) => ['80mm', '104mm', '104mm-slip', 'A4', 'A5'].includes(value) ? value : '80mm';
 const preferredReceiptSize = () => normalizeReceiptSize(
   shopInfo.value.PreferredPaperSize ?? shopInfo.value.preferredPaperSize
 );
@@ -1487,7 +1523,7 @@ const printAndroidDetailImageIfPossible = async () => {
   if (!androidBridge.supportsNativePrint()) return false;
 
   await nextTick();
-  const elementId = receiptSize.value === '80mm' ? 'print-area' : 'print-area-a4';
+  const elementId = isSlipReceiptSize(receiptSize.value) ? 'print-area' : 'print-area-a4';
   const el = document.getElementById(elementId);
   if (!el || typeof androidBridge.printImage !== 'function') return false;
 
@@ -1509,7 +1545,7 @@ const printFromDetail = async (preOpenedWindow = null) => {
   const saleId = selectedSale.value?.sale?.SaleId || selectedSale.value?.sale?.saleId;
   if (!saleId) return;
 
-  const isThermal = receiptSize.value === '80mm';
+  const isThermal = isSlipReceiptSize(receiptSize.value);
   if (supportsEpsonAssistant && isThermal && applePrintMethod.value === 'epson') {
     if (preparingEpson.value) return;
     preparingEpson.value = true;
@@ -1569,8 +1605,8 @@ const printFromDetail = async (preOpenedWindow = null) => {
        </div>`
     : '';
 
-  const pageSize = isThermal ? '80mm auto' : (receiptSize.value === 'A5' ? '148mm 210mm' : '210mm 297mm');
-  const bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
+  const pageSize = receiptPaper(receiptSize.value).pageSize;
+  const bodyWidth = receiptPaper(receiptSize.value).bodyWidth;
 
   printWindow.document.write(`
     <html>
@@ -1653,7 +1689,7 @@ const shareFromDetail = async () => {
 
   await nextTick();
 
-  const isThermal = receiptSize.value === '80mm';
+  const isThermal = isSlipReceiptSize(receiptSize.value);
   const elementId = isThermal ? 'print-area' : 'print-area-a4';
   const el = document.getElementById(elementId);
   if (!el) {
@@ -1734,10 +1770,11 @@ const shareFromDetail = async () => {
 const captureDetailInvoiceElement = async (el) => {
   let iframe = null;
   try {
-    const isThermal = receiptSize.value === '80mm';
-    const bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
-    const bodyHeight = isThermal ? 'auto' : (receiptSize.value === 'A5' ? '210mm' : '297mm');
-    const capturePaddingBottom = isThermal ? '18px' : '0';
+    const paper = receiptPaper(receiptSize.value);
+    const isThermal = paper.isSlip;
+    const bodyWidth = paper.bodyWidth;
+    const bodyHeight = paper.bodyHeight;
+    const capturePaddingBottom = paper.capturePaddingBottom;
     const captureWidth = bodyWidth;
     const contentHtml = el.outerHTML.replace('style="display: none;"', 'style="display: block;"');
 

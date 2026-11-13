@@ -41,6 +41,49 @@ foreach (var amount in new[] { 0m, -1m, 1.001m })
 await Reject(() => { var m = Request(1, 10); m.RequestId = null; SupplierDebtPayments.Validate(m); return Task.CompletedTask; }, "Old clients without a request ID fail closed");
 await Reject(() => { var m = Request(1, 10); m.ReferenceNo = "PU00001"; SupplierDebtPayments.Validate(m); return Task.CompletedTask; }, "Purchase-owned reference prefix cannot be used for debt payments");
 
+var legacyOrders = new List<SupplierDebtPayments.OrderState>
+{
+    new() { POId = 26, TotalAmount = 5026308m, PaidAmount = 0m, Status = "Unpaid" },
+    new() { POId = 42, TotalAmount = -112000m, PaidAmount = -112000m, Status = "Paid" }
+};
+var legacyAllocations = SupplierDebtPayments.Allocate(legacyOrders, 1000m);
+Check(legacyAllocations.Count == 1 && legacyAllocations[0].POId == 26
+    && legacyAllocations[0].Applied == 1000m, "Settled signed purchase does not block payment allocation");
+Check(legacyOrders[1].PaidAmount == -112000m && legacyOrders[1].Status == "Paid",
+    "Settled signed purchase stays unchanged");
+foreach (var invalid in new[]
+{
+    new SupplierDebtPayments.OrderState { TotalAmount = null, PaidAmount = null },
+    new SupplierDebtPayments.OrderState { TotalAmount = 100m, PaidAmount = -10m },
+    new SupplierDebtPayments.OrderState { TotalAmount = -100m, PaidAmount = -110m }
+})
+    await Reject(() => { SupplierDebtPayments.Allocate([invalid], 1m); return Task.CompletedTask; },
+        "Missing or unsettled negative balances still require reconciliation");
+
+// Optional read-only reproduction against the supplied backup. No SQL is executed.
+if (args.Length == 1)
+{
+    var orders = new List<SupplierDebtPayments.OrderState>();
+    foreach (var line in File.ReadLines(args[0]))
+    {
+        if (!line.StartsWith("INSERT INTO `PurchaseOrders` VALUES ")) continue;
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(line,
+            @"\((\d+),29,(\d+|NULL),(-?[\d.]+|NULL),(-?[\d.]+|NULL),"))
+        {
+            decimal? ParseAmount(string value) => value == "NULL" ? null
+                : decimal.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+            orders.Add(new() { POId = int.Parse(match.Groups[1].Value),
+                TotalAmount = ParseAmount(match.Groups[3].Value), PaidAmount = ParseAmount(match.Groups[4].Value) });
+        }
+    }
+    Check(orders.Count == 32, "Backup reproduction found supplier 29's 32 purchase orders");
+    Check(orders.Sum(o => Math.Max(0m, o.TotalAmount!.Value - o.PaidAmount!.Value)) == 13755518m,
+        "Backup open purchase balances match supplier debt of 13,755,518 Ks");
+    var allocations = SupplierDebtPayments.Allocate(orders, 13755518m);
+    Check(allocations.Sum(x => x.Applied) == 13755518m && allocations.All(x => x.POId != 42),
+        "Read-only full-balance allocation succeeds and leaves historical purchase 42 untouched");
+}
+
 var connectionString = Environment.GetEnvironmentVariable("VERSA_PAYMENT_TEST_CONNECTION");
 if (string.IsNullOrWhiteSpace(connectionString))
 {

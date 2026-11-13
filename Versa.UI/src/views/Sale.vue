@@ -35,11 +35,11 @@
         <!-- Invoice Preview (scrollable) - shows the actual print-area content -->
         <div
           class="invoice-preview-scroll overflow-y-auto flex-1 min-h-0 p-3 sm:p-4 bg-slate-50 flex"
-          :class="receiptSize === '80mm' ? 'justify-center overflow-x-hidden' : 'justify-start overflow-x-auto'"
+          :class="isSlipReceiptSize(receiptSize) ? 'justify-center overflow-x-hidden' : 'justify-start overflow-x-auto'"
         >
           <div
             class="bg-white rounded-xl shadow-sm border border-slate-200 invoice-preview-wrapper"
-            :class="{ 'invoice-preview-wrapper-wide': receiptSize !== '80mm' }"
+            :class="{ 'invoice-preview-wrapper-wide': !isSlipReceiptSize(receiptSize) }"
             ref="invoicePreviewRef"
           >
             <div v-html="capturedPrintHtml" class="invoice-preview-content"></div>
@@ -126,12 +126,18 @@
     </div>
 
 
+    <BarcodeScannerModal v-if="showBarcodeScanner" @close="showBarcodeScanner = false" @scan="handleCameraBarcode" />
+
     <div class="bg-white p-4 shadow-sm flex flex-col gap-3 border-b shrink-0">
       <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
         <div class="flex-1 min-w-0 relative">
           <input v-model="searchQuery" type="text" ref="searchInput" @input="handleSearch"
             @keydown.enter="handleBarcodeScan" :placeholder="t('sale.searchPlaceholder')"
-            class="w-full pl-10 pr-4 py-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-normal border border-gray-200 transition-all">
+            class="w-full pl-10 pr-14 py-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-normal border border-gray-200 transition-all">
+          <button type="button" @click="showBarcodeScanner = true" :title="t('scanner.open')" :aria-label="t('scanner.open')"
+            class="absolute right-1 top-1 flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-200 focus-visible:ring-2 focus-visible:ring-blue-500">
+            <ScanBarcode class="h-5 w-5" />
+          </button>
           <span class="absolute left-3 top-3.5 text-gray-400"> <svg class="h-4 w-4" fill="none" stroke="currentColor"
               viewBox="0 0 24 24">
               <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2" />
@@ -715,6 +721,8 @@
                 <select v-model="receiptSize"
                   class="w-full p-3 border border-slate-200 rounded-lg font-normal bg-slate-50 outline-none focus:border-blue-400 text-xs">
                   <option value="80mm">{{ t('sale.thermalPrinter') }}</option>
+                  <option value="104mm">{{ t('sale.voucher104') }}</option>
+                  <option value="104mm-slip">{{ t('sale.voucher104Slip') }}</option>
                   <option value="A4">{{ t('sale.standardOffice') }}</option>
                   <option value="A5">{{ t('sale.smallPage') }}</option>
                 </select>
@@ -756,7 +764,7 @@
 
       <div id="print-area" style="display: none;">
         <div
-          :style="{ width: '76mm', padding: '5px', fontFamily: 'Pyidaungsu, Segoe UI, sans-serif', fontSize: receiptFont.body + 'px', color: 'black', lineHeight: '1.4' }">
+          :style="{ width: receiptPaper(receiptSize).bodyWidth, padding: '5px', fontFamily: 'Pyidaungsu, Segoe UI, sans-serif', fontSize: receiptFont.body + 'px', color: 'black', lineHeight: '1.4' }">
           <div style="text-align: center; margin-bottom: 5px;">
             <h2 :style="{ fontSize: receiptFont.h2 + 'px', margin: 0, textTransform: 'uppercase', fontWeight: 'bold' }">{{ shopInfo.ShopName
             }}</h2>
@@ -881,16 +889,16 @@
 
       <div id="print-area-a4" style="display: none;">
         <div :style="{
-          width: receiptSize === 'A4' ? '210mm' : '148mm',
+          width: receiptPaper(receiptSize).bodyWidth,
           minHeight: 'auto',
-          padding: receiptSize === 'A5' ? '4mm' : '10mm',
+          padding: receiptSize === 'A4' ? '10mm' : '4mm',
           backgroundColor: 'white',
           fontFamily: 'Pyidaungsu, sans-serif',
           color: 'black'
         }">
 
           <div style="text-align: center; margin-bottom: 10px;">
-            <h1 :style="{ margin: 0, fontSize: (receiptSize === 'A5' ? receiptFont.h2 : receiptFont.h1) + 'px', fontWeight: 'bold' }">{{
+            <h1 :style="{ margin: 0, fontSize: (receiptSize === 'A4' ? receiptFont.h1 : receiptFont.h2) + 'px', fontWeight: 'bold' }">{{
               shopInfo.ShopName }}</h1>
             <p :style="{ margin: '2px 0', fontSize: receiptFont.small + 'px' }">{{ receiptBranchName }}<span v-if="receiptContact.Address"> | {{ receiptContact.Address }}</span></p>
             <p v-if="receiptContact.Phone" :style="{ margin: '2px 0', fontSize: receiptFont.small + 'px' }">Tel: {{ receiptContact.Phone }}</p>
@@ -961,7 +969,7 @@
 
               <tr>
                 <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
-                  {{ t('sale.subtotal') }}:</td>
+                  {{ t('sale.invoiceTotal') }}:</td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
                   {{ formatNumber(receiptSubtotal) }}
                 </td>
@@ -985,26 +993,37 @@
               </tr>
               <tr style="font-weight: bold; background-color: #f8fafc;">
                 <td colspan="5" style="padding: 8px; border: 1px solid #ccc; text-align: right;">
-                  {{ t('sale.netAmount') }}:</td>
+                  {{ t('sale.invoiceNetTotal') }}:</td>
                 <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(receiptTotal) }}
                 </td>
               </tr>
-              <tr v-for="p in receiptData.payments" :key="p.method">
+              <tr>
                 <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
-                  {{ receiptPaidLabel(p.method) }}</td>
-                <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(p.amount) }}</td>
+                  {{ t('sale.invoicePaid') }}:</td>
+                <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(receiptPaidTotal) }}</td>
               </tr>
-              <tr v-if="balanceAmount !== 0">
+              <tr v-for="payment in receiptData.payments" :key="`a4-${payment.method}`">
+                <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
+                  {{ receiptPaidLabel(payment.method) }}:</td>
+                <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(payment.amount) }}</td>
+              </tr>
+              <tr v-if="receiptRemaining > 0">
                 <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
-                  {{ receiptBalanceLabel(balanceAmount) }}</td>
+                  {{ t('sale.invoiceRemaining') }}:</td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">{{
-                  formatNumber(Math.abs(balanceAmount)) }}</td>
+                  formatNumber(receiptRemaining) }}</td>
               </tr>
-              <tr v-if="showPreviousCredit && receiptTotalCredit > 0">
+              <tr v-if="receiptPreviousDebt > 0">
                 <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
-                  {{ t('sale.totalCredit') }}:</td>
+                  {{ t('sale.invoicePreviousDebt') }}:</td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold; color: #dc2626;">
-                  {{ formatNumber(receiptTotalCredit) }}</td>
+                  {{ formatNumber(receiptPreviousDebt) }}</td>
+              </tr>
+              <tr v-if="receiptTotalDueBalance > 0" style="font-weight: bold; background-color: #fff1f2;">
+                <td colspan="5" style="padding: 8px; border: 1px solid #ccc; text-align: right;">
+                  {{ t('sale.invoiceTotalDueBalance') }}:</td>
+                <td style="padding: 8px; border: 1px solid #ccc; text-align: right; color: #be123c;">
+                  {{ formatNumber(receiptTotalDueBalance) }}</td>
               </tr>
             </tbody>
           </table>
@@ -1354,6 +1373,8 @@ import { isMobileBrowser, openPrintWindow } from '../utils/print';
 import { isAppleMobile, prepareEpsonReceipt } from '../utils/epsonPrint';
 import { normalizeReceiptPayments, receiptUnitName } from '../utils/receiptData';
 import androidBridge from '../services/androidBridge';
+import { ScanBarcode } from 'lucide-vue-next';
+import BarcodeScannerModal from '../components/BarcodeScannerModal.vue';
 const { addToast } = useToast();
 const { t, locale } = useI18n();
 const isAdmin = computed(() => localStorage.getItem('Role') === 'Admin');
@@ -1375,6 +1396,7 @@ const customers = ref([]);
 const units = ref([]);
 const suppliers = ref([]);
 const searchQuery = ref('');
+const showBarcodeScanner = ref(false);
 const supplierSearch = ref('');
 const showSupplierResults = ref(false);
 const customerSearch = ref('');
@@ -1500,7 +1522,15 @@ const quantityInputMin = quantityInputStep;
 const lastSaleNo = ref('');
 const lastSaleDate = ref('');
 const cashierName = ref('');
-const normalizeReceiptSize = (value) => ['80mm', 'A4', 'A5'].includes(value) ? value : '80mm';
+const receiptPaper = (size) => {
+  if (size === '80mm') return { isSlip: true, pageSize: '80mm auto', bodyWidth: '76mm', bodyHeight: 'auto', capturePaddingBottom: '18px' };
+  if (size === '104mm') return { isSlip: false, pageSize: '104mm auto', bodyWidth: '104mm', bodyHeight: 'auto', capturePaddingBottom: '0' };
+  if (size === '104mm-slip') return { isSlip: true, pageSize: '104mm auto', bodyWidth: '100mm', bodyHeight: 'auto', capturePaddingBottom: '18px' };
+  if (size === 'A5') return { isSlip: false, pageSize: '148mm 210mm', bodyWidth: '148mm', bodyHeight: '210mm', capturePaddingBottom: '0' };
+  return { isSlip: false, pageSize: '210mm 297mm', bodyWidth: '210mm', bodyHeight: '297mm', capturePaddingBottom: '0' };
+};
+const isSlipReceiptSize = (size) => receiptPaper(size).isSlip;
+const normalizeReceiptSize = (value) => ['80mm', '104mm', '104mm-slip', 'A4', 'A5'].includes(value) ? value : '80mm';
 const preferredReceiptSize = () => normalizeReceiptSize(
   shopInfo.value.PreferredPaperSize ?? shopInfo.value.preferredPaperSize
 );
@@ -1530,6 +1560,8 @@ const invoicePreviewData = ref({
   deliveryFee: 0,
   voucherNote: '',
   customerName: '',
+  previousDebt: 0,
+  initialRemaining: 0,
   totalCredit: 0,
   branchName: '',
 });
@@ -1594,6 +1626,15 @@ const receiptBalance = computed(() => {
   return paidTotal - receiptTotal.value;
 });
 const receiptTotalCredit = computed(() => toNonNegativeAmount(invoicePreviewData.value.totalCredit));
+const receiptPaidTotal = computed(() => invoicePreviewData.value.payments.reduce(
+  (sum, payment) => sum + toNonNegativeAmount(payment.amount),
+  0
+));
+const receiptRemaining = computed(() => toNonNegativeAmount(
+  invoicePreviewData.value.initialRemaining ?? Math.max(0, receiptTotal.value - receiptPaidTotal.value)
+));
+const receiptPreviousDebt = computed(() => toNonNegativeAmount(invoicePreviewData.value.previousDebt));
+const receiptTotalDueBalance = computed(() => receiptPreviousDebt.value + receiptRemaining.value);
 const receiptPaidLabel = (method) => `${t('sale.totalPaid')}${method ? ` (${method})` : ''}:`;
 const receiptBalanceLabel = (balance) => (
   balance > 0
@@ -1656,22 +1697,35 @@ const handleSearch = () => {
   currentPage.value = 1;
 };
 
-const handleBarcodeScan = (e) => {
-  if (!searchQuery.value) return;
-
-  const q = searchQuery.value.toLowerCase().trim();
-  // Find exact SKU match or exact Name match
-  const match = allItems.value.find(i =>
-    (i.Sku && i.Sku.toLowerCase() === q) ||
-    (i.Name && i.Name.toLowerCase() === q)
-  );
-
-  if (match) {
-    e.preventDefault();
-    handleItemSelect(match);
+const handleBarcodeScan = async (e, payload = searchQuery.value) => {
+  e?.preventDefault();
+  if (typeof payload !== 'string' || payload.length > 4096 || /[\u0000-\u001f\u007f-\u009f]/.test(payload) || !payload.trim()) {
+    if (payload) addToast(t('scanner.invalidPayload'), 'warning');
+    return;
+  }
+  searchQuery.value = payload.trim();
+  handleSearch();
+  selectedCategory.value = null;
+  showOutOfStockItems.value = true;
+  const q = searchQuery.value.toLowerCase();
+  const normalize = value => String(value ?? '').trim().toLowerCase();
+  const skuMatches = allItems.value.filter(item => normalize(item.Sku ?? item.sku) === q);
+  const matches = skuMatches.length ? skuMatches : allItems.value.filter(item => normalize(item.Name) === q);
+  if (matches.length > 1) {
+    addToast(t('scanner.ambiguous'), 'warning');
+  } else if (matches.length === 1) {
+    const match = matches[0];
+    if (await handleItemSelect(match) === false) return;
     searchQuery.value = ''; // Clear search for next scan
     addToast(`Added ${match.Name}`, "success");
+  } else {
+    addToast(t('scanner.noMatch'), 'warning');
   }
+};
+
+const handleCameraBarcode = (text) => {
+  showBarcodeScanner.value = false;
+  return handleBarcodeScan(undefined, text);
 };
 
 const normalizeProductStockFields = (product) => {
@@ -1777,10 +1831,10 @@ const getTypeColor = (type) => {
 };
 
 const handleItemSelect = (item) => {
-  if (item.itemType === 'QuickSale') openQuickSaleModal();
-  else if (item.itemType === 'Product') addToCart(item);
-  else if (item.itemType === 'Service') addServiceToCart(item);
-  else if (item.itemType === 'Bundle') addBundleToCart(item);
+  if (item.itemType === 'QuickSale') return openQuickSaleModal();
+  else if (item.itemType === 'Product') return addToCart(item);
+  else if (item.itemType === 'Service') return addServiceToCart(item);
+  else if (item.itemType === 'Bundle') return addBundleToCart(item);
 };
 
 const openQuickSaleModal = () => {
@@ -2864,7 +2918,7 @@ const addToCart = async (product) => {
 
   if (product.EffectiveStock < unitsToAdd) {
     addToast(`"${product.Name}" ${t('sale.outOfStock')}`, "error");
-    return;
+    return false;
   }
 
 
@@ -2899,6 +2953,7 @@ const addToCart = async (product) => {
     cart.value.push(cartItem);
     refreshCartItemConversions(product, cartItem);
   }
+  return true;
 };
 
 const refreshCartItemConversions = async (product, cartItem) => {
@@ -3184,7 +3239,8 @@ const openMobileInvoiceImageWindow = (targetWindow, blob, fileName) => {
 };
 
 const buildInvoiceHtml = (format = null) => {
-  const isThermal = (format || receiptSize.value) === '80mm';
+  const paper = receiptPaper(format || receiptSize.value);
+  const isThermal = paper.isSlip;
   const data = invoicePreviewData.value;
   const font = receiptFont.value;
   const discountLabel = voucherDiscountLabel(data.discountType, data.discountInput);
@@ -3244,7 +3300,7 @@ const buildInvoiceHtml = (format = null) => {
 
   if (isThermal) {
     return `
-      <div style="width:76mm;padding:5px;font-family:Pyidaungsu,sans-serif;color:black;line-height:1.4;background:white">
+      <div style="width:${paper.bodyWidth};padding:5px;font-family:Pyidaungsu,sans-serif;color:black;line-height:1.4;background:white">
         <div style="text-align:center;margin-bottom:5px">
           <h2 style="font-size:${font.h2}px;margin:0;text-transform:uppercase;font-weight:bold">${shopInfo.value.ShopName || ''}</h2>
           <p style="margin:2px 0;font-weight:bold">(${receiptBranchName.value || ''})</p>
@@ -3333,10 +3389,11 @@ const capturePreviewElement = async () => {
       return null;
     }
 
-    const isThermal = receiptSize.value === '80mm';
-    const bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
-    const bodyHeight = isThermal ? 'auto' : (receiptSize.value === 'A5' ? '210mm' : '297mm');
-    const capturePaddingBottom = isThermal ? '18px' : '0';
+    const paper = receiptPaper(receiptSize.value);
+    const isThermal = paper.isSlip;
+    const bodyWidth = paper.bodyWidth;
+    const bodyHeight = paper.bodyHeight;
+    const capturePaddingBottom = paper.capturePaddingBottom;
     const captureWidth = bodyWidth;
 
     // Build logo HTML
@@ -3493,9 +3550,10 @@ const printFromPreview = async () => {
     }
   }
 
-  const isThermal = receiptSize.value === '80mm';
-  const pageSize = isThermal ? '80mm auto' : (receiptSize.value === 'A5' ? '148mm 210mm' : '210mm 297mm');
-  const bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
+  const paper = receiptPaper(receiptSize.value);
+  const isThermal = paper.isSlip;
+  const pageSize = paper.pageSize;
+  const bodyWidth = paper.bodyWidth;
 
   // Build logo HTML
   const hasLogo = shopInfo.value.LogoData &&
@@ -3556,7 +3614,7 @@ const closeInvoicePreview = () => {
 };
 
 const onSaleKeydown = (e) => {
-  if (showNewCustomerModal.value) return;
+  if (showNewCustomerModal.value || showBarcodeScanner.value) return;
   if (e.key === 'F12') {
     e.preventDefault();
     processCheckout();
@@ -3565,7 +3623,7 @@ const onSaleKeydown = (e) => {
 
 const printReceipt = async (htmlContent = null, preOpenedWindow = null) => {
   await nextTick();
-  const isThermal = receiptSize.value === '80mm';
+  const isThermal = isSlipReceiptSize(receiptSize.value);
   const elementId = isThermal ? 'print-area' : 'print-area-a4';
   const printArea = document.getElementById(elementId);
 
@@ -3579,8 +3637,8 @@ const printReceipt = async (htmlContent = null, preOpenedWindow = null) => {
     }
     return;
   }
-  let pageSize = isThermal ? '80mm auto' : (receiptSize.value === 'A5' ? '148mm 210mm' : '210mm 297mm');
-  let bodyWidth = isThermal ? '76mm' : (receiptSize.value === 'A5' ? '148mm' : '210mm');
+  let pageSize = receiptPaper(receiptSize.value).pageSize;
+  let bodyWidth = receiptPaper(receiptSize.value).bodyWidth;
 
   // ပုံစာသား (Base64) တကယ်ရှိမရှိ သေချာစစ်ဆေးခြင်း
   const hasLogo = shopInfo.value.LogoData &&
@@ -3806,6 +3864,8 @@ const confirmSale = async () => {
       deliveryFee: saleForm.value.DeliveryFee || 0,
       voucherNote: saleForm.value.Note || '',
       customerName: saleForm.value.CustomerName || t('common.walkInCustomer'),
+      previousDebt: previousCustomerCredit,
+      initialRemaining: Math.max(0, totalAmount.value - totalPaid.value),
       totalCredit: previousCustomerCredit
         + Math.max(0, totalAmount.value - totalPaid.value),
       branchName: receiptBranchName.value,
@@ -3817,7 +3877,7 @@ const confirmSale = async () => {
 
     // ၄။ Capture print-area HTML BEFORE clearing cart
     await nextTick();
-    const isThermal = receiptSize.value === '80mm';
+    const isThermal = isSlipReceiptSize(receiptSize.value);
     const elementId = isThermal ? 'print-area' : 'print-area-a4';
     const printEl = document.getElementById(elementId);
     if (printEl) {

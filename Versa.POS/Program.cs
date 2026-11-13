@@ -23,17 +23,30 @@ builder.Services.AddControllers()
 builder.Services.AddScoped<DatabaseService>();
 
 // CORS Policy Configuration (UI Project က လှမ်းခေါ်နိုင်ရန်)
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? [];
+if (allowedOrigins.Length == 0)
+{
+    throw new InvalidOperationException(
+        "Configure at least one Cors:AllowedOrigins value before starting the POS API.");
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll",
-        policy => policy.AllowAnyOrigin()
-                        .AllowAnyMethod()
-                        .AllowAnyHeader());
+    options.AddPolicy("TrustedUi", policy => policy
+        .WithOrigins(allowedOrigins)
+        .AllowAnyMethod()
+        .AllowAnyHeader());
 });
 
 // JWT Authentication Configuration
 // appsettings.json ထဲက Key ကို သုံးတာ ပိုကောင်းပါတယ် (ဒါက လက်ရှိ model အတွက် ဥပမာပါ)
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "Your_Secret_Key_Here_Must_Be_Long_Enough_12345";
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.Length < 32)
+{
+    throw new InvalidOperationException(
+        "Configure a Jwt:Key of at least 32 characters before starting the POS API.");
+}
 var key = Encoding.ASCII.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(x =>
@@ -43,8 +56,8 @@ builder.Services.AddAuthentication(x =>
 })
 .AddJwtBearer(x =>
 {
-    x.RequireHttpsMetadata = false;
-    x.SaveToken = true;
+    x.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+    x.SaveToken = false;
     x.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
@@ -87,7 +100,7 @@ app.Use(async (context, next) =>
 app.UseRouting();
 
 // CORS က Routing နဲ့ Authentication ကြားမှာ ရှိရပါမယ်
-app.UseCors("AllowAll");
+app.UseCors("TrustedUi");
 
 app.UseAuthentication(); // ဘယ်သူလဲ စစ်ဆေးခြင်း
 app.UseMiddleware<SingleSessionMiddleware>(); // Single-session enforcement

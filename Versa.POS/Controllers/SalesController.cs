@@ -296,6 +296,25 @@ WHERE TABLE_SCHEMA = DATABASE()
             }
         }
 
+        private static async Task EnsureSalesDebtSnapshotColumnsAsync(MySqlConnection conn, MySqlTransaction transaction)
+        {
+            var hasPreviousDebt = await HasColumnAsync(conn, transaction, "Sales", "PreviousDebtAmount");
+            if (!hasPreviousDebt)
+            {
+                await conn.ExecuteAsync(
+                    "ALTER TABLE Sales ADD COLUMN PreviousDebtAmount DECIMAL(18,2) NULL",
+                    transaction: transaction);
+            }
+
+            var hasInitialDue = await HasColumnAsync(conn, transaction, "Sales", "InitialDueAmount");
+            if (!hasInitialDue)
+            {
+                await conn.ExecuteAsync(
+                    "ALTER TABLE Sales ADD COLUMN InitialDueAmount DECIMAL(18,2) NULL",
+                    transaction: transaction);
+            }
+        }
+
         private static async Task EnsureBundleItemsSupportsUnitsAsync(MySqlConnection conn, MySqlTransaction transaction)
         {
             var hasUnitId = await conn.ExecuteScalarAsync<int>(@"
@@ -528,6 +547,7 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
                 await EnsureSalesClientSaleIdColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureSalesSaleTypeColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureSalesDiscountMetaColumnsAsync(conn, (MySqlTransaction)transaction);
+                await EnsureSalesDebtSnapshotColumnsAsync(conn, (MySqlTransaction)transaction);
                 await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureBundleItemsSupportsUnitsAsync(conn, (MySqlTransaction)transaction);
 
@@ -579,6 +599,11 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
                     throw new InvalidOperationException("Credit or partial sale requires a selected customer.");
                 }
                 string finalSaleType = dueAmount > 0 ? (model.PaidAmount > 0 ? "Partial" : "Credit") : "Normal";
+                decimal previousDebtAmount = resolvedCustomerId.HasValue
+                    ? await conn.ExecuteScalarAsync<decimal>(
+                        "SELECT GREATEST(IFNULL(CurrentBalance, 0), 0) FROM Customers WHERE CustomerId = @CustomerId FOR UPDATE",
+                        new { CustomerId = resolvedCustomerId.Value }, transaction)
+                    : 0;
 
                 // Always trust authenticated user claim over client payload for audit fields
                 int claimUserId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId) ? parsedUserId : 0;
@@ -586,8 +611,8 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
 
                 // ၂။ Sales Master သိမ်းဆည်းခြင်း
                 DateTime saleDate = model.SaleDate ?? DateTime.Now;
-                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DiscountType, DiscountInput, DeliveryFee, PaidAmount, DueAmount, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus, ClientSaleId)  
-                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DiscountType, @DiscountInput, @DeliveryFee, @PaidAmount, @dueAmount, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus, @ClientSaleId);
+                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DiscountType, DiscountInput, DeliveryFee, PaidAmount, DueAmount, InitialDueAmount, PreviousDebtAmount, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus, ClientSaleId)
+                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DiscountType, @DiscountInput, @DeliveryFee, @PaidAmount, @dueAmount, @dueAmount, @previousDebtAmount, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus, @ClientSaleId);
                           SELECT LAST_INSERT_ID();";
 
                 int saleId = await conn.ExecuteScalarAsync<int>(saleSql, new
@@ -602,6 +627,7 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
                     model.DeliveryFee,
                     model.PaidAmount,
                     dueAmount,
+                    previousDebtAmount,
                     model.PaymentMethod,
                     VoucherNote = string.IsNullOrWhiteSpace(model.VoucherNote) ? (model.Note ?? "") : model.VoucherNote,
                     SaleDate = saleDate,
@@ -829,6 +855,7 @@ WHERE SaleItemId = @SaleItemId",
                 await EnsurePurchaseBatchRemainingColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureSalesSaleTypeColumnAsync(conn, (MySqlTransaction)transaction);
                 await EnsureSalesDiscountMetaColumnsAsync(conn, (MySqlTransaction)transaction);
+                await EnsureSalesDebtSnapshotColumnsAsync(conn, (MySqlTransaction)transaction);
                 await EnsureBundleItemsSupportsUnitsAsync(conn, (MySqlTransaction)transaction);
 
                 // 0. Resolve Customer
@@ -861,13 +888,18 @@ WHERE SaleItemId = @SaleItemId",
                     throw new InvalidOperationException("Credit or partial preorder requires a selected customer.");
                 }
                 string finalSaleType = dueAmount > 0 ? (model.PaidAmount > 0 ? "Partial" : "Credit") : "Normal";
+                decimal previousDebtAmount = resolvedCustomerId.HasValue
+                    ? await conn.ExecuteScalarAsync<decimal>(
+                        "SELECT GREATEST(IFNULL(CurrentBalance, 0), 0) FROM Customers WHERE CustomerId = @CustomerId FOR UPDATE",
+                        new { CustomerId = resolvedCustomerId.Value }, transaction)
+                    : 0;
 
                 int claimUserId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId) ? parsedUserId : 0;
                 int effectiveUserId = claimUserId > 0 ? claimUserId : model.UserId;
 
                 DateTime saleDate = model.SaleDate?.Date ?? DateTime.Now.Date;
-                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DiscountType, DiscountInput, DeliveryFee, PaidAmount, DueAmount, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus)  
-                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DiscountType, @DiscountInput, @DeliveryFee, @PaidAmount, @dueAmount, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus);
+                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DiscountType, DiscountInput, DeliveryFee, PaidAmount, DueAmount, InitialDueAmount, PreviousDebtAmount, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus)
+                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DiscountType, @DiscountInput, @DeliveryFee, @PaidAmount, @dueAmount, @dueAmount, @previousDebtAmount, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus);
                           SELECT LAST_INSERT_ID();";
 
                 int saleId = await conn.ExecuteScalarAsync<int>(saleSql, new
@@ -882,6 +914,7 @@ WHERE SaleItemId = @SaleItemId",
                     model.DeliveryFee,
                     model.PaidAmount,
                     dueAmount,
+                    previousDebtAmount,
                     model.PaymentMethod,
                     VoucherNote = string.IsNullOrWhiteSpace(model.VoucherNote) ? (model.Note ?? "") : model.VoucherNote,
                     SaleDate = saleDate,

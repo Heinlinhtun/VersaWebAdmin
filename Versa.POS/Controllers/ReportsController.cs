@@ -568,6 +568,8 @@ WHERE TABLE_SCHEMA = DATABASE()
                 po.OrderDate AS PurchaseDate,
                 IFNULL(s.SupplierName, 'N/A') AS SupplierName,
                 poi.POItemId,
+                poi.ProductId,
+                poi.UnitId,
                 COALESCE(p.Name, CONCAT('Product #', poi.ProductId)) AS ProductName,
                 COALESCE(p.Sku, '') AS Sku,
                 COALESCE(u.UnitName, '') AS UnitName,
