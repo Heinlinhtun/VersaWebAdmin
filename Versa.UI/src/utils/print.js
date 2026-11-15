@@ -3,6 +3,18 @@ const isIOS = () => /iPad|iPhone|iPod/i.test(navigator.userAgent || '');
 
 export const isMobileBrowser = () => isAndroid() || isIOS();
 
+// Native WebViews receive a complete document, including the selected paper width.
+export const buildNativePrintDocument = ({ pageSize, bodyWidth, bodyPadding = '0', html = '' }) => `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+@page { size: ${pageSize}; margin: 0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: white; }
+body { width: ${bodyWidth}; padding: ${bodyPadding}; font-family: Pyidaungsu, sans-serif;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+table { border-collapse: collapse; }
+</style></head><body>${html}</body></html>`;
+
 /**
  * Opens a print-friendly window and triggers printing.
  * On mobile (Android/iOS), printing often requires a user gesture and auto-closing

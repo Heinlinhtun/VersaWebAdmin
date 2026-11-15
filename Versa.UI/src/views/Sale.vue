@@ -1369,7 +1369,7 @@ import api from '../services/api';
 import { useQuantitySettings, applyQuantitySettings } from '../composables/useQuantitySettings';
 import { useToast } from '../composables/useToast';
 import { useI18n } from '../composables/useI18n';
-import { isMobileBrowser, openPrintWindow } from '../utils/print';
+import { isMobileBrowser, openPrintWindow, buildNativePrintDocument } from '../utils/print';
 import { isAppleMobile, prepareEpsonReceipt } from '../utils/epsonPrint';
 import { normalizeReceiptPayments, receiptUnitName } from '../utils/receiptData';
 import androidBridge from '../services/androidBridge';
@@ -3575,13 +3575,29 @@ const printFromPreview = async () => {
   const fullPrintHtml = logoHtml + content;
 
   if (androidBridge.isAndroid()) {
-    if (isThermal) {
+    if (receiptSize.value === '104mm' || receiptSize.value === '104mm-slip') {
+      if (!androidBridge.supportsVoucherPrint()) {
+        addToast(t('sale.update104Printer'), 'warning');
+        return;
+      }
+      const blob = await capturePreviewElement();
+      if (!blob) {
+        addToast(t('history.shareCaptureError') || 'Could not capture invoice image.', 'error');
+        return;
+      }
+      const result = androidBridge.printVoucherImage(await blobToDataUrl(blob), receiptSize.value);
+      addToast(result?.message || t('sale.bluetoothPrintFailed'), result?.ok ? 'success' : 'error');
+      return;
+    }
+    if (receiptSize.value === '80mm') {
       const receiptText = capturedReceiptText.value || buildReceiptText(lastSaleNo.value, { width: 38 });
       await printWithAndroidIfPossible(receiptText, true);
       return;
     }
 
-    const htmlPrintResult = androidBridge.printHtml(fullPrintHtml, 'Invoice - ' + (lastSaleNo.value || ''));
+    const htmlPrintResult = androidBridge.printHtml(buildNativePrintDocument({
+      pageSize, bodyWidth, bodyPadding: isThermal ? '2mm' : '0', html: fullPrintHtml
+    }), 'Invoice - ' + (lastSaleNo.value || ''));
     if (htmlPrintResult?.ok) {
       addToast(t('history.printPopupOpened') || 'Print preview opened.', 'success');
       return;

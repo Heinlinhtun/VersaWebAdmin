@@ -858,6 +858,9 @@ public class AdminController : Controller
         using (var conn = new MySqlConnection(tenantConnStr))
         {
             await conn.OpenAsync();
+            // New shops and resets can start from an older pos_template. Prepare
+            // the current customer schema before seeding and before any transaction.
+            await CustomerSchema.EnsureOpeningBalanceAsync(conn);
             using var transaction = await conn.BeginTransactionAsync();
 
             try

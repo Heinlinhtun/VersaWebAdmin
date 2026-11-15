@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
+import { buildNativePrintDocument } from '../src/utils/print.js';
 
 const source = readFileSync(new URL('../src/views/HistoryCenter.vue', import.meta.url), 'utf8');
 const printFunction = source.slice(source.indexOf('const printFromDetail ='), source.indexOf('const shareFromDetail ='));
@@ -21,6 +22,7 @@ for (const size of ['80mm', '104mm', '104mm-slip', 'A4', 'A5']) {
         selectedSale: { value: { sale: { SaleId: 248 } } },
         receiptSize: { value: size },
         supportsEpsonAssistant: false,
+        androidBridge: { isAndroid: () => false },
         isSlipReceiptSize: value => value === '80mm' || value === '104mm-slip',
         receiptPaper: value => ({
           '80mm': { pageSize: '80mm auto', bodyWidth: '76mm' },
@@ -93,6 +95,55 @@ for (const size of ['80mm', '104mm', '104mm-slip', 'A4', 'A5']) {
       assert.equal(prints, 3);
     });
   }
+}
+
+for (const size of ['104mm', '104mm-slip']) {
+  test(`Android sale preview sends ${size} image directly to Bluetooth`, async () => {
+    const saleSource = readFileSync(new URL('../src/views/Sale.vue', import.meta.url), 'utf8');
+    const fn = saleSource.slice(saleSource.indexOf('const printFromPreview ='), saleSource.indexOf('const closeInvoicePreview ='));
+    let printed;
+    const deps = {
+      supportsEpsonAssistant: false, receiptSize: { value: size }, saveInvoiceAsImage: { value: false },
+      receiptPaper: () => ({ isSlip: size === '104mm-slip', pageSize: '104mm auto', bodyWidth: size === '104mm-slip' ? '100mm' : '104mm' }),
+      shopInfo: { value: {} }, capturedPrintHtml: { value: '<div>KPay 1000</div>' }, lastSaleNo: { value: 'SA248' },
+      buildNativePrintDocument,
+      capturePreviewElement: async () => new Blob(['voucher']), blobToDataUrl: async () => 'data:image/png;base64,test',
+      androidBridge: { isAndroid: () => true, supportsVoucherPrint: () => true,
+        printVoucherImage: (image, paper) => { printed = { image, paper }; return { ok: true }; },
+        printHtml: () => { throw new Error('Must not open Save as PDF'); } },
+      printWithAndroidIfPossible: () => { throw new Error('Unexpected 80mm text printing'); },
+      addToast() {}, t: key => key
+    };
+    await new Function(...Object.keys(deps), `${fn}; return printFromPreview;`)(...Object.values(deps))();
+    assert.deepEqual(printed, { image: 'data:image/png;base64,test', paper: size });
+  });
+  test(`Android history sends ${size} image directly to Bluetooth`, async () => {
+    let documentHtml;
+    let closed = false;
+    const deps = {
+      selectedSale: { value: { sale: { SaleId: 248 } } }, receiptSize: { value: size },
+      supportsEpsonAssistant: false,
+      isSlipReceiptSize: value => value === '104mm-slip',
+      receiptPaper: () => ({ pageSize: '104mm auto', bodyWidth: size === '104mm-slip' ? '100mm' : '104mm' }),
+      buildNativePrintDocument,
+      printWithAndroidIfPossible: () => { throw new Error('104mm must not use 80mm Bluetooth text'); },
+      nextTick: async () => {}, shopInfo: { value: { LogoData: '' } },
+      captureDetailInvoiceElement: async () => new Blob(['voucher']), blobToDataUrl: async () => 'data:image/png;base64,test',
+      androidBridge: { isAndroid: () => true, supportsVoucherPrint: () => true,
+        printVoucherImage: (image, paper) => { documentHtml = { image, paper }; return { ok: true }; },
+        printHtml: () => { throw new Error('Must not open Save as PDF'); } },
+      document: { getElementById: id => {
+        assert.equal(id, size === '104mm-slip' ? 'print-area' : 'print-area-a4');
+        return { innerHTML: '<div>Invoice 248: KPay 1000</div>' };
+      } },
+      window: { open: () => { throw new Error('Native print must not open popup'); } },
+      addToast() {}, t: key => key
+    };
+    const print = new Function(...Object.keys(deps), `${printFunction}; return printFromDetail;`)(...Object.values(deps));
+    await print({ close() { closed = true; } });
+    assert.equal(closed, true);
+    assert.deepEqual(documentHtml, { image: 'data:image/png;base64,test', paper: size });
+  });
 }
 
 test('Return History CSV includes the matching sales or purchase voucher number', () => {

@@ -13,7 +13,12 @@ using Versa.POS.Controllers;
 public class CustomersController : BaseShopController
 {
     private readonly DatabaseService _dbService;
-    public CustomersController(DatabaseService dbService) => _dbService = dbService;
+    private readonly ILogger<CustomersController>? _logger;
+    public CustomersController(DatabaseService dbService, ILogger<CustomersController>? logger = null)
+    {
+        _dbService = dbService;
+        _logger = logger;
+    }
 
     private static async Task EnsureSalesOrderStatusColumnAsync(MySqlConnection conn)
     {
@@ -30,7 +35,7 @@ WHERE TABLE_SCHEMA = DATABASE()
         }
     }
 
-    // Tenant databases already migrated for Previous Credit (avoids hitting INFORMATION_SCHEMA every request).
+    // Tenant databases previously migrated for Previous Credit; verify before reusing after a restore.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _openingBalanceReadyDbs = new();
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Threading.SemaphoreSlim> _openingBalanceMigrationLocks = new();
 
@@ -38,8 +43,24 @@ WHERE TABLE_SCHEMA = DATABASE()
     // Must be called OUTSIDE a transaction because ALTER TABLE causes an implicit commit in MySQL.
     private static async Task EnsureCustomerOpeningBalanceColumnsAsync(MySqlConnection conn)
     {
+        // Keep the advisory lock on one physical connection, and resolve the tenant
+        // database before consulting the process-wide migration cache.
+        if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
         var dbKey = conn.Database ?? string.Empty;
-        if (_openingBalanceReadyDbs.ContainsKey(dbKey)) return;
+        if (_openingBalanceReadyDbs.ContainsKey(dbKey))
+        {
+            // A restored backup can replace a migrated table without restarting
+            // this API. Never trust the cached flag over the actual tenant schema.
+            var ready = await conn.ExecuteScalarAsync<int>(@"
+SELECT
+    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Customers'
+       AND COLUMN_NAME IN ('OpeningBalance', 'OpeningBalancePaid'))
+    + (SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'CustomerOpeningBalanceAdjustments')");
+            if (ready == 3) return;
+            _openingBalanceReadyDbs.TryRemove(dbKey, out _);
+        }
 
         var migrationLock = _openingBalanceMigrationLocks.GetOrAdd(dbKey, _ => new System.Threading.SemaphoreSlim(1, 1));
         await migrationLock.WaitAsync();
@@ -52,35 +73,9 @@ WHERE TABLE_SCHEMA = DATABASE()
             if (!holdsDatabaseLock)
                 throw new InvalidOperationException("Could not acquire the customer previous-credit migration lock.");
 
-            // Recheck after acquiring the tenant-specific lock: another request may have completed the migration.
-            if (_openingBalanceReadyDbs.ContainsKey(dbKey)) return;
+            // Always inspect after taking the lock, including after a restore.
 
-            var existing = (await conn.QueryAsync<string>(@"
-SELECT COLUMN_NAME
-FROM INFORMATION_SCHEMA.COLUMNS
-WHERE TABLE_SCHEMA = DATABASE()
-  AND TABLE_NAME = 'Customers'
-  AND COLUMN_NAME IN ('OpeningBalance', 'OpeningBalancePaid')"))
-            .Select(c => c.ToLowerInvariant())
-            .ToHashSet();
-
-            if (!existing.Contains("openingbalance"))
-                await conn.ExecuteAsync("ALTER TABLE Customers ADD COLUMN OpeningBalance DECIMAL(18,2) NOT NULL DEFAULT 0");
-            if (!existing.Contains("openingbalancepaid"))
-                await conn.ExecuteAsync("ALTER TABLE Customers ADD COLUMN OpeningBalancePaid DECIMAL(18,2) NOT NULL DEFAULT 0");
-
-            await conn.ExecuteAsync(@"
-CREATE TABLE IF NOT EXISTS CustomerOpeningBalanceAdjustments (
-    AdjustmentId INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    CustomerId INT NOT NULL,
-    PreviousOpeningBalance DECIMAL(18,2) NOT NULL,
-    NewOpeningBalance DECIMAL(18,2) NOT NULL,
-    AmountChange DECIMAL(18,2) NOT NULL,
-    Reason VARCHAR(500) NOT NULL,
-    ChangedByUserId INT NULL,
-    ChangedAt DATETIME(6) NOT NULL,
-    KEY IX_CustomerOpeningBalanceAdjustments_CustomerId (CustomerId)
-) ENGINE=InnoDB");
+            await CustomerSchema.EnsureOpeningBalanceAsync(conn);
 
             _openingBalanceReadyDbs[dbKey] = true;
         }
@@ -165,6 +160,31 @@ CREATE TABLE IF NOT EXISTS CustomerOpeningBalanceAdjustments (
 
     [HttpPost]
     public async Task<IActionResult> Create(Customer model)
+    {
+        try
+        {
+            return await CreateCustomerAsync(model);
+        }
+        catch (MySqlException ex)
+        {
+            _logger?.LogError(ex, "Customer creation failed for tenant {TenantDb}; database error {ErrorNumber}", TenantDbName, ex.Number);
+            var message = ex.Number switch
+            {
+                1044 or 1045 or 1142 or 1143 => "The server database account does not have permission to prepare or save customer records. Please ask your administrator to check customer-table permissions.",
+                1054 => "The customer database is missing a required field. Please ask your administrator to update the customer database schema.",
+                1406 => "Customer details are too long. Use at most 100 characters for the name and 20 for the phone number.",
+                _ => $"Could not save the customer because of a server database error (code {ex.Number}). Please contact your administrator."
+            };
+            return StatusCode(ex.Number == 1406 ? 400 : 503, new { Message = message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger?.LogError(ex, "Customer setup failed for tenant {TenantDb}", TenantDbName);
+            return StatusCode(503, new { Message = "Customer database setup could not complete. Please try again; if the error continues, ask your administrator to check the server logs." });
+        }
+    }
+
+    private async Task<IActionResult> CreateCustomerAsync(Customer model)
     {
         var openingBalance = model.OpeningBalance ?? 0m;
         if (openingBalance < 0)

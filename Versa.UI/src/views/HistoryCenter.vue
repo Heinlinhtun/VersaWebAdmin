@@ -1257,7 +1257,7 @@ import { useToast } from '../composables/useToast';
 import { useI18n } from '../composables/useI18n';
 import { useCsvExport } from '../composables/useCsvExport';
 import { normalizeReceiptPayments, receiptUnitName } from '../utils/receiptData';
-import { isMobileBrowser, openPrintWindow } from '../utils/print';
+import { isMobileBrowser, openPrintWindow, buildNativePrintDocument } from '../utils/print';
 import { isAppleMobile, prepareEpsonReceipt } from '../utils/epsonPrint';
 import androidBridge from '../services/androidBridge';
 
@@ -1546,7 +1546,7 @@ const printFromDetail = async (preOpenedWindow = null) => {
   if (!saleId) return;
 
   const isThermal = isSlipReceiptSize(receiptSize.value);
-  if (supportsEpsonAssistant && isThermal && applePrintMethod.value === 'epson') {
+  if (supportsEpsonAssistant && receiptSize.value === '80mm' && applePrintMethod.value === 'epson') {
     if (preparingEpson.value) return;
     preparingEpson.value = true;
     epsonReceiptUrl.value = '';
@@ -1568,7 +1568,47 @@ const printFromDetail = async (preOpenedWindow = null) => {
     }
     return;
   }
-  if (isThermal && printWithAndroidIfPossible()) return;
+  if (receiptSize.value === '80mm' && printWithAndroidIfPossible()) return;
+
+  if (androidBridge.isAndroid() && ['104mm', '104mm-slip'].includes(receiptSize.value)) {
+    if (preOpenedWindow?.close) preOpenedWindow.close();
+    if (!androidBridge.supportsVoucherPrint()) {
+      addToast(t('sale.update104Printer'), 'warning');
+      return;
+    }
+    await nextTick();
+    const area = document.getElementById(isThermal ? 'print-area' : 'print-area-a4');
+    const blob = area ? await captureDetailInvoiceElement(area) : null;
+    if (!blob) {
+      addToast(t('history.shareCaptureError') || 'Could not capture invoice image.', 'error');
+      return;
+    }
+    const result = androidBridge.printVoucherImage(await blobToDataUrl(blob), receiptSize.value);
+    addToast(result?.message || t('sale.bluetoothPrintFailed'), result?.ok ? 'success' : 'error');
+    return;
+  }
+
+  // Wider formats need the native document print service, not the 80mm text bridge.
+  if (androidBridge.isAndroid() && receiptSize.value !== '80mm') {
+    await nextTick();
+    const area = document.getElementById(isThermal ? 'print-area' : 'print-area-a4');
+    if (area) {
+      const logo = shopInfo.value.LogoData;
+      const logoSize = { Small: 50, Medium: 70, Large: 100 }[shopInfo.value.LogoSize] || 100;
+      const logoHtml = logo && logo !== 'null'
+        ? `<div style="text-align:center"><img src="${logo}" style="width:${logoSize}px;height:${logoSize}px;object-fit:contain"></div>` : '';
+      const paper = receiptPaper(receiptSize.value);
+      const result = androidBridge.printHtml(buildNativePrintDocument({
+        pageSize: paper.pageSize, bodyWidth: paper.bodyWidth,
+        bodyPadding: isThermal ? '2mm' : '0', html: logoHtml + area.innerHTML
+      }), `Invoice - ${saleId}`);
+      if (result?.ok) {
+        if (preOpenedWindow?.close) preOpenedWindow.close();
+        addToast(t('history.printPopupOpened') || 'Print preview opened.', 'success');
+        return;
+      }
+    }
+  }
 
   const hasPrintWindow = preOpenedWindow?.document && typeof preOpenedWindow.document.write === 'function';
   const printWindow = hasPrintWindow ? preOpenedWindow : window.open('', '_blank', 'width=900,height=800');

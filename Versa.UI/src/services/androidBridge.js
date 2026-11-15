@@ -106,6 +106,14 @@ export const androidBridge = {
     return callJson('printImage', imageData || '');
   },
 
+  supportsVoucherPrint() {
+    return bridgeKind() === 'android' && typeof bridge()?.printVoucherImage === 'function';
+  },
+
+  printVoucherImage(imageData, paperSize) {
+    return callJson('printVoucherImage', imageData, paperSize);
+  },
+
   shareImage(imageData, fileName = 'invoice.png', title = 'Invoice', text = '') {
     return callJson('shareImage', imageData || '', fileName || 'invoice.png', title || 'Invoice', text || '');
   }
