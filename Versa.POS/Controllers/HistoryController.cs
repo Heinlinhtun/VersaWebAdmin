@@ -67,6 +67,7 @@ WHERE TABLE_SCHEMA = DATABASE()
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
         await conn.OpenAsync();
+        await SalesChannels.EnsureAsync(conn);
         await conn.ExecuteAsync("SET time_zone = '+06:30'");
         await EnsureSalesOrderStatusColumnAsync(conn);
         var businessDayRange = await BusinessDayService.GetFilterAsync(conn, filter.Date, filter.StartDate, filter.EndDate);
@@ -79,7 +80,8 @@ WHERE TABLE_SCHEMA = DATABASE()
         string sql = $@"
     -- ၁။ အရောင်းမှတ်တမ်းစာရင်း (Items Summary ပါဝင်သည်)
     SELECT 
-        s.SaleId as saleId, 
+        s.SaleId as saleId,
+        COALESCE(s.SalesChannel, 'Unspecified') as salesChannel,
         s.SaleDate as saleDate, 
         IFNULL(sit.ItemSubtotal, 0) as itemSubtotal,
         IFNULL(s.DiscountAmount, 0) as discountAmount,
@@ -128,6 +130,7 @@ WHERE TABLE_SCHEMA = DATABASE()
     LEFT JOIN ShopUsers u ON s.UserId = u.UserId
     WHERE (@BranchId IS NULL OR s.BranchId = @BranchId)            
     AND (@Query = '' OR CAST(s.SaleId AS CHAR) = @Query OR s.SaleId LIKE CONCAT('%', @Query, '%'))
+    AND (@SalesChannel = '' OR COALESCE(s.SalesChannel, 'Unspecified') = @SalesChannel)
     AND (@CustomerName = '' OR IFNULL(c.Name, '') LIKE CONCAT('%', @CustomerName, '%'))
     {dateFilter}
     AND (@OrderStatus = '' OR IFNULL(s.OrderStatus,'Completed') = @OrderStatus)
@@ -139,6 +142,7 @@ WHERE TABLE_SCHEMA = DATABASE()
     LEFT JOIN Customers c ON s.CustomerId = c.CustomerId
     WHERE (@BranchId IS NULL OR s.BranchId = @BranchId)
     AND (@Query = '' OR CAST(s.SaleId AS CHAR) = @Query OR s.SaleId LIKE CONCAT('%', @Query, '%'))
+    AND (@SalesChannel = '' OR COALESCE(s.SalesChannel, 'Unspecified') = @SalesChannel)
     AND (@CustomerName = '' OR IFNULL(c.Name, '') LIKE CONCAT('%', @CustomerName, '%'))
     {dateFilter}
     AND (@OrderStatus = '' OR IFNULL(s.OrderStatus,'Completed') = @OrderStatus);";
@@ -146,6 +150,7 @@ WHERE TABLE_SCHEMA = DATABASE()
         var multi = await conn.QueryMultipleAsync(sql, new
         {
             BranchId = bId,
+            SalesChannel = filter.SalesChannel ?? "",
             Query = filter.Query ?? "",
             CustomerName = CleanText(filter.CustomerName),
             StartDate = businessDayRange.Start,

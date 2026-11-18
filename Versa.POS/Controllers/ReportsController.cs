@@ -281,9 +281,11 @@ WHERE TABLE_SCHEMA = DATABASE()
 
     // ၁။ Sale Reports: အရောင်းအနှစ်ချုပ် (Net Sales, Discount, Deli Fee အားလုံးပါဝင်သည်)
     [HttpGet("sales-summary")]
-    public async Task<IActionResult> GetSalesSummary([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId)
+    public async Task<IActionResult> GetSalesSummary([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId, [FromQuery] string? salesChannel = null)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+        await SalesChannels.EnsureAsync(conn);
+        salesChannel ??= "";
         var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
         var start = range.Start;
         var end = range.End;
@@ -303,6 +305,7 @@ WHERE TABLE_SCHEMA = DATABASE()
                 LEFT JOIN Sales ps ON ps.SaleId = cp.SaleId
                 WHERE cp.PaymentDate BETWEEN @start AND @end
                   AND (@branchId IS NULL OR ps.BranchId = @branchId OR ps.SaleId IS NULL)
+          AND (@salesChannel = '' OR COALESCE(ps.SalesChannel, 'Unspecified') = @salesChannel)
             ), 0) - IFNULL((
                 SELECT SUM(LEAST(x.ReturnedAmount, x.PaidAmount))
                 FROM (
@@ -319,6 +322,7 @@ WHERE TABLE_SCHEMA = DATABASE()
                     INNER JOIN Sales rs ON rs.SaleId = sr2.SaleId
                     WHERE sr2.ReturnDate BETWEEN @start AND @end
                       AND (@branchId IS NULL OR rs.BranchId = @branchId)
+          AND (@salesChannel = '' OR COALESCE(rs.SalesChannel, 'Unspecified') = @salesChannel)
                     GROUP BY sr2.SaleId, rs.PaidAmount
                 ) x
             ), 0) as TotalCollected,
@@ -330,16 +334,19 @@ WHERE TABLE_SCHEMA = DATABASE()
             GROUP BY SaleId
         ) sr ON sr.SaleId = s.SaleId
         WHERE s.SaleDate BETWEEN @start AND @end
-          AND (@branchId IS NULL OR s.BranchId = @branchId)";
+          AND (@branchId IS NULL OR s.BranchId = @branchId)
+          AND (@salesChannel = '' OR COALESCE(s.SalesChannel, 'Unspecified') = @salesChannel)";
 
-        var summary = await conn.QueryFirstOrDefaultAsync<dynamic>(sql, new { start, end, branchId = scopedBranchId });
+        var summary = await conn.QueryFirstOrDefaultAsync<dynamic>(sql, new { start, end, branchId = scopedBranchId, salesChannel });
         return Ok(summary);
     }
 
     [HttpGet("sales-list")] // အမည်ကို ပိုရှင်းအောင် sales-list လို့ ပြောင်းလိုက်ပါတယ်
-    public async Task<IActionResult> GetSalesList([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId)
+    public async Task<IActionResult> GetSalesList([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId, [FromQuery] string? salesChannel = null)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+        await SalesChannels.EnsureAsync(conn);
+        salesChannel ??= "";
         var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
         var start = range.Start;
         var end = range.End;
@@ -349,6 +356,7 @@ WHERE TABLE_SCHEMA = DATABASE()
         string sql = @"
         SELECT 
             s.SaleId,
+            COALESCE(s.SalesChannel, 'Unspecified') AS SalesChannel,
             c.Name as CustomerName,
             s.TotalAmount as SubTotal,
             s.DiscountAmount,
@@ -387,9 +395,10 @@ WHERE TABLE_SCHEMA = DATABASE()
         ) sr ON sr.SaleId = s.SaleId
         WHERE s.SaleDate BETWEEN @start AND @end
           AND (@branchId IS NULL OR s.BranchId = @branchId)
+          AND (@salesChannel = '' OR COALESCE(s.SalesChannel, 'Unspecified') = @salesChannel)
         ORDER BY s.SaleDate DESC";
 
-        var sales = (await conn.QueryAsync<dynamic>(sql, new { start, end, branchId = scopedBranchId })).ToList();
+        var sales = (await conn.QueryAsync<dynamic>(sql, new { start, end, branchId = scopedBranchId, salesChannel })).ToList();
         var saleIds = sales.Select(x => Convert.ToInt32(((IDictionary<string, object>)x)["SaleId"])).ToArray();
         var netPaymentSummaries = await GetNetPaymentSummariesAsync(conn, saleIds);
         var responseRows = sales.Select(row =>
@@ -413,9 +422,11 @@ WHERE TABLE_SCHEMA = DATABASE()
     }
 
     [HttpGet("sales-items")]
-    public async Task<IActionResult> GetSalesItems([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId)
+    public async Task<IActionResult> GetSalesItems([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId, [FromQuery] string? salesChannel = null)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+        await SalesChannels.EnsureAsync(conn);
+        salesChannel ??= "";
         var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
         var start = range.Start;
         var end = range.End;
@@ -424,6 +435,7 @@ WHERE TABLE_SCHEMA = DATABASE()
         string sql = @"
         SELECT
             s.SaleId,
+            COALESCE(s.SalesChannel, 'Unspecified') AS SalesChannel,
             CONCAT('SA-', LPAD(s.SaleId, 7, '0')) AS VoucherNo,
             s.SaleDate,
             IFNULL(c.Name, 'Walk-in Client') AS CustomerName,
@@ -457,16 +469,19 @@ WHERE TABLE_SCHEMA = DATABASE()
         LEFT JOIN Units u ON si.UnitId = u.UnitId
         WHERE s.SaleDate BETWEEN @start AND @end
           AND (@branchId IS NULL OR s.BranchId = @branchId)
+          AND (@salesChannel = '' OR COALESCE(s.SalesChannel, 'Unspecified') = @salesChannel)
         ORDER BY s.SaleDate DESC, s.SaleId DESC, si.SaleItemId DESC";
 
-        var items = await conn.QueryAsync<dynamic>(sql, new { start, end, branchId = scopedBranchId });
+        var items = await conn.QueryAsync<dynamic>(sql, new { start, end, branchId = scopedBranchId, salesChannel });
         return Ok(items);
     }
 
     [HttpGet("credit-collections")]
-    public async Task<IActionResult> GetCreditCollections([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId)
+    public async Task<IActionResult> GetCreditCollections([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId, [FromQuery] string? salesChannel = null)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
+        await SalesChannels.EnsureAsync(conn);
+        salesChannel ??= "";
         var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
         var start = range.Start;
         var end = range.End;
@@ -493,9 +508,10 @@ WHERE TABLE_SCHEMA = DATABASE()
         LEFT JOIN Customers c ON c.CustomerId = cp.CustomerId
         WHERE cp.PaymentDate BETWEEN @start AND @end
           AND (@branchId IS NULL OR s.BranchId = @branchId OR s.SaleId IS NULL)
+          AND (@salesChannel = '' OR COALESCE(s.SalesChannel, 'Unspecified') = @salesChannel)
         ORDER BY cp.PaymentDate DESC, cp.PaymentId DESC";
 
-        var collections = await conn.QueryAsync<dynamic>(sql, new { start, end, branchId = scopedBranchId });
+        var collections = await conn.QueryAsync<dynamic>(sql, new { start, end, branchId = scopedBranchId, salesChannel });
         return Ok(collections);
     }
 
@@ -604,10 +620,12 @@ WHERE TABLE_SCHEMA = DATABASE()
     }
     // ReportsController.cs
     [HttpGet("payment-methods-summary")]
-    public async Task<IActionResult> GetPaymentMethodsSummary([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId)
+    public async Task<IActionResult> GetPaymentMethodsSummary([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId, [FromQuery] string? salesChannel = null)
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
         await EnsureSaleReturnsPaymentMethodColumnAsync(conn);
+        await SalesChannels.EnsureAsync(conn);
+        salesChannel ??= "";
         var range = await BusinessDayService.GetRangeAsync(conn, fromDate, toDate);
         var start = range.Start;
         var end = range.End;
@@ -621,7 +639,8 @@ WHERE TABLE_SCHEMA = DATABASE()
             FROM CustomerPayments cp
             INNER JOIN Sales s ON s.SaleId = cp.SaleId
             WHERE cp.PaymentDate BETWEEN @start AND @end
-              AND (@branchId IS NULL OR s.BranchId = @branchId)", new { start, end, branchId = scopedBranchId });
+              AND (@branchId IS NULL OR s.BranchId = @branchId)
+          AND (@salesChannel = '' OR COALESCE(s.SalesChannel, 'Unspecified') = @salesChannel)", new { start, end, branchId = scopedBranchId, salesChannel });
 
         var returnRows = await conn.QueryAsync<(int SaleId, decimal RefundAmount, string ReturnPaymentMethod)>(@"
             SELECT
@@ -631,7 +650,8 @@ WHERE TABLE_SCHEMA = DATABASE()
             FROM SaleReturns sr
             INNER JOIN Sales s ON s.SaleId = sr.SaleId
             WHERE sr.ReturnDate BETWEEN @start AND @end
-              AND (@branchId IS NULL OR s.BranchId = @branchId)", new { start, end, branchId = scopedBranchId });
+              AND (@branchId IS NULL OR s.BranchId = @branchId)
+          AND (@salesChannel = '' OR COALESCE(s.SalesChannel, 'Unspecified') = @salesChannel)", new { start, end, branchId = scopedBranchId, salesChannel });
 
         var saleRowsWithoutCustomerPayments = await conn.QueryAsync<(int SaleId, string Method, decimal PaidAmount)>(@"
             SELECT
@@ -641,12 +661,13 @@ WHERE TABLE_SCHEMA = DATABASE()
             FROM Sales s
             WHERE s.SaleDate BETWEEN @start AND @end
               AND (@branchId IS NULL OR s.BranchId = @branchId)
+          AND (@salesChannel = '' OR COALESCE(s.SalesChannel, 'Unspecified') = @salesChannel)
               AND IFNULL(s.PaidAmount, 0) > 0
               AND NOT EXISTS (
                     SELECT 1
                     FROM CustomerPayments cp2
                     WHERE cp2.SaleId = s.SaleId
-              )", new { start, end, branchId = scopedBranchId });
+              )", new { start, end, branchId = scopedBranchId, salesChannel });
 
         var methodTotals = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
 

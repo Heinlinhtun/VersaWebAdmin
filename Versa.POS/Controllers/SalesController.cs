@@ -534,9 +534,11 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
         [HttpPost("create-sale")]
         public async Task<IActionResult> CreateSale([FromBody] SaleEntryModel model)
         {
+            if (!SalesChannels.IsValid(model.SalesChannel)) return BadRequest(new { Message = "Invalid sales channel." });
             var tenantDb = User.FindFirst("TenantDb")?.Value;
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(tenantDb));
             await conn.OpenAsync();
+            await SalesChannels.EnsureAsync(conn);
             // Set session timezone to Asia/Yangon (UTC+6:30) so TIMESTAMP stores/returns local time
             await conn.ExecuteAsync("SET time_zone = '+06:30'");
             using var transaction = await conn.BeginTransactionAsync();
@@ -611,8 +613,8 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
 
                 // ၂။ Sales Master သိမ်းဆည်းခြင်း
                 DateTime saleDate = model.SaleDate ?? DateTime.Now;
-                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DiscountType, DiscountInput, DeliveryFee, PaidAmount, DueAmount, InitialDueAmount, PreviousDebtAmount, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus, ClientSaleId)
-                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DiscountType, @DiscountInput, @DeliveryFee, @PaidAmount, @dueAmount, @dueAmount, @previousDebtAmount, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus, @ClientSaleId);
+                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DiscountType, DiscountInput, DeliveryFee, PaidAmount, DueAmount, InitialDueAmount, PreviousDebtAmount, SalesChannel, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus, ClientSaleId)
+                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DiscountType, @DiscountInput, @DeliveryFee, @PaidAmount, @dueAmount, @dueAmount, @previousDebtAmount, @SalesChannel, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus, @ClientSaleId);
                           SELECT LAST_INSERT_ID();";
 
                 int saleId = await conn.ExecuteScalarAsync<int>(saleSql, new
@@ -628,6 +630,7 @@ WHERE HeldSaleId = LAST_INSERT_ID();",
                     model.PaidAmount,
                     dueAmount,
                     previousDebtAmount,
+                    SalesChannel = string.IsNullOrEmpty(model.SalesChannel) ? null : model.SalesChannel,
                     model.PaymentMethod,
                     VoucherNote = string.IsNullOrWhiteSpace(model.VoucherNote) ? (model.Note ?? "") : model.VoucherNote,
                     SaleDate = saleDate,
@@ -844,9 +847,11 @@ WHERE SaleItemId = @SaleItemId",
         [HttpPost("create-preorder")]
         public async Task<IActionResult> CreatePreorder([FromBody] SaleEntryModel model)
         {
+            if (!SalesChannels.IsValid(model.SalesChannel)) return BadRequest(new { Message = "Invalid sales channel." });
             var tenantDb = User.FindFirst("TenantDb")?.Value;
             using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(tenantDb));
             await conn.OpenAsync();
+            await SalesChannels.EnsureAsync(conn);
             using var transaction = await conn.BeginTransactionAsync();
 
             try
@@ -898,8 +903,8 @@ WHERE SaleItemId = @SaleItemId",
                 int effectiveUserId = claimUserId > 0 ? claimUserId : model.UserId;
 
                 DateTime saleDate = model.SaleDate?.Date ?? DateTime.Now.Date;
-                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DiscountType, DiscountInput, DeliveryFee, PaidAmount, DueAmount, InitialDueAmount, PreviousDebtAmount, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus)
-                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DiscountType, @DiscountInput, @DeliveryFee, @PaidAmount, @dueAmount, @dueAmount, @previousDebtAmount, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus);
+                string saleSql = @"INSERT INTO Sales (BranchId, CustomerId, UserId, TotalAmount, DiscountAmount, DiscountType, DiscountInput, DeliveryFee, PaidAmount, DueAmount, InitialDueAmount, PreviousDebtAmount, SalesChannel, PaymentMethod, VoucherNote, SaleDate, SaleType, OrderStatus)
+                          VALUES (@BranchId, @CustomerId, @UserId, @actualItemsTotal, @DiscountAmount, @DiscountType, @DiscountInput, @DeliveryFee, @PaidAmount, @dueAmount, @dueAmount, @previousDebtAmount, @SalesChannel, @PaymentMethod, @VoucherNote, @SaleDate, @finalSaleType, @OrderStatus);
                           SELECT LAST_INSERT_ID();";
 
                 int saleId = await conn.ExecuteScalarAsync<int>(saleSql, new
@@ -915,6 +920,7 @@ WHERE SaleItemId = @SaleItemId",
                     model.PaidAmount,
                     dueAmount,
                     previousDebtAmount,
+                    SalesChannel = string.IsNullOrEmpty(model.SalesChannel) ? null : model.SalesChannel,
                     model.PaymentMethod,
                     VoucherNote = string.IsNullOrWhiteSpace(model.VoucherNote) ? (model.Note ?? "") : model.VoucherNote,
                     SaleDate = saleDate,

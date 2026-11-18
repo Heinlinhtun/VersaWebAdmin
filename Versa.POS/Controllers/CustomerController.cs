@@ -301,7 +301,7 @@ FROM (
             return BadRequest(new { Message = "Previous credit cannot be negative." });
 
         await EnsureCustomerOpeningBalanceColumnsAsync(conn);
-        await conn.OpenAsync();
+        // Schema preparation leaves this connection open for the transaction.
         using var trans = await conn.BeginTransactionAsync();
         try
         {
@@ -381,7 +381,7 @@ VALUES
     {
         using var conn = new MySqlConnection(_dbService.GetTenantConnectionString(TenantDbName));
         await EnsureCustomerOpeningBalanceColumnsAsync(conn); // ALTER TABLE must run before the transaction
-        await conn.OpenAsync();
+        // Schema preparation leaves this connection open for the transaction.
         using var trans = await conn.BeginTransactionAsync();
 
         try

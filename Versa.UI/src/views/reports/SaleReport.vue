@@ -1,6 +1,13 @@
 <template>
   <div v-if="summary" class="space-y-8 animate-in fade-in duration-500">
 
+    <label class="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+      {{ t('common.salesChannel') }}
+      <select v-model="selectedSalesChannel" class="border border-slate-200 rounded-lg p-2 bg-white">
+        <option value="">{{ t('common.allChannels') }}</option>
+        <option v-for="channel in ['Offline', 'Facebook', 'TikTok', 'Unspecified']" :key="channel" :value="channel">{{ t('common.channel' + channel) }}</option>
+      </select>
+    </label>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group">
         <div class="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
@@ -96,7 +103,9 @@
                 <td class="p-4 font-normal text-blue-600 tabular-nums tracking-tighter">
                   {{ formatSaleVoucher(s.SaleId) }}
                 </td>
-                <td class="p-4 text-slate-900 font-normal italic">{{ s.CustomerName || tx.walkInClient }}</td>
+                <td class="p-4 text-slate-900 font-normal italic">{{ s.CustomerName || tx.walkInClient }}
+                  <div class="mt-1 text-[10px] text-blue-600 not-italic">{{ t('common.channel' + (s.SalesChannel || s.salesChannel || 'Unspecified')) }}</div>
+                </td>
                 <td class="p-4 text-right tabular-nums">{{ formatNumber(getSaleSubTotal(s)) }}</td>
                 <td class="p-4 text-right text-amber-600 tabular-nums">-{{ formatNumber(s.DiscountAmount ?? s.discountAmount) }}</td>
                 <td class="p-4 text-right font-normal text-slate-900 tabular-nums bg-slate-50/30">
@@ -303,6 +312,7 @@ const saleItems = ref([]);
 const collections = ref([]);
 const settlementRows = ref([]);
 const reportView = ref('voucher');
+const selectedSalesChannel = ref('');
 const selectedItemKey = ref('');
 const tx = computed(() => ({
   netRevenue: t('reportViews.sale.netRevenue'),
@@ -580,7 +590,8 @@ const handleExportCsv = () => {
     t('reportViews.sale.subTotal'),
     'Discount',
     t('reportViews.sale.netTotal'),
-    'Remaining'
+    'Remaining',
+    t('common.salesChannel')
   ];
 
   const rows = sales.value.map(s => [
@@ -590,7 +601,8 @@ const handleExportCsv = () => {
     getSaleSubTotal(s),
     toNumber(s.DiscountAmount ?? s.discountAmount),
     getSaleNetTotal(s),
-    getSaleRemaining(s)
+    getSaleRemaining(s),
+    t('common.channel' + (s.SalesChannel || s.salesChannel || 'Unspecified'))
   ]);
   
   const dateStr = new Date().toISOString().split('T')[0];
@@ -602,7 +614,8 @@ const fetchData = async () => {
     const params = {
       fromDate: props.filters.fromDate,
       toDate: props.filters.toDate,
-      branchId: props.filters.branchId
+      branchId: props.filters.branchId,
+      salesChannel: selectedSalesChannel.value
     };
     const [resSum, resSales, resItems, resCollections, resPayments] = await Promise.all([
       api.get('/Reports/sales-summary', { params }),
@@ -640,6 +653,11 @@ watch(reportView, () => {
   currentPage.value = 1;
 });
 
+watch(selectedSalesChannel, () => {
+  currentPage.value = 1;
+  selectedItemKey.value = '';
+  fetchData();
+});
 onMounted(fetchData);
 </script>
 

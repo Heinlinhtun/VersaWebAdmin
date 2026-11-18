@@ -24,6 +24,7 @@ namespace Versa.Core.Models
         public DateTime? SaleDate { get; set; }
         public string? Note { get; set; }
         public string? VoucherNote { get; set; }
+        public string? SalesChannel { get; set; }
         public string SaleType { get; set; } // 'Normal', 'Credit' စသဖြင့်
         public List<SaleItemModel> Items { get; set; }
         public List<PaymentDetailModel> Payments { get; set; }

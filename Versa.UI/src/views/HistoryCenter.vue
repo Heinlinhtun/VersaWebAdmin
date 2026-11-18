@@ -106,6 +106,13 @@
               class="p-2 bg-slate-50 border border-slate-200 rounded-lg font-normal text-xs outline-none w-36">
           </div>
         </div>
+          <label v-if="currentTab === 'sale'" class="flex flex-col gap-1 text-xs text-slate-500">
+            {{ t('common.salesChannel') }}
+            <select v-model="filters.salesChannel" @change="resetAndLoad" class="p-3 border border-slate-200 rounded-lg bg-white">
+              <option value="">{{ t('common.allChannels') }}</option>
+              <option v-for="channel in ['Offline', 'Facebook', 'TikTok', 'Unspecified']" :key="channel" :value="channel">{{ t('common.channel' + channel) }}</option>
+            </select>
+          </label>
         <div v-if="currentTab === 'sale'" class="flex flex-col">
           <label class="text-[9px] font-normal uppercase text-slate-400 ml-2 mb-1">{{ t('history.status') }}</label>
           <select v-model="filters.orderStatus"
@@ -204,6 +211,7 @@
               <td class="p-5 text-slate-500 font-normal text-[11px]">{{ formatDateTime(item.saleDate) }}</td>
               <td class="p-5">
                 <div class="font-normal text-slate-800 text-sm tracking-tight">{{ item.customerName || t('common.walkInCustomer') }}</div>
+                <div class="text-[10px] text-blue-600 mt-1">{{ t('common.salesChannel') }}: {{ t('common.channel' + (item.salesChannel || item.SalesChannel || 'Unspecified')) }}</div>
                 <div class="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
                   <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
                   {{ item.username || item.Username || item.cashierName || item.CashierName || 'System' }}
@@ -1078,16 +1086,24 @@
                 formatNumber(payment.amount) }}</td>
             </tr>
 
-            <tr v-if="receiptBalanceDetail !== 0">
+            <tr v-if="receiptPaidTotalDetail > receiptTotalDetail">
               <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">
-                {{ receiptBalanceLabel(receiptBalanceDetail) }}
+                {{ t('sale.invoiceExcess') }}:
               </td>
               <td style="text-align: right; padding-top: 5px; font-weight: bold;">{{
-                formatNumber(Math.abs(receiptBalanceDetail)) }}</td>
+                formatNumber(receiptPaidTotalDetail - receiptTotalDetail) }}</td>
             </tr>
-            <tr v-if="showPreviousCredit && receiptTotalCreditDetail > 0">
-              <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ t('sale.totalCredit') }}:</td>
-              <td style="text-align: right; padding-top: 5px; font-weight: bold; color: #dc2626;">{{ formatNumber(receiptTotalCreditDetail) }}</td>
+            <tr v-if="receiptTotalDueBalanceDetail > 0">
+              <td colspan="2">{{ t('sale.invoiceRemaining') }}:</td>
+              <td style="text-align: right;">{{ formatNumber(receiptRemainingDetail) }}</td>
+            </tr>
+            <tr v-if="receiptPreviousDebtDetail > 0">
+              <td colspan="2">{{ t('sale.invoicePreviousDebt') }}:</td>
+              <td style="text-align: right;">{{ formatNumber(receiptPreviousDebtDetail) }}</td>
+            </tr>
+            <tr v-if="receiptTotalDueBalanceDetail > 0" style="font-weight: bold; border-top: 2px solid black;">
+              <td colspan="2" style="padding-top: 6px;">{{ t('sale.invoiceTotalDueBalance') }}:</td>
+              <td style="text-align: right; padding-top: 6px;">{{ formatNumber(receiptTotalDueBalanceDetail) }}</td>
             </tr>
           </tfoot>
         </table>
@@ -1204,17 +1220,21 @@
               <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">{{
                 formatNumber(receiptTotalDetail) }}</td>
             </tr>
-            <tr>
+            <tr v-if="selectedSalePayments.length > 1">
               <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
                 {{ t('sale.invoicePaid') }}:</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(receiptPaidTotalDetail) }}</td>
             </tr>
             <tr v-for="payment in selectedSalePayments" :key="`a4-${payment.method}`">
               <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
-                {{ receiptPaidLabel(payment.method) }}:</td>
+                {{ receiptPaidLabel(payment.method) }}</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(payment.amount) }}</td>
             </tr>
-            <tr v-if="receiptRemainingDetail > 0">
+            <tr v-if="receiptPaidTotalDetail > receiptTotalDetail">
+              <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ t('sale.invoiceExcess') }}:</td>
+              <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(receiptPaidTotalDetail - receiptTotalDetail) }}</td>
+            </tr>
+            <tr v-if="receiptTotalDueBalanceDetail > 0">
               <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
                 {{ t('sale.invoiceRemaining') }}:</td>
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">{{
@@ -1226,7 +1246,7 @@
               <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold; color: #dc2626;">
                 {{ formatNumber(receiptPreviousDebtDetail) }}</td>
             </tr>
-            <tr v-if="receiptTotalDueBalanceDetail > 0" style="font-weight: bold; background-color: #fff1f2;">
+            <tr v-if="receiptTotalDueBalanceDetail > 0" style="font-weight: bold; background-color: #fff1f2; border-top: 2px solid #333;">
               <td colspan="5" style="padding: 8px; border: 1px solid #ccc; text-align: right;">
                 {{ t('sale.invoiceTotalDueBalance') }}:</td>
               <td style="padding: 8px; border: 1px solid #ccc; text-align: right; color: #be123c;">
@@ -1493,11 +1513,14 @@ const buildAndroidHistoryReceiptText = () => {
   lines.push(doubleLine);
   lines.push(columns('TOTAL:', formatNumber(finalTotal)));
   selectedSalePayments.value.forEach(payment => lines.push(columns(receiptPaidLabel(payment.method), formatNumber(payment.amount || 0))));
-  if (receiptBalanceDetail.value !== 0) {
-    lines.push(columns(receiptBalanceLabel(receiptBalanceDetail.value), formatNumber(Math.abs(receiptBalanceDetail.value))));
-  }
-  if (showPreviousCredit.value && receiptTotalCreditDetail.value > 0) {
-    lines.push(columns(`${t('sale.totalCredit')}:`, formatNumber(receiptTotalCreditDetail.value)));
+  if (receiptPaidTotalDetail.value > receiptTotalDetail.value)
+    lines.push(columns(`${t('sale.invoiceExcess')}:`, formatNumber(receiptPaidTotalDetail.value - receiptTotalDetail.value)));
+  if (receiptTotalDueBalanceDetail.value > 0) {
+    lines.push(columns(`${t('sale.invoiceRemaining')}:`, formatNumber(receiptRemainingDetail.value)));
+    if (receiptPreviousDebtDetail.value > 0)
+      lines.push(columns(`${t('sale.invoicePreviousDebt')}:`, formatNumber(receiptPreviousDebtDetail.value)));
+    lines.push(doubleLine);
+    lines.push(columns(`${t('sale.invoiceTotalDueBalance')}:`, formatNumber(receiptTotalDueBalanceDetail.value)));
   }
   lines.push(doubleLine, '');
   receiptFooterLines.value.forEach(footerLine => lines.push(center(footerLine)));
@@ -1980,7 +2003,7 @@ const receiptFooterLines = computed(() => {
 const filters = ref({
   page: 1, limit: 15,
   branchId: localStorage.getItem('BranchId'),
-  query: '', customerName: '', supplierName: '', startDate: '', endDate: '', orderStatus: ''
+  query: '', customerName: '', supplierName: '', startDate: '', endDate: '', orderStatus: '', salesChannel: ''
 });
 
 const customerOptions = ref([]);
@@ -2521,7 +2544,7 @@ const buildCsvPayload = (tab, sourceData) => {
   let rows = [];
 
   if (tab === 'sale') {
-    headers = [t('history.invoiceNo'), t('history.dateTime'), t('history.customer'), t('history.netAmount'), t('history.saleType'), t('history.status'), t('history.notes')];
+    headers = [t('history.invoiceNo'), t('history.dateTime'), t('history.customer'), t('history.netAmount'), t('history.saleType'), t('history.status'), t('history.notes'), t('common.salesChannel')];
     rows = sourceData.map(item => {
       const saleId = csvValueOf(item, 'SaleId', 'saleId', '');
       return [
@@ -2531,7 +2554,8 @@ const buildCsvPayload = (tab, sourceData) => {
         getSaleNetAmount(item),
         csvValueOf(item, 'SaleType', 'saleType', 'Normal') || 'Normal',
         csvValueOf(item, 'OrderStatus', 'orderStatus', 'Completed') || 'Completed',
-        csvValueOf(item, 'VoucherNote', 'voucherNote', '')
+        csvValueOf(item, 'VoucherNote', 'voucherNote', ''),
+        t('common.channel' + csvValueOf(item, 'SalesChannel', 'salesChannel', 'Unspecified'))
       ];
     });
   } else if (tab === 'purchase') {
@@ -2718,6 +2742,7 @@ watch(currentTab, () => {
   filters.value.page = 1;
   filters.value.customerName = currentTab.value === 'sale' ? filters.value.customerName : '';
   filters.value.supplierName = currentTab.value === 'purchase' ? filters.value.supplierName : '';
+  if (currentTab.value !== 'sale') filters.value.salesChannel = '';
   closeNameFilterResults();
   loadData();
 });

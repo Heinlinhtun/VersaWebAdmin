@@ -182,7 +182,8 @@
           </div>
 
       <div v-if="currentTab === 'all' || currentTab === 'products'"
-        class="flex flex-wrap gap-2 items-center pb-1">
+        role="region" :aria-label="t('sale.allCategories')" tabindex="0"
+        class="sale-category-list flex flex-wrap gap-2 items-center pb-1">
         <button @click="selectCategory(null)"
           :class="['px-4 py-1.5 rounded-lg font-normal text-[11px] whitespace-nowrap transition', selectedCategory === null ? 'bg-blue-600 text-white shadow-md' : 'bg-white border text-gray-500']">
           {{ t('sale.allCategories') }}
@@ -563,6 +564,15 @@
 
         <div class="payment-modal-body p-4 sm:p-8 space-y-4 sm:space-y-5 overflow-y-auto custom-scrollbar bg-white flex-1 min-h-0">
 
+          <fieldset class="space-y-2">
+            <legend class="text-xs text-slate-600">{{ t('common.salesChannel') }}</legend>
+            <div class="flex flex-wrap gap-3">
+              <label v-for="channel in ['Offline', 'Facebook', 'TikTok']" :key="channel" class="flex items-center gap-2 p-3 rounded-lg border border-slate-200 cursor-pointer">
+                <input v-model="saleForm.SalesChannel" type="radio" name="sales-channel" :value="channel">
+                <span>{{ t('common.channel' + channel) }}</span>
+              </label>
+            </div>
+          </fieldset>
           <!-- Sale Date Picker -->
           <div class="space-y-1.5">
             <label class="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">{{ t('sale.saleDate') }}</label>
@@ -869,14 +879,22 @@
                 <td style="text-align: right; padding-top: 5px; font-weight: bold;">{{ formatNumber(p.amount) }}</td>
               </tr>
 
-              <tr v-if="balanceAmount !== 0">
-                <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ receiptBalanceLabel(balanceAmount) }}</td>
+              <tr v-if="receiptPaidTotal > receiptTotal">
+                <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ t('sale.invoiceExcess') }}:</td>
                 <td style="text-align: right; padding-top: 5px; font-weight: bold;">{{
-                  formatNumber(Math.abs(balanceAmount)) }}</td>
+                  formatNumber(receiptPaidTotal - receiptTotal) }}</td>
               </tr>
-              <tr v-if="showPreviousCredit && receiptTotalCredit > 0">
-                <td colspan="2" style="text-align: left; padding-top: 5px; font-weight: bold;">{{ t('sale.totalCredit') }}:</td>
-                <td style="text-align: right; padding-top: 5px; font-weight: bold; color: #dc2626;">{{ formatNumber(receiptTotalCredit) }}</td>
+              <tr v-if="receiptTotalDueBalance > 0">
+                <td colspan="2">{{ t('sale.invoiceRemaining') }}:</td>
+                <td style="text-align: right;">{{ formatNumber(receiptRemaining) }}</td>
+              </tr>
+              <tr v-if="receiptPreviousDebt > 0">
+                <td colspan="2">{{ t('sale.invoicePreviousDebt') }}:</td>
+                <td style="text-align: right;">{{ formatNumber(receiptPreviousDebt) }}</td>
+              </tr>
+              <tr v-if="receiptTotalDueBalance > 0" style="font-weight: bold; border-top: 2px solid black;">
+                <td colspan="2" style="padding-top: 6px;">{{ t('sale.invoiceTotalDueBalance') }}:</td>
+                <td style="text-align: right; padding-top: 6px;">{{ formatNumber(receiptTotalDueBalance) }}</td>
               </tr>
             </tfoot>
           </table>
@@ -997,17 +1015,21 @@
                 <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(receiptTotal) }}
                 </td>
               </tr>
-              <tr>
+              <tr v-if="receiptData.payments.length > 1">
                 <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
                   {{ t('sale.invoicePaid') }}:</td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(receiptPaidTotal) }}</td>
               </tr>
               <tr v-for="payment in receiptData.payments" :key="`a4-${payment.method}`">
                 <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">
-                  {{ receiptPaidLabel(payment.method) }}:</td>
+                  {{ receiptPaidLabel(payment.method) }}</td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(payment.amount) }}</td>
               </tr>
-              <tr v-if="receiptRemaining > 0">
+              <tr v-if="receiptPaidTotal > receiptTotal">
+                <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ t('sale.invoiceExcess') }}:</td>
+                <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">{{ formatNumber(receiptPaidTotal - receiptTotal) }}</td>
+              </tr>
+              <tr v-if="receiptTotalDueBalance > 0">
                 <td colspan="5" style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">
                   {{ t('sale.invoiceRemaining') }}:</td>
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">{{
@@ -1019,7 +1041,7 @@
                 <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold; color: #dc2626;">
                   {{ formatNumber(receiptPreviousDebt) }}</td>
               </tr>
-              <tr v-if="receiptTotalDueBalance > 0" style="font-weight: bold; background-color: #fff1f2;">
+              <tr v-if="receiptTotalDueBalance > 0" style="font-weight: bold; background-color: #fff1f2; border-top: 2px solid #333;">
                 <td colspan="5" style="padding: 8px; border: 1px solid #ccc; text-align: right;">
                   {{ t('sale.invoiceTotalDueBalance') }}:</td>
                 <td style="padding: 8px; border: 1px solid #ccc; text-align: right; color: #be123c;">
@@ -1204,6 +1226,18 @@
 </template>
 
 <style scoped>
+.sale-category-list {
+  max-height: min(28vh, 12rem);
+  max-height: min(28dvh, 12rem);
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
 /* Chrome, Safari, Edge, Opera */
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
@@ -1474,6 +1508,7 @@ const createDefaultSaleForm = () => ({
   CustomerId: null,
   CustomerName: '',
   SaleType: 'Normal',
+  SalesChannel: 'Offline',
   SaleDate: new Date().toISOString().split('T')[0], // yyyy-MM-dd
   DiscountAmount: 0,
   DeliveryFee: 0,
@@ -2730,7 +2765,6 @@ const buildReceiptText = (saleNo, options = {}) => {
   const paidTotal = Number(options.paidAmount ?? payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0));
   const balance = paidTotal - finalTotal;
   const totalCredit = toNonNegativeAmount(options.totalCredit ?? invoicePreviewData.value.totalCredit);
-  const includePreviousCredit = options.showPreviousCredit ?? showPreviousCredit.value;
   const lines = [];
   const line = '-'.repeat(width);
   const doubleLine = '='.repeat(width);
@@ -2822,10 +2856,15 @@ const buildReceiptText = (saleNo, options = {}) => {
     lines.push(columns(receiptPaidLabel(payment.method), money(payment.amount || 0)));
   });
   if (balance !== 0) {
-    lines.push(columns(receiptBalanceLabel(balance), money(Math.abs(balance))));
+    if (balance > 0) lines.push(columns(`${t('sale.invoiceExcess')}:`, money(balance)));
   }
-  if (includePreviousCredit && totalCredit > 0) {
-    lines.push(columns(`${t('sale.totalCredit')}:`, money(totalCredit)));
+  const unpaid = Math.max(0, finalTotal - paidTotal);
+  const previous = Math.max(0, totalCredit - unpaid);
+  if (previous + unpaid > 0) {
+    lines.push(columns(`${t('sale.invoiceRemaining')}:`, money(unpaid)));
+    if (previous > 0) lines.push(columns(`${t('sale.invoicePreviousDebt')}:`, money(previous)));
+    lines.push(doubleLine);
+    lines.push(columns(`${t('sale.invoiceTotalDueBalance')}:`, money(previous + unpaid)));
   }
   lines.push(doubleLine);
   lines.push('');
@@ -3291,12 +3330,12 @@ const buildInvoiceHtml = (format = null) => {
     .join('');
 
   const balance = receiptBalance.value;
-  const balanceHtml = (balance !== 0 && Number.isFinite(balance))
+  const balanceHtml = (balance > 0 && Number.isFinite(balance))
     ? `<div style="display:flex;justify-content:${isThermal ? 'space-between' : 'flex-end'};${isThermal ? '' : 'gap:100px'};margin-top:4px;font-weight:bold;font-size:${isThermal ? font.total : 12}px;color:${balance > 0 ? '#16a34a' : '#dc2626'}"><span>${receiptBalanceLabel(balance)}</span><span>${formatMoney(Math.abs(balance))}</span></div>`
     : '';
-  const totalCreditHtml = showPreviousCredit.value && receiptTotalCredit.value > 0
-    ? `<div style="display:flex;justify-content:${isThermal ? 'space-between' : 'flex-end'};${isThermal ? '' : 'gap:100px'};margin-top:4px;font-weight:bold;font-size:${isThermal ? font.total : 12}px;color:#dc2626"><span>${t('sale.totalCredit')}:</span><span>${formatMoney(receiptTotalCredit.value)}</span></div>`
-    : '';
+  const payableHtml = receiptTotalDueBalance.value > 0 ? `<div style="display:flex;justify-content:space-between;margin-top:4px"><span>${t('sale.invoiceRemaining')}:</span><span>${formatMoney(receiptRemaining.value)}</span></div>`
+    + (receiptPreviousDebt.value > 0 ? `<div style="display:flex;justify-content:space-between"><span>${t('sale.invoicePreviousDebt')}:</span><span>${formatMoney(receiptPreviousDebt.value)}</span></div>` : '')
+    + `<div style="display:flex;justify-content:space-between;border-top:2px solid black;padding-top:6px;font-weight:bold"><span>${t('sale.invoiceTotalDueBalance')}:</span><span>${formatMoney(receiptTotalDueBalance.value)}</span></div>` : '';
 
   if (isThermal) {
     return `
@@ -3333,7 +3372,7 @@ const buildInvoiceHtml = (format = null) => {
           <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:${font.total}px;margin-top:4px;padding-top:4px;border-top:1px double black"><span>Total:</span><span>${formatMoney(receiptTotal.value)}</span></div>
           ${paymentsHtml}
           ${balanceHtml}
-          ${totalCreditHtml}
+          ${payableHtml}
         </div>
         ${data.voucherNote && data.voucherNote !== 'null' ? `<div style="margin-top:8px;font-size:${font.tiny}px;font-style:italic;text-align:center">Note: ${data.voucherNote}</div>` : ''}
         ${footerHtml}
@@ -3374,7 +3413,7 @@ const buildInvoiceHtml = (format = null) => {
         <div style="display:flex;justify-content:flex-end;gap:100px;font-weight:bold;font-size:${font.total}px;margin-top:4px;padding-top:4px;border-top:1px double #333"><span>Total:</span><span>${formatMoney(receiptTotal.value)}</span></div>
         ${paymentsHtml}
         ${balanceHtml}
-        ${totalCreditHtml}
+        ${payableHtml}
       </div>
       ${data.voucherNote && data.voucherNote !== 'null' ? `<div style="margin-top:10px;font-size:${font.small}px;font-style:italic;text-align:center">Note: ${data.voucherNote}</div>` : ''}
       ${footerHtml}
@@ -3780,6 +3819,7 @@ const confirmSale = async () => {
       PaidAmount: totalPaid.value,
 
       // PaymentMethod ကို Split သို့မဟုတ် ပထမဆုံး method အဖြစ် သတ်မှတ်ခြင်း
+      SalesChannel: saleForm.value.SalesChannel || 'Offline',
       PaymentMethod: paymentDetails.value.length > 1 ? 'Split' : paymentDetails.value[0].method,
       ReferenceNo: "", // လိုအပ်လျှင် Form မှ ယူနိုင်သည်
       Note: saleForm.value.Note || "",
@@ -3934,6 +3974,7 @@ const confirmSale = async () => {
     voucherDiscountInput.value = 0;
     saleForm.value.DeliveryFee = 0;
     saleForm.value.Note = '';
+    saleForm.value.SalesChannel = 'Offline';
     resetCustomerSelection();
     paymentDetails.value = [{ method: availableMethods.value[0], amount: 0 }];
     activeHeldSaleId.value = null;
@@ -3987,6 +4028,7 @@ const confirmPreorder = async () => {
       DeliveryFee: saleForm.value.DeliveryFee || 0,
       PaidAmount: totalPaid.value,
 
+      SalesChannel: saleForm.value.SalesChannel || 'Offline',
       PaymentMethod: paymentDetails.value.length > 1 ? 'Split' : paymentDetails.value[0].method,
       ReferenceNo: "",
       Note: saleForm.value.Note || "",
@@ -4034,6 +4076,7 @@ const confirmPreorder = async () => {
     voucherDiscountInput.value = 0;
     saleForm.value.DeliveryFee = 0;
     saleForm.value.Note = '';
+    saleForm.value.SalesChannel = 'Offline';
     resetCustomerSelection();
     paymentDetails.value = [{ method: availableMethods.value[0], amount: 0 }];
     activeHeldSaleId.value = null;

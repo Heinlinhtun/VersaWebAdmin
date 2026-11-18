@@ -54,6 +54,13 @@ test('checkout replaces credit from a returned voucher with the fresh customer b
   assert.equal(vm.selectedCustomerObj.value.currentBalance, 0);
 });
 
+test('checkout starts with Offline and keeps the selected sales channel in its form', t => {
+  const vm = mountSetup(t);
+  assert.equal(vm.saleForm.value.SalesChannel, 'Offline');
+  vm.saleForm.value.SalesChannel = 'Facebook';
+  assert.equal(JSON.parse(JSON.stringify(vm.saleForm.value)).SalesChannel, 'Facebook');
+});
+
 test('offline checkout keeps locally known credit and walk-in needs no request', async t => {
   const vm = mountSetup(t, undefined, { online: false, get: () => { throw new Error('Unexpected request'); } });
   vm.saleForm.value.CustomerId = null;
